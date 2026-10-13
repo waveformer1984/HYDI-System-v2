@@ -52,24 +52,52 @@ wait_for_supabase() {
   return 1
 }
 
+supabase_is_healthy() {
+  npx supabase status >/dev/null 2>&1
+}
+
+write_supabase_env() {
+  mkdir -p "$CURSOR_DIR"
+  npx supabase status -o env > "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  log "wrote $ENV_FILE"
+}
+
 start_supabase() {
-  local api_url
+  local api_url attempt
   api_url="$(supabase_api_url)"
   if [ -f "$ENV_FILE" ] && wait_for_supabase "$api_url"; then
     log "supabase already up"
     return 0
   fi
+  if [ -f "$ENV_FILE" ] && ! wait_for_supabase "$api_url"; then
+    log "stale $ENV_FILE — removing and restarting Supabase"
+    rm -f "$ENV_FILE"
+    npx supabase stop >/dev/null 2>&1 || true
+  fi
 
-  log "npx supabase start (CI excludes)"
   # Same service exclusions as .github/workflows/unit-tests.yml
-  npx supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+  local excludes="studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor"
+  for attempt in 1 2 3; do
+    log "npx supabase start attempt ${attempt} (CI excludes)"
+    # CLI may exit 0 even when start failed — verify with `supabase status`.
+    npx supabase start -x "$excludes" || true
+    if supabase_is_healthy; then
+      write_supabase_env
+      api_url="$(supabase_api_url)"
+      if wait_for_supabase "$api_url"; then
+        return 0
+      fi
+      log "API not ready after healthy status (attempt ${attempt})"
+    else
+      log "supabase status unhealthy after start (attempt ${attempt})"
+    fi
+    npx supabase stop >/dev/null 2>&1 || true
+    sleep "$((attempt * 3))"
+  done
 
-  mkdir -p "$CURSOR_DIR"
-  npx supabase status -o env > "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
-  log "wrote $ENV_FILE"
-  api_url="$(supabase_api_url)"
-  wait_for_supabase "$api_url"
+  log "ERROR: Supabase failed to start after 3 attempts (see output above)" >&2
+  return 1
 }
 
 maybe_join_tailnet() {
@@ -87,7 +115,7 @@ maybe_join_tailnet() {
 }
 
 ensure_docker
-start_supabase
+start_supabase || exit 1
 maybe_join_tailnet
 
 log "source Supabase env: set -a && source .cursor/cloud-agent-env.sh && set +a"

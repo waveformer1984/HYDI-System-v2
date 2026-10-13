@@ -30,6 +30,11 @@ if ! command -v docker >/dev/null 2>&1; then
   if command -v sudo >/dev/null 2>&1; then
     sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io
+    if id -nG 2>/dev/null | grep -qw docker; then
+      :
+    else
+      sudo usermod -aG docker "${USER:-ubuntu}" 2>/dev/null || true
+    fi
   else
     echo "[cloud-agent-install] WARN: docker missing and sudo unavailable" >&2
   fi

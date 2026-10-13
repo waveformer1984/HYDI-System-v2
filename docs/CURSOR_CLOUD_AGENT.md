@@ -23,6 +23,11 @@ npm run typecheck
 
 Generated file (never commit): `.cursor/supabase-local.env` (mode 600).
 
+Boot logs: `/tmp/cursor/start-user/start-user.log` (and `start-user.status` when
+the start script exits). If Supabase fails, the start script exits non-zero after
+three attempts; the Supabase CLI sometimes prints JSON errors while still exiting
+0, so health is verified with `supabase status` and a REST readiness probe.
+
 ## Local Supabase (same as CI)
 
 `cloud-agent-start.sh` runs:
@@ -72,3 +77,12 @@ hooks. Use `npm run dev` (includes `--webpack`).
 Link this repo’s `.cursor/environment.json` in the Cursor dashboard (Cloud
 Agents → Environments), trigger a **build**, and activate the build when green.
 Until then, agents boot the default image without `install`/`start`.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|----------------|-----|
+| `Bind for 0.0.0.0:54322 failed` | Another Postgres/Supabase on the VM | `npx supabase stop`; remove stray containers on 54321/54322 |
+| `DbSetupError` / Realtime pool timeout | Slow first boot on a small VM | Re-run boot; `cloud-agent-start.sh` retries up to 3 times |
+| Tests `ECONNREFUSED` on 54321 | Start script still running or failed | Wait for start log; `source .cursor/cloud-agent-env.sh` |
+| MCP tools unavailable | `TS_AUTHKEY` unset | Optional; set secrets per [TAILSCALE.md](./TAILSCALE.md) |
