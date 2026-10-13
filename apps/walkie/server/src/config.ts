@@ -50,6 +50,9 @@ const Env = z.object({
   PUBLIC_BASE_URL: z.string().url().optional(),
   // Requests allowed per IP per minute on the unauthenticated join/login routes.
   PUBLIC_RATE_PER_MIN: z.coerce.number().int().min(1).max(1000).default(20),
+  // Requests allowed per IP per minute on every other route (phones behind one
+  // NAT share an IP; a talking phone renews about 40 times a minute).
+  API_RATE_PER_MIN: z.coerce.number().int().min(60).max(100_000).default(600),
 
   JOIN_TOKEN_TTL_S: z.coerce.number().int().min(30).max(3600).default(300),
   INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24),
@@ -89,6 +92,7 @@ export type Config = {
   sessions?: { secret: string; guestTtlS: number; ownerTtlS: number };
   publicBaseUrl?: string;
   publicRatePerMin: number;
+  apiRatePerMin: number;
   joinTokenTtlS: number;
   inviteTtlHours: number;
   maxChannelMembers: number;
@@ -176,6 +180,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       : undefined,
     publicBaseUrl,
     publicRatePerMin: e.PUBLIC_RATE_PER_MIN,
+    apiRatePerMin: e.API_RATE_PER_MIN,
     joinTokenTtlS: e.JOIN_TOKEN_TTL_S,
     inviteTtlHours: e.INVITE_TTL_HOURS,
     maxChannelMembers: e.MAX_CHANNEL_MEMBERS,

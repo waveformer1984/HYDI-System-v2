@@ -21,6 +21,7 @@
     "test:e2e:web": "node e2e/qr-join.e2e.mjs"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^10.3.0",
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
     "livekit-server-sdk": "^2.19.1",

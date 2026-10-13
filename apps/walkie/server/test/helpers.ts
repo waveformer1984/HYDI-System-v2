@@ -14,6 +14,7 @@ export function testConfig(over: Partial<Config> = {}): Config {
     auth: { mode: 'dev', devSecret: DEV_SECRET },
     talk: { maxMs: 30_000, renewTtlMs: 5_000, minRequestIntervalMs: 250, burst: 6, burstWindowMs: 10_000 },
     publicRatePerMin: 1000,
+    apiRatePerMin: 100_000,
     joinTokenTtlS: 300,
     inviteTtlHours: 24,
     maxChannelMembers: 50,

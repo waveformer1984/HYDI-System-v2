@@ -209,6 +209,33 @@ describe('QR join, guests and owner sign-in', () => {
     const codes = [];
     for (let i = 0; i < 4; i++) codes.push((await as(null)('GET', '/v1/invites/AAAAA-BBBBB-CCCCC-DDDDD/preview')).statusCode);
     assert.deepEqual(codes, [404, 404, 404, 429]);
+    const limited = await as(null)('POST', '/v1/session/exchange', { ticket: 'x'.repeat(40) });
+    assert.equal((await as(null)('POST', '/v1/session/exchange', { ticket: 'x'.repeat(40) })).statusCode, 401, 'separate budget per route');
+    assert.equal(limited.statusCode, 401);
+    for (let i = 0; i < 2; i++) await as(null)('POST', '/v1/session/exchange', { ticket: 'x'.repeat(40) });
+    const res = await as(null)('POST', '/v1/session/exchange', { ticket: 'x'.repeat(40) });
+    assert.equal(res.statusCode, 429);
+    assert.equal(res.json().error, 'rate_limited');
+    assert.ok(res.json().retryAfterMs > 0);
+    assert.ok(res.headers['retry-after']);
+  });
+
+  test('every other route has a per-IP ceiling too, except signed LiveKit webhooks', async () => {
+    await boot(sessionsConfig({ apiRatePerMin: 5 }));
+    // Owner setup spends 2 of the shared budget (create channel, create invite);
+    // the ticket exchange has its own public budget.
+    const { session } = (await ownerWithInvite()).owner;
+    const me = as(session.token);
+    const codes = [];
+    for (let i = 0; i < 4; i++) codes.push((await me('GET', '/v1/me')).statusCode);
+    assert.deepEqual(codes, [200, 200, 200, 429], 'one budget per IP across ordinary routes');
+    const del = await me('DELETE', '/v1/me');
+    assert.equal(del.statusCode, 429, 'account deletion is covered by the same ceiling');
+    assert.equal(del.json().error, 'rate_limited');
+    for (let i = 0; i < 7; i++) {
+      const wh = await app.inject({ method: 'POST', url: '/livekit/webhook', payload: '{}', headers: { 'content-type': 'application/webhook+json', authorization: 'x' } });
+      assert.notEqual(wh.statusCode, 429);
+    }
   });
 
   test('the join page is served with strict headers, and the script gzipped', async () => {

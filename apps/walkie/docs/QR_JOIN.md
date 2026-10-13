@@ -150,8 +150,13 @@ Funnel exposes only the walkie backend (`127.0.0.1:8787`).
 | `GET /v1/invites/<code>/preview` | invite code; per-IP limit (`PUBLIC_RATE_PER_MIN`, 20/min) |
 | `POST /v1/join` | invite code; per-IP limit |
 | `POST /v1/session/exchange` | one-time owner ticket (10 min, single use); per-IP limit. No route mints tickets: only `owner-login` on heidi-pc, which needs `WALKIE_SESSION_SECRET` |
-| `POST /livekit/webhook` | LiveKit signature |
+| `POST /livekit/webhook` | LiveKit signature (not rate-limited) |
 | every other `/v1/…` | bearer token (Supabase, owner or guest session) |
+
+Every route except the webhook also shares a per-IP ceiling (`API_RATE_PER_MIN`, 600/min),
+enforced by `@fastify/rate-limit`. Responses carry `x-ratelimit-*` headers, and a 429
+says `{"error":"rate_limited","retryAfterMs":…}`. Talk requests keep their own, finer
+limiter on top.
 
 There are no recordings or transcripts. Audio goes phone → LiveKit Cloud → phone.
 

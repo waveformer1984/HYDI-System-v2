@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AuthError, CompositeVerifier, DevVerifier, deleteSupabaseUser, type AuthUser, type AuthVerifier, type SessionIssuer } from './auth.js';
 import type { Config } from './config.js';
@@ -7,7 +8,6 @@ import { FloorService, errMsg } from './floor.js';
 import { roomNameFor, type MediaGateway } from './livekit.js';
 import { ApnsClient, type PushSender } from './apns.js';
 import { PttNotifier } from './ptt-notifier.js';
-import { TalkRateLimiter } from './rate-limit.js';
 import type { PttPushToken, Store } from './store/types.js';
 import { registerWebClient } from './web.js';
 
@@ -86,6 +86,16 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     trustProxy: true,
   });
   const floor = new FloorService(store, media, config, app.log, now);
+
+  // Per-IP request ceiling for every route (API_RATE_PER_MIN); the public
+  // join/login routes get a much smaller budget (PUBLIC_RATE_PER_MIN).
+  // Speaker arbitration keeps its own finer limiter (TALK_*).
+  await app.register(rateLimit, {
+    global: true,
+    max: config.apiRatePerMin,
+    timeWindow: 60_000,
+    errorResponseBuilder: (_req, ctx) => new HttpError(429, 'rate_limited', { retryAfterMs: ctx.ttl }),
+  });
 
   // Milestone 3: wake PushToTalk iPhones when someone starts talking.
   const push = deps.push ?? (config.apns ? new ApnsClient(config.apns) : undefined);
@@ -166,16 +176,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
   // ---- Public, unauthenticated routes: invite preview, QR join, owner login ----
   // Each IP gets a small budget; invite codes carry ~98 bits, so this is
   // about abuse (profile spam), not about guessing codes.
-  const publicLimiter = new TalkRateLimiter({ minIntervalMs: 0, burst: config.publicRatePerMin, windowMs: 60_000 });
-  let publicCalls = 0;
-  const limitPublic = (req: FastifyRequest, reply: FastifyReply) => {
-    if (++publicCalls % 200 === 0) publicLimiter.prune(now());
-    const wait = publicLimiter.check(req.ip, now());
-    if (wait > 0) {
-      reply.header('retry-after', Math.ceil(wait / 1000));
-      throw new HttpError(429, 'rate_limited', { retryAfterMs: wait });
-    }
-  };
+  const publicRoute = { config: { rateLimit: { max: config.publicRatePerMin, timeWindow: 60_000 } } };
   const optionalUser = async (req: FastifyRequest): Promise<AuthUser | null> => {
     const h = req.headers.authorization;
     if (!h || !h.startsWith('Bearer ')) return null;
@@ -197,8 +198,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     return { id: ch.id, name: ch.name, role: await store.getRole(ch.id, userId), ownerId: ch.ownerId };
   };
 
-  app.get<{ Params: { code: string } }>('/v1/invites/:code/preview', async (req, reply) => {
-    limitPublic(req, reply);
+  app.get<{ Params: { code: string } }>('/v1/invites/:code/preview', publicRoute, async (req) => {
     const code = InviteCodeParam.safeParse(req.params.code);
     const p = code.success ? await store.peekInvite(hashInviteCode(code.data), now()) : null;
     if (!p) throw new HttpError(404, 'invite_invalid');
@@ -207,8 +207,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
 
   // Join through an invite QR. Signed-in callers (any kind) just join; anyone
   // else becomes a guest who can use this channel and nothing more.
-  app.post('/v1/join', async (req, reply) => {
-    limitPublic(req, reply);
+  app.post('/v1/join', publicRoute, async (req, reply) => {
     const { code, displayName } = JoinBody.parse(req.body);
     const codeHash = hashInviteCode(code);
     const existing = await optionalUser(req);
@@ -234,8 +233,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
   });
 
   // Owner sign-in: swaps a one-time ticket from `npm run owner-login` for a session.
-  app.post('/v1/session/exchange', async (req, reply) => {
-    limitPublic(req, reply);
+  app.post('/v1/session/exchange', publicRoute, async (req) => {
     if (!sessions || !config.sessions) throw new HttpError(404, 'not_found');
     const { ticket } = ExchangeBody.parse(req.body);
     let who;
@@ -253,7 +251,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
   registerWebClient(app, config);
 
   // ---- Livekit webhooks (signature-verified) ----
-  app.post('/livekit/webhook', async (req, reply) => {
+  // LiveKit sends one webhook per room event; it is signature-checked, not throttled.
+  app.post('/livekit/webhook', { config: { rateLimit: false } }, async (req, reply) => {
     let ev;
     try {
       ev = await media.receiveWebhook(String(req.body ?? ''), req.headers.authorization);
