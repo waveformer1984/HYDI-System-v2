@@ -9,8 +9,8 @@ cd "$ROOT"
 echo "[cloud-agent-install] repo: $ROOT"
 
 node_major="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
-if [ "${node_major:-0}" -lt 20 ]; then
-  echo "[cloud-agent-install] ERROR: Node >= 20 required (got $(node -v 2>/dev/null || echo missing))" >&2
+if [ "${node_major:-0}" -lt 22 ]; then
+  echo "[cloud-agent-install] ERROR: Node >= 22 required (got $(node -v 2>/dev/null || echo missing))" >&2
   exit 1
 fi
 echo "[cloud-agent-install] node $(node -v)"
