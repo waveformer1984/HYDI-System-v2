@@ -9,6 +9,11 @@
  * Duplicate safety: CLAIM_NEXT_QUEUED_JOB_SQL uses FOR UPDATE SKIP LOCKED,
  * so the queued -> executing claim is atomic. Exactly one PM2 instance.
  *
+ * Supervision contract (lib/revenue/model-prep-loop.js): the process never
+ * exits on a dependency error — it backs off exponentially and reports
+ * 'degraded' on .model-prep-executor-status.json until the dependency
+ * recovers. Only SIGINT/SIGTERM (or --once) end it.
+ *
  * Usage:
  *   node scripts/model-prep-executor-scheduler.js            # continuous
  *   node scripts/model-prep-executor-scheduler.js --once     # single cycle
@@ -18,12 +23,21 @@
 require('./babel-register');
 require('dotenv').config({ path: '.env.local' });
 
+const path = require('path');
 const { processNextJob, recoverStaleJobs, sweepAwaitingReview } = require('../lib/revenue/JobExecutor');
+const {
+  runSchedulerLoop,
+  runOnce,
+  writeModelPrepStatus,
+  interruptibleSleep,
+} = require('../lib/revenue/model-prep-loop');
 
+const ROOT = path.resolve(__dirname, '..');
 const INTERVAL_MS = parseInt(process.env.MODEL_PREP_INTERVAL_MS || '30000', 10);
 const ONCE = process.argv.includes('--once');
 
 let stopping = false;
+const isStopping = () => stopping;
 
 async function cycle() {
   // Recover jobs orphaned mid-execution (e.g. after a restart) before
@@ -55,26 +69,48 @@ async function cycle() {
   }
 }
 
+const writeStatus = (snapshot) =>
+  writeModelPrepStatus(ROOT, { pid: process.pid, ...snapshot });
+
+const log = (m) => console.log(`[model-prep-executor] ${m}`);
+
 async function main() {
-  console.log(`[model-prep-executor] started — interval ${INTERVAL_MS}ms`);
-  await cycle();
-  if (ONCE) return;
-  while (!stopping) {
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
-    if (stopping) break;
-    try {
-      await cycle();
-    } catch (e) {
-      console.error('[model-prep-executor] cycle error:', e instanceof Error ? e.message : e);
-    }
+  log(`started — interval ${INTERVAL_MS}ms`);
+
+  if (ONCE) {
+    const r = await runOnce({ cycle });
+    writeStatus({
+      state: r.ok ? 'ok' : 'degraded',
+      consecutiveFailures: r.ok ? 0 : 1,
+      lastError: r.ok ? null : r.error,
+      lastSuccessAt: r.ok ? new Date().toISOString() : null,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!r.ok) console.error(`[model-prep-executor] cycle error: ${r.error}`);
+    return r.ok ? 0 : 1;
   }
-  console.log('[model-prep-executor] stopped');
+
+  await runSchedulerLoop({
+    cycle,
+    isStopping,
+    writeStatus,
+    log,
+    intervalMs: INTERVAL_MS,
+    sleep: interruptibleSleep(isStopping),
+  });
+  log('stopped');
+  return 0;
 }
 
-process.on('SIGINT', () => { stopping = true; });
-process.on('SIGTERM', () => { stopping = true; });
-
-main().catch((e) => {
-  console.error('[model-prep-executor] fatal:', e instanceof Error ? e.message : e);
-  process.exit(1);
-});
+if (require.main === module) {
+  process.on('SIGINT', () => { stopping = true; });
+  process.on('SIGTERM', () => { stopping = true; });
+  main()
+    .then((code) => process.exit(code))
+    .catch((e) => {
+      // Only reachable for a defect in the loop machinery itself — a cycle
+      // error is degraded state, never a fatal exit.
+      console.error('[model-prep-executor] fatal:', e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+}
