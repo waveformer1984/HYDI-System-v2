@@ -8,6 +8,7 @@ node_modules/
 .env
 .env.*
 .env*.local
+.cursor/supabase-local.env
 
 # Local Netlify folder
 .netlify
