@@ -107,6 +107,7 @@ hydi.db
 # Daemon runtime artifacts
 .heidi-daemon.lock
 .heidi-daemon-audit.jsonl
+.heidi-daemon-status.json
 # Single-instance lease for the boot runtime (scripts/boot-instance-lease.js).
 # Machine-local runtime state — committing it would hand one machine's boot
 # identity to every other checkout.
