@@ -37,16 +37,20 @@ const spec = (over = {}) => ({
   ...over,
 });
 
-function makePool({ fail = false } = {}) {
+function makePool({ fail = false, failWhen = null } = {}) {
   const writes = [];
-  return {
+  const pool = {
     writes,
+    calls: 0,
     query: async (sql, params) => {
-      if (fail) throw new Error('connection refused');
+      pool.calls++;
+      const err = fail ? new Error('connection refused') : failWhen && failWhen(params);
+      if (err) throw err;
       writes.push({ sql, params });
       return { rows: [] };
     },
   };
+  return pool;
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -81,6 +85,24 @@ describe('mirrorActionRecord', () => {
     const svc = new HumanActionService();
     const { action } = svc.request(spec());
     expect(await mirrorActionRecord(pool, action)).toBe('connection refused');
+  });
+
+  it('serializes array-valued record fields as JSON text, not Postgres array literals', async () => {
+    const pool = makePool();
+    const svc = new HumanActionService();
+    const { action } = svc.request(spec());
+    // A real record always carries a transitions[] array — the raw JS value
+    // would go to the jsonb column as a Postgres array literal and die with
+    // 'invalid input syntax for type json'.
+    expect(Array.isArray(action.transitions)).toBe(true);
+
+    const err = await mirrorActionRecord(pool, action);
+    expect(err).toBeNull();
+    const { params } = pool.writes[0];
+    expect(params.filter(Array.isArray)).toHaveLength(0);
+    expect(params).toContain(JSON.stringify(action.transitions));
+    // Objects stay jsonb-legal too — verifier round-trips as JSON text.
+    expect(params).toContain(JSON.stringify(action.verifier));
   });
 });
 
@@ -127,9 +149,26 @@ describe('mirrorAllActions — the offline catch-up', () => {
     svc.request(spec({ blockerKey: 'test:a', title: 'one' }));
     svc.request(spec({ blockerKey: 'test:b', title: 'two' }));
 
-    const res = await mirrorAllActions(makePool({ fail: true }));
+    const pool = makePool({ fail: true });
+    const res = await mirrorAllActions(pool);
     expect(res.synced).toBe(0);
     expect(res.error).toBe('connection refused');
+    expect(pool.calls).toBe(1); // connection-class — early break, no hammering
+  });
+
+  it('a per-row data error does not starve the rest of the pass', async () => {
+    const svc = new HumanActionService();
+    svc.request(spec({ blockerKey: 'test:a', title: 'poison' }));
+    svc.request(spec({ blockerKey: 'test:b', title: 'fine' }));
+
+    // SQLSTATE 22P02 (invalid_text_representation) — a server-side data
+    // error on one row, the class the old break treated as a dead DB.
+    const badInput = Object.assign(new Error('invalid input syntax for type json'), { code: '22P02' });
+    const pool = makePool({ failWhen: (params) => (params.includes('poison') ? badInput : null) });
+    const res = await mirrorAllActions(pool);
+
+    expect(res).toMatchObject({ synced: 1, failed: 1, error: 'invalid input syntax for type json' });
+    expect(pool.calls).toBe(2);
   });
 });
 
