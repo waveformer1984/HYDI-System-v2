@@ -35,7 +35,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import { buildCognitiveCore } from '../lib/heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, LoopStatus } from '../lib/heidi/CognitiveCore';
 import { getGoalSystem } from '../lib/heidi/GoalSystem';
-import { OperatorLease } from '../lib/heidi/OperatorLease';
+import { OperatorLeaseSupervisor } from '../lib/heidi/OperatorLease';
 import { writeDaemonStatus } from '../lib/heidi/DaemonStatusSurface';
 import type { PersistenceTruth } from '../lib/heidi/DaemonStatusSurface';
 
@@ -589,37 +589,15 @@ async function main(): Promise<void> {
   // instance owns the loop, heartbeating, expiring on schedule if it dies.
   // Refusal is logged loudly, not fatal: the file lock is still the
   // authoritative same-host guard and a refused daemon reporting itself
-  // beats a daemon that silently vanished.
-  let operatorLease: OperatorLease | null = null;
+  // beats a daemon that silently vanished. The supervisor re-claims every
+  // tick until it holds — a restart that races a predecessor's unexpired
+  // lease self-heals instead of running leaseless forever.
   const leasePool = new Pool({ ...DB_CONFIG, max: 1 });
-  try {
-    const candidate = new OperatorLease(leasePool, { ttlMs: 120_000 });
-    const claim = await candidate.claim();
-    if (claim.held) {
-      operatorLease = candidate;
-      console.log(`[daemon] operator lease held (owner=${candidate.ownerId.slice(0, 8)}… expires=${claim.expiresAt})`);
-    } else {
-      console.error(`[daemon] operator lease REFUSED — live holder: ${JSON.stringify(claim.currentOwner)}`);
-    }
-  } catch (e) {
-    console.warn(`[daemon] operator lease unavailable (table missing or DB down): ${e instanceof Error ? e.message : 'unknown'}`);
-  }
-
-  let leaseHeartbeatInFlight = false;
+  const operatorLease = new OperatorLeaseSupervisor(leasePool, { ttlMs: 120_000 });
+  await operatorLease.tick();
   const leaseInterval = setInterval(() => {
-    if (shuttingDown || !operatorLease || leaseHeartbeatInFlight) return;
-    leaseHeartbeatInFlight = true;
-    operatorLease.heartbeat()
-      .then((ok) => {
-        if (!ok) {
-          // A superseded holder's heartbeat touches 0 rows. We are no
-          // longer the recorded operator — say so, stop heartbeating.
-          console.error('[daemon] operator lease LOST — this process is no longer the recorded holder');
-          operatorLease = null;
-        }
-      })
-      .catch(() => { /* transient DB error — the TTL absorbs one miss */ })
-      .finally(() => { leaseHeartbeatInFlight = false; });
+    if (shuttingDown) return;
+    void operatorLease.tick();
   }, 30000);
 
   // 3. Set up graceful shutdown
@@ -716,9 +694,11 @@ async function main(): Promise<void> {
 
     // Release the durable operator lease before the file lock — a
     // successor's claim should see a clean handoff, not a stale expiry.
-    if (operatorLease) {
-      await operatorLease.release().catch(() => { });
-    }
+    // leasePool.end() runs only here, AFTER the release: the keep-alive
+    // interval ending the pool mid-shutdown was what left released_at
+    // NULL — the release failed against an ended pool, silently.
+    await operatorLease.release();
+    await leasePool.end().catch(() => { });
 
     // Release lock
     releaseLock();
@@ -988,7 +968,7 @@ async function main(): Promise<void> {
         const run = (m as { runHumanActionResolverAgent?: Function; default?: { runHumanActionResolverAgent?: Function } }).runHumanActionResolverAgent
           ?? (m as { default?: { runHumanActionResolverAgent?: Function } }).default?.runHumanActionResolverAgent;
         if (!run) throw new Error('resolver-agent export missing');
-        return run({ pool: resolverPool, goals: resolverGoals });
+        return run({ pool: resolverPool, goals: resolverGoals, leaseHeld: () => operatorLease.held });
       })
       .then((r) => {
         const s = r?.summary;
@@ -1039,7 +1019,6 @@ async function main(): Promise<void> {
         clearTimeout(resolverKick);
         resolverPool.end().catch(() => { });
         clearInterval(leaseInterval);
-        leasePool.end().catch(() => { });
         clearInterval(statusInterval);
         resolve();
       }

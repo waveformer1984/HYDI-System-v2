@@ -178,7 +178,7 @@ describe('resolver mission deployment per action (pool path)', () => {
       verifier: { name: 'env-vars', spec: { envNames: ['__RESOLVER_TEST_NEVER_SET__'] } },
     }).action;
     const fakePlane = { canAutoModify: () => true, set: () => ({ success: true, verified: true }) };
-    const first = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane } });
+    const first = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane }, leaseHeld: true });
     expect(first.attempted[0].outcome).toBe('completed');
     const missions = pool.events.filter((e) => e.event_type === 'agent_mission');
     expect(missions.length).toBe(1);
@@ -189,7 +189,7 @@ describe('resolver mission deployment per action (pool path)', () => {
     const got = svc.get(a.id);
     expect(got.resolver.attempts[0].missionId).toBe(missions[0].payload.missionId);
     // second pass (throttle cleared) → mission dedupe → deferred, no re-execution
-    const second = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane } });
+    const second = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane }, leaseHeld: true });
     expect(second.deferred.some((d) => d.reason === 'resolver mission already completed for this action')).toBe(true);
     expect(pool.events.filter((e) => e.event_type === 'agent_mission').length).toBe(1);
   });
