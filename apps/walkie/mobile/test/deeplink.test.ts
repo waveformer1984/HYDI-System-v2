@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { parseWalkieLink } from '../src/deeplink';
 
 const CODE = 'QJKPH-EBC8F-JFTGM-Q3YFS';
-const TICKET = 'eyJhbGciOiJIUzI1NiJ9.eyJraW5kIjoibG9naW4ifQ.c2lnbmF0dXJl';
+// Decodes to {"kind":"login"}, signed with the literal string "signature".
+const TICKET = 'eyJhbGciOiJIUzI1NiJ9.eyJraW5kIjoibG9naW4ifQ.c2lnbmF0dXJl'; // test fixture — not a real credential
 
 test('invite links from the QR page and the QR itself', () => {
   assert.deepEqual(parseWalkieLink(`protoforgewalkie://join/${CODE}`), { kind: 'join', code: CODE });
