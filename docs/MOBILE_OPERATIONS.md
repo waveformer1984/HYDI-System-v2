@@ -1,5 +1,7 @@
 # HYDI Mobile Operations
 
+Cursor agents use the always-on rules in [`.cursor/rules/hydi-mobile-operations.mdc`](../.cursor/rules/hydi-mobile-operations.mdc) for mobile-first execution, Tailscale/MCP boundaries, and repository-safe autonomy. Cloud VM setup: [CURSOR_CLOUD_AGENT.md](./CURSOR_CLOUD_AGENT.md).
+
 Status as of 2026-07-15. This document covers the mobile command-center
 surface built on branch `claude/hydi-mobile-operations-ozd777`: real-time
 status, worker fleet control, push notifications, device-scoped auth/RBAC,
