@@ -9,6 +9,23 @@
  * pool-less (attended) sweep keeps its semantics.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Isolate the durable store: HumanActionService defaults to the repo's
+// data/human-actions.json, which is production state on a live machine —
+// pooled-sweep tests must never write refusal attempts into it.
+let dir;
+beforeEach(() => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ha-bounds-'));
+  process.env.HYDI_HUMAN_ACTIONS_FILE = path.join(dir, 'human-actions.json');
+});
+afterEach(() => {
+  delete process.env.HYDI_HUMAN_ACTIONS_FILE;
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+});
+
 const { loadAuthorityBounds, checkUnattendedAuthority } = require('../../lib/heidi/AuthorityBounds');
 const { resolveEligibleActions } = require('../../lib/human-actions/detector');
 const { HumanActionService } = require('../../lib/human-actions/service');
