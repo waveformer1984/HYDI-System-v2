@@ -15,6 +15,12 @@ export function describeError(err: unknown): string {
         return 'Choose a display name first.';
       case 'owner_only':
         return 'Only the channel owner can do that.';
+      case 'invalid_ticket':
+        return 'That sign-in code has expired or was already used. Run owner-login again.';
+      case 'guest_not_allowed':
+        return 'Guests cannot do that. Ask the channel owner.';
+      case 'rate_limited':
+        return 'Too many attempts. Wait a minute and try again.';
       case 'not_found':
         return 'That channel is no longer available to you.';
       default:

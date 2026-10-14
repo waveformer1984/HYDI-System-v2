@@ -2,6 +2,7 @@ import type { Config } from '../src/config.js';
 import type { MediaGateway, RoomParticipant, SpeakerMetadata, WebhookEventLite } from '../src/livekit.js';
 
 export const DEV_SECRET = 'test-dev-secret-0123456789abcdef0123456789';
+export const SESSION_SECRET = 'test-session-secret-0123456789abcdef01234567';
 
 export function testConfig(over: Partial<Config> = {}): Config {
   return {
@@ -12,6 +13,8 @@ export function testConfig(over: Partial<Config> = {}): Config {
     livekit: { url: 'ws://livekit.test', apiUrl: 'http://livekit.test', apiKey: 'devkey', apiSecret: 'secret-secret-secret-secret-secret-00' },
     auth: { mode: 'dev', devSecret: DEV_SECRET },
     talk: { maxMs: 30_000, renewTtlMs: 5_000, minRequestIntervalMs: 250, burst: 6, burstWindowMs: 10_000 },
+    publicRatePerMin: 1000,
+    apiRatePerMin: 100_000,
     joinTokenTtlS: 300,
     inviteTtlHours: 24,
     maxChannelMembers: 50,

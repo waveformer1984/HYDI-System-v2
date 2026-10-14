@@ -1,5 +1,7 @@
 # Status report — 2026-10-11 (updated for Milestones 2 and 3)
 
+> **Join by QR (2026-10-13):** a phone can join a channel by scanning a QR code: browser walkie, no install or account (guest session), plus an owner sign-in QR. Verified end to end with two browsers through real LiveKit (audio bytes both ways); real phones, Safari, LiveKit Cloud and Funnel not yet. See `docs/QR_JOIN.md`.
+>
 > **Post-merge validation (2026-10-12):** see `docs/results/POSTMERGE_VALIDATION_2026-10-12.md`. All automated suites pass on `clean-main`. B1–B17 and P1–P14 are BLOCKED here: no Android SDK, macOS, Tailscale or device. The CI blocker has been isolated to billable Actions usage.
 
 Status words are used strictly:

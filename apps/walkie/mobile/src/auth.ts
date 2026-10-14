@@ -19,8 +19,40 @@ function sb(): SupabaseClient {
 }
 
 const DEV_TOKEN_KEY = 'walkie.devToken';
+/** Session signed by the walkie server: a guest from an invite QR, or the owner via a login QR. */
+const SERVER_SESSION_KEY = 'walkie.serverSession';
+
+async function serverSessionToken(): Promise<string | null> {
+  const raw = await secureStorage.getItem(SERVER_SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const { token, expiresAt } = JSON.parse(raw) as { token: string; expiresAt: number };
+    return Date.now() < expiresAt - 60_000 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveServerSession(s: { token: string; expiresAt: number }, kind: 'guest' | 'owner') {
+  await secureStorage.setItem(SERVER_SESSION_KEY, JSON.stringify({ token: s.token, expiresAt: s.expiresAt, kind }));
+}
+
+/** Owner sign-in QR: swaps the one-time ticket for a server session. */
+export async function signInWithTicket(ticket: string): Promise<void> {
+  const r = await createApi(async () => null).exchangeTicket(ticket);
+  await saveServerSession(r.session, 'owner');
+}
+
+/** Invite QR without an account: join as a guest of that channel. */
+export async function joinAsGuest(code: string, displayName: string) {
+  const r = await createApi(async () => null).join(code, displayName);
+  if (r.session) await saveServerSession(r.session, 'guest');
+  return r.channel;
+}
 
 export async function getAccessToken(): Promise<string | null> {
+  const server = await serverSessionToken();
+  if (server) return server;
   if (config.authMode === 'dev') {
     const raw = await secureStorage.getItem(DEV_TOKEN_KEY);
     if (!raw) return null;
@@ -48,6 +80,7 @@ export async function devSignIn(handle: string): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  await secureStorage.removeItem(SERVER_SESSION_KEY);
   if (config.authMode === 'dev') {
     await secureStorage.removeItem(DEV_TOKEN_KEY);
     return;

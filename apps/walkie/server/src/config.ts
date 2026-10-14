@@ -40,6 +40,20 @@ const Env = z.object({
   TALK_BURST: z.coerce.number().int().min(1).max(100).default(6),
   TALK_BURST_WINDOW_MS: z.coerce.number().int().min(1000).max(600_000).default(10_000),
 
+  // Server-signed sessions: guests who join by scanning an invite QR, and
+  // owner sign-in via `npm run owner-login`. Unset → both are disabled.
+  WALKIE_SESSION_SECRET: z.string().optional(),
+  GUEST_SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  OWNER_SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(90),
+  // Public https address of this server (e.g. the Tailscale Funnel URL).
+  // Invite QR codes link to <PUBLIC_BASE_URL>/j/<code>.
+  PUBLIC_BASE_URL: z.string().url().optional(),
+  // Requests allowed per IP per minute on the unauthenticated join/login routes.
+  PUBLIC_RATE_PER_MIN: z.coerce.number().int().min(1).max(1000).default(20),
+  // Requests allowed per IP per minute on every other route (phones behind one
+  // NAT share an IP; a talking phone renews about 40 times a minute).
+  API_RATE_PER_MIN: z.coerce.number().int().min(60).max(100_000).default(600),
+
   JOIN_TOKEN_TTL_S: z.coerce.number().int().min(30).max(3600).default(300),
   INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24),
   MAX_CHANNEL_MEMBERS: z.coerce.number().int().min(2).max(500).default(50),
@@ -75,6 +89,10 @@ export type Config = {
     burst: number;
     burstWindowMs: number;
   };
+  sessions?: { secret: string; guestTtlS: number; ownerTtlS: number };
+  publicBaseUrl?: string;
+  publicRatePerMin: number;
+  apiRatePerMin: number;
   joinTokenTtlS: number;
   inviteTtlHours: number;
   maxChannelMembers: number;
@@ -129,6 +147,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     };
   }
 
+  if (e.WALKIE_SESSION_SECRET !== undefined && e.WALKIE_SESSION_SECRET.length < 32) {
+    throw new Error('WALKIE_SESSION_SECRET must be at least 32 characters.');
+  }
+  if (e.WALKIE_SESSION_SECRET && e.AUTH_MODE === 'dev' && e.WALKIE_SESSION_SECRET === e.WALKIE_DEV_AUTH_SECRET) {
+    throw new Error('WALKIE_SESSION_SECRET must differ from WALKIE_DEV_AUTH_SECRET.');
+  }
+  const publicBaseUrl = e.PUBLIC_BASE_URL?.replace(/\/$/, '');
+  if (production && publicBaseUrl && !publicBaseUrl.startsWith('https://')) {
+    throw new Error('PUBLIC_BASE_URL must use https:// in production (browsers only allow the microphone on secure pages).');
+  }
+
   const apiUrl = e.LIVEKIT_API_URL ?? e.LIVEKIT_URL.replace(/^ws/, 'http');
 
   return {
@@ -146,6 +175,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       burst: e.TALK_BURST,
       burstWindowMs: e.TALK_BURST_WINDOW_MS,
     },
+    sessions: e.WALKIE_SESSION_SECRET
+      ? { secret: e.WALKIE_SESSION_SECRET, guestTtlS: e.GUEST_SESSION_DAYS * 86_400, ownerTtlS: e.OWNER_SESSION_DAYS * 86_400 }
+      : undefined,
+    publicBaseUrl,
+    publicRatePerMin: e.PUBLIC_RATE_PER_MIN,
+    apiRatePerMin: e.API_RATE_PER_MIN,
     joinTokenTtlS: e.JOIN_TOKEN_TTL_S,
     inviteTtlHours: e.INVITE_TTL_HOURS,
     maxChannelMembers: e.MAX_CHANNEL_MEMBERS,

@@ -29,8 +29,9 @@ small.
 | Team | 100 (20 channels) | 1,056,000 | ≈15 GB | Ship: $50 + 906k × $0.0005 ≈ **$500/mo**, or **Scale $500/mo** (≈1.5M min incl.) | 1–2 small VMs, ≈$20–80/mo |
 | Org | 1,000 (200 channels) | 10,560,000 | ≈150 GB | Scale $500 + overage on ≈9M min: **several thousand $/mo** (overage rate unverified) | 2–4 VMs + bandwidth, ≈$100–400/mo |
 
-Free tier ("Build", $0): about 5,000 participant-minutes. That is roughly 10
-hours for one pair of phones, so it is enough for Milestone 1 testing only.
+Free tier ("Build", $0): about 5,000 participant-minutes. Each connected phone
+counts, so that is roughly 41 hours of one pair of phones connected (5,000 ÷ 2 ÷ 60).
+Enough for testing and occasional use, not for an always-on channel.
 
 **Other costs:**
 

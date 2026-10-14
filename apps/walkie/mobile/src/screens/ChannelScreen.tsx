@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import type { Api, ChannelDetail, ChannelSummary } from '../api';
 import { describeError } from '../errors';
 import { displayStatus, type DisplayStatus, type Notice } from '../ptt/machine';
@@ -51,6 +52,7 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
   const { state, presence, timing, ended, outputs } = session;
   const [detail, setDetail] = useState<ChannelDetail | null>(null);
   const [error, setError] = useState('');
+  const [inviteQr, setInviteQr] = useState<{ code: string; url: string; isWeb: boolean; hours: number } | null>(null);
   const [keepInBackground, setKeepInBackground] = useState(true);
 
   const loadDetail = useCallback(async () => {
@@ -86,15 +88,28 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
     );
   }
 
+  // Invite = a QR the other phone scans with its camera. It opens the web
+  // walkie (or this app, if installed) and joins them, no account needed.
   const invite = async () => {
     try {
       const inv = await api.createInvite(channel.id);
-      const hours = Math.round((inv.expiresAt - Date.now()) / 3600_000);
-      await Share.share({ message: `Join my Walkie channel "${channel.name}" with code ${inv.code} (single use, expires in ${hours} h).` });
+      setInviteQr({
+        code: inv.code,
+        url: inv.qrUrl ?? `protoforgewalkie://join/${inv.code}`,
+        isWeb: Boolean(inv.joinUrl),
+        hours: Math.max(1, Math.round((inv.expiresAt - Date.now()) / 3600_000)),
+      });
     } catch (e) {
       setError(describeError(e));
     }
   };
+  const shareInvite = () =>
+    inviteQr &&
+    Share.share({
+      message: inviteQr.isWeb
+        ? `Join my Walkie channel "${channel.name}": ${inviteQr.url} (works once, ${inviteQr.hours} h)`
+        : `Join my Walkie channel "${channel.name}" with code ${inviteQr.code} (single use, expires in ${inviteQr.hours} h).`,
+    });
 
   const memberActions = (userId: string, name: string) => {
     if (!isOwner || userId === selfId) return;
@@ -170,7 +185,27 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
           );
         })}
         {isOwner ? <Body muted>Long-press a member to remove or block them.</Body> : null}
-        {isOwner ? <Button label="Invite someone" kind="secondary" onPress={invite} /> : null}
+        {isOwner ? <Button label="Invite with QR code" kind="secondary" onPress={invite} /> : null}
+        <Modal visible={Boolean(inviteQr)} animationType="slide" transparent onRequestClose={() => setInviteQr(null)}>
+          <View style={st.modalBackdrop}>
+            <View style={st.modalCard}>
+              <Text style={st.h}>Invite to {channel.name}</Text>
+              {inviteQr ? (
+                <View style={st.qrBox}>
+                  <QRCode value={inviteQr.url} size={240} ecl="M" quietZone={8} backgroundColor="#ffffff" color="#000000" />
+                </View>
+              ) : null}
+              <Body muted>
+                {inviteQr?.isWeb
+                  ? `Let them scan this with their phone camera. It opens Walkie in their browser and joins them. Works once, for ${inviteQr?.hours} h.`
+                  : 'This server has no public address (PUBLIC_BASE_URL), so the code only opens the Walkie app on a phone that already has it.'}
+              </Body>
+              <Text selectable style={st.code}>{inviteQr?.code}</Text>
+              <Button label="Share link instead" kind="secondary" onPress={() => void shareInvite()} />
+              <Button label="Done" onPress={() => setInviteQr(null)} />
+            </View>
+          </View>
+        </Modal>
 
         {background.status !== 'unavailable' ? (
           <>
@@ -227,6 +262,10 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
 }
 
 const st = StyleSheet.create({
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: colors.bg, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, gap: 12 },
+  qrBox: { alignSelf: 'center', backgroundColor: '#ffffff', padding: 8, borderRadius: 12 },
+  code: { color: colors.text, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', textAlign: 'center', fontSize: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between' },
   link: { color: colors.accent, fontSize: 16 },
   banner: { borderWidth: 2, borderRadius: 12, padding: 12, gap: 4 },

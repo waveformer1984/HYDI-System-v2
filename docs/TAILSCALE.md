@@ -1,9 +1,10 @@
 # Tailscale: reaching the HYDI PC from phone and agents
 
 Tailnet `tailc50af2.ts.net`. The HYDI PC is `heidi-pc` (Windows 11, canonical
-tree `C:\Users\Owner\HYDI-System-v2`). **Everything here is tailnet-only.
-Never enable Tailscale Funnel for these ports**: the protoforge tools include
-Stripe balances, and nothing should be reachable from the public internet.
+tree `C:\Users\Owner\HYDI-System-v2`). **Everything here is tailnet-only
+except the walkie backend on :8443** (see the table). **Never enable Tailscale Funnel
+for any other port**: the protoforge tools include
+Stripe balances, and nothing else should be reachable from the public internet.
 
 ## What is exposed
 
@@ -11,6 +12,7 @@ Stripe balances, and nothing should be reachable from the public internet.
 |---|---|---|---|
 | `https://heidi-pc.tailc50af2.ts.net/` (443) | `127.0.0.1:3000` | heidi-web, incl. `/heidi` phone PWA | device pairing (`docs/HEIDI_MOBILE.md`) |
 | `https://heidi-pc.tailc50af2.ts.net:8470/mcp` | `127.0.0.1:3470` | protoforge MCP server (read-only tools) | `Authorization: Bearer <PROTOFORGE_MCP_TOKEN>` |
+| `https://heidi-pc.tailc50af2.ts.net:8443/` **(public, Funnel)** | `127.0.0.1:8787` | ProtoForge Walkie backend + browser walkie, so invite QRs work for phones off the tailnet. The one deliberate exception, approved 2026-10-13; `scripts/tailscale/funnel-walkie.ps1` refuses to run if Funnel is on any other port | invite codes / guest + owner sessions (`apps/walkie/docs/QR_JOIN.md`) |
 
 `GET :8470/healthz` is unauthenticated and returns only name and version.
 `tailscale serve` config persists across reboots.

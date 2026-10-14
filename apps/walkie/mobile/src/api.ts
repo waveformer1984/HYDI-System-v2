@@ -53,14 +53,22 @@ export function createApi(getToken: TokenSource) {
 
   return {
     devSession: (handle: string) => call<{ token: string; userId: string; expiresAt: number }>('POST', '/v1/dev/session', { handle }),
-    me: () => call<{ userId: string; displayName: string | null }>('GET', '/v1/me'),
+    me: () => call<{ userId: string; displayName: string | null; guest?: boolean }>('GET', '/v1/me'),
+    // QR flows (no account needed): preview/join an invite, owner ticket sign-in.
+    previewInvite: (code: string) =>
+      call<{ channelName: string; ownerName: string | null; expiresAt: number; guestJoin: boolean }>('GET', `/v1/invites/${encodeURIComponent(code)}/preview`),
+    join: (code: string, displayName: string) =>
+      call<{ userId: string; channel: ChannelSummary; session: { token: string; expiresAt: number } | null }>('POST', '/v1/join', { code, displayName }),
+    exchangeTicket: (ticket: string) =>
+      call<{ userId: string; displayName: string; session: { token: string; expiresAt: number } }>('POST', '/v1/session/exchange', { ticket }),
     setDisplayName: (displayName: string) => call<{ userId: string; displayName: string }>('PUT', '/v1/me', { displayName }),
     deleteAccount: () => call<{ deleted: boolean; authUserDeleted: boolean }>('DELETE', '/v1/me'),
     channels: () => call<{ channels: ChannelSummary[] }>('GET', '/v1/channels'),
     createChannel: (name: string) => call<ChannelSummary>('POST', '/v1/channels', { name }),
     channel: (id: string) => call<ChannelDetail>('GET', `/v1/channels/${id}`),
     deleteChannel: (id: string) => call<{ deleted: boolean }>('DELETE', `/v1/channels/${id}`),
-    createInvite: (id: string) => call<{ code: string; expiresAt: number; maxUses: number }>('POST', `/v1/channels/${id}/invites`, {}),
+    createInvite: (id: string) =>
+      call<{ code: string; expiresAt: number; maxUses: number; joinUrl?: string | null; appUrl?: string; qrUrl?: string }>('POST', `/v1/channels/${id}/invites`, {}),
     redeemInvite: (code: string) => call<ChannelSummary>('POST', '/v1/invites/redeem', { code }),
     leave: (id: string) => call<{ left: boolean }>('POST', `/v1/channels/${id}/leave`),
     removeMember: (id: string, userId: string) => call<{ removed: boolean }>('DELETE', `/v1/channels/${id}/members/${userId}`),
