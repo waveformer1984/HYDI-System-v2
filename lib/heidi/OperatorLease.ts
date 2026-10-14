@@ -156,3 +156,119 @@ export class OperatorLease {
     return rows;
   }
 }
+
+export interface OperatorLeaseSupervisorDeps {
+  /** Injectable lease factory — tests substitute a stubbed OperatorLease. */
+  createLease?: () => OperatorLease;
+  log?: (msg: string) => void;
+  warn?: (msg: string) => void;
+  error?: (msg: string) => void;
+}
+
+/**
+ * Owns the daemon's lease lifecycle across ticks: claim when unheld,
+ * heartbeat when held. The startup-only claim used to leave a daemon
+ * leaseless for its whole run when a restart raced a predecessor's
+ * not-yet-expired row — the supervisor re-attempts every tick instead.
+ * `held` is the unattended-authority gate's input: acting unattended
+ * with no live lease means acting with no recorded operator, so the
+ * gate refuses on it (NO_OPERATOR_LEASE).
+ */
+export class OperatorLeaseSupervisor {
+  private readonly pool: Pool;
+  private readonly ttlMs: number;
+  private readonly makeLease: () => OperatorLease;
+  private readonly log: (msg: string) => void;
+  private readonly warn: (msg: string) => void;
+  private readonly error: (msg: string) => void;
+  private lease: OperatorLease | null = null;
+  private candidate: OperatorLease | null = null;
+  private everHeld = false;
+  private inFlight = false;
+  private lastBlock: string | null = null;
+
+  constructor(pool: Pool, opts: { ttlMs?: number } = {}, deps: OperatorLeaseSupervisorDeps = {}) {
+    this.pool = pool;
+    this.ttlMs = opts.ttlMs ?? 120_000;
+    this.makeLease = deps.createLease ?? (() => new OperatorLease(this.pool, { ttlMs: this.ttlMs }));
+    this.log = deps.log ?? ((m) => console.log(m));
+    this.warn = deps.warn ?? ((m) => console.warn(m));
+    this.error = deps.error ?? ((m) => console.error(m));
+  }
+
+  /** Whether this process currently holds a live lease. */
+  get held(): boolean {
+    return this.lease !== null;
+  }
+
+  /**
+   * One supervision step. Held → heartbeat; a superseded heartbeat clears
+   * the hold so the NEXT tick re-claims. Unheld → claim; refusals and
+   * unavailability log on state change only, so a long-lived holder
+   * elsewhere doesn't spam the log every tick.
+   */
+  async tick(): Promise<void> {
+    if (this.inFlight) return;
+    this.inFlight = true;
+    try {
+      if (this.lease) {
+        const lease = this.lease;
+        try {
+          const ok = await lease.heartbeat();
+          if (!ok) {
+            this.lease = null;
+            this.error('[daemon] operator lease LOST — this process is no longer the recorded holder');
+          }
+        } catch {
+          /* transient DB error — the TTL absorbs one miss */
+        }
+        return;
+      }
+      if (!this.candidate) this.candidate = this.makeLease();
+      const candidate = this.candidate;
+      try {
+        const claim = await candidate.claim();
+        if (claim.held) {
+          const retried = this.everHeld || this.lastBlock !== null;
+          this.lease = candidate;
+          this.lastBlock = null;
+          this.log(retried
+            ? `[daemon] operator lease acquired on retry (owner=${candidate.ownerId.slice(0, 8)}… expires=${claim.expiresAt})`
+            : `[daemon] operator lease held (owner=${candidate.ownerId.slice(0, 8)}… expires=${claim.expiresAt})`);
+          this.everHeld = true;
+        } else {
+          const key = `refused:${JSON.stringify(claim.currentOwner)}`;
+          if (key !== this.lastBlock) {
+            this.lastBlock = key;
+            this.error(`[daemon] operator lease REFUSED — live holder: ${JSON.stringify(claim.currentOwner)}`);
+          }
+        }
+      } catch (e: unknown) {
+        const key = `unavailable:${e instanceof Error ? e.message : 'unknown'}`;
+        if (key !== this.lastBlock) {
+          this.lastBlock = key;
+          this.warn(`[daemon] operator lease unavailable (table missing or DB down): ${e instanceof Error ? e.message : 'unknown'}`);
+        }
+      }
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /**
+   * Voluntary release at shutdown. A failure is logged, not swallowed —
+   * released_at staying NULL is the difference between "clean handoff"
+   * and "presumed dead" in the evidence trail. The hold clears either
+   * way: the process is leaving.
+   */
+  async release(): Promise<void> {
+    const lease = this.lease;
+    this.lease = null;
+    if (!lease) return;
+    try {
+      await lease.release();
+    } catch (e: unknown) {
+      this.warn(`[daemon] operator lease release failed: ${e instanceof Error ? e.message : 'unknown'}`);
+    }
+  }
+}

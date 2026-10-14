@@ -57,7 +57,7 @@ describe('checkUnattendedAuthority — the gate in order', () => {
   const bounds = { ok: true, bounds: { unattendedEnabled: true, deniedResolvers: [], deniedCapabilities: [] } };
 
   it('allows when every gate is satisfied', () => {
-    const v = checkUnattendedAuthority({ env: envWithExec, boundsResult: bounds, resolverId: 'config-set', capability: 'config.write' });
+    const v = checkUnattendedAuthority({ env: envWithExec, boundsResult: bounds, resolverId: 'config-set', capability: 'config.write', leaseHeld: true });
     expect(v.allowed).toBe(true);
   });
 
@@ -66,8 +66,15 @@ describe('checkUnattendedAuthority — the gate in order', () => {
     expect(v).toMatchObject({ allowed: false, code: 'EXEC_DISABLED' });
   });
 
+  it('no live operator lease → NO_OPERATOR_LEASE, fail-closed even when leaseHeld is absent', () => {
+    const missing = checkUnattendedAuthority({ env: envWithExec, boundsResult: bounds, resolverId: 'config-set' });
+    expect(missing).toMatchObject({ allowed: false, code: 'NO_OPERATOR_LEASE' });
+    const falsy = checkUnattendedAuthority({ env: envWithExec, boundsResult: bounds, resolverId: 'config-set', leaseHeld: () => false });
+    expect(falsy).toMatchObject({ allowed: false, code: 'NO_OPERATOR_LEASE' });
+  });
+
   it('bounds unreadable → BOUNDS_UNREACHABLE (an unreachable bound is a refused bound)', () => {
-    const v = checkUnattendedAuthority({ env: envWithExec, boundsResult: { ok: false, reason: 'dead' }, resolverId: 'config-set' });
+    const v = checkUnattendedAuthority({ env: envWithExec, boundsResult: { ok: false, reason: 'dead' }, resolverId: 'config-set', leaseHeld: true });
     expect(v).toMatchObject({ allowed: false, code: 'BOUNDS_UNREACHABLE' });
   });
 
@@ -76,6 +83,7 @@ describe('checkUnattendedAuthority — the gate in order', () => {
       env: envWithExec,
       boundsResult: { ok: true, bounds: { unattendedEnabled: false, deniedResolvers: [], deniedCapabilities: [] } },
       resolverId: 'config-set',
+      leaseHeld: true,
     });
     expect(v).toMatchObject({ allowed: false, code: 'UNATTENDED_DISABLED' });
   });
@@ -85,6 +93,7 @@ describe('checkUnattendedAuthority — the gate in order', () => {
       env: envWithExec,
       boundsResult: { ok: true, bounds: { unattendedEnabled: true, deniedResolvers: ['config-set'], deniedCapabilities: [] } },
       resolverId: 'config-set',
+      leaseHeld: true,
     });
     expect(v).toMatchObject({ allowed: false, code: 'RESOLVER_DENIED' });
   });
@@ -94,6 +103,7 @@ describe('checkUnattendedAuthority — the gate in order', () => {
       env: envWithExec,
       boundsResult: { ok: true, bounds: { unattendedEnabled: true, deniedResolvers: [], deniedCapabilities: ['config.write'] } },
       resolverId: 'config-set', capability: 'config.write',
+      leaseHeld: true,
     });
     expect(v).toMatchObject({ allowed: false, code: 'CAPABILITY_DENIED' });
   });
@@ -128,6 +138,7 @@ describe('resolveEligibleActions — pooled sweep consults live bounds', () => {
     const out = await resolveEligibleActions(svc, {
       env: mkEnv(), throttleMs: 0,
       pool: mkPool(new Error('connection refused')),
+      leaseHeld: true,
     });
     expect(out.attempted).toHaveLength(0);
     expect(out.unauthorized.some((x) => x.actionId === a.id)).toBe(true);
@@ -141,9 +152,25 @@ describe('resolveEligibleActions — pooled sweep consults live bounds', () => {
     const out = await resolveEligibleActions(svc, {
       env: mkEnv(), throttleMs: 0,
       pool: mkPool([boundsRow({ denied_resolvers: ['config-set'] })]),
+      leaseHeld: true,
     });
     expect(out.attempted).toHaveLength(0);
     expect(out.unauthorized.some((x) => x.actionId === a.id)).toBe(true);
+    delete process.env.HEIDI_ALLOW_EXEC;
+  });
+
+  it('flag on + live bounds but no operator lease → refused as NO_OPERATOR_LEASE, recorded as evidence', async () => {
+    process.env.HEIDI_ALLOW_EXEC = 'true';
+    const svc = new HumanActionService();
+    const a = svc.request(spec()).action;
+    const out = await resolveEligibleActions(svc, {
+      env: mkEnv(), throttleMs: 0,
+      pool: mkPool([boundsRow()]),
+      leaseHeld: () => false,
+    });
+    expect(out.attempted).toHaveLength(0);
+    expect(out.unauthorized.some((x) => x.actionId === a.id && x.reason === 'authority NO_OPERATOR_LEASE')).toBe(true);
+    expect(svc.get(a.id).resolver.lastOutcome).toBe('unauthorized');
     delete process.env.HEIDI_ALLOW_EXEC;
   });
 
@@ -155,6 +182,7 @@ describe('resolveEligibleActions — pooled sweep consults live bounds', () => {
       env: mkEnv(), throttleMs: 0,
       pool: mkPool(new Error('should not be queried')),
       deps: { authority: { ok: true, bounds: { unattendedEnabled: true, deniedResolvers: [], deniedCapabilities: [] } } },
+      leaseHeld: true,
     });
     // Gate consulted but allowed → resolution proceeds to the resolver
     // (which reports unauthorized/failed on env stubs — either way the

@@ -5,7 +5,7 @@
  * writes), so the tests prove lease BEHAVIOR — claim/refuse/heartbeat/
  * release/stale — not just that SQL text looks right.
  */
-import { OperatorLease } from '../../lib/heidi/OperatorLease';
+import { OperatorLease, OperatorLeaseSupervisor } from '../../lib/heidi/OperatorLease';
 import type { Pool, QueryResult } from 'pg';
 
 interface FakeRow {
@@ -185,5 +185,85 @@ describe('OperatorLease', () => {
     await lease.claim();
     const row = await OperatorLease.readCurrent(pool);
     expect(row?.owner_id).toBe(lease.ownerId);
+  });
+});
+
+describe('OperatorLeaseSupervisor — the per-tick lifecycle', () => {
+  const mkSupervisor = (pool: Pool, opts: { ttlMs?: number } = {}) => {
+    const lines: { level: string; msg: string }[] = [];
+    const collect = (level: string) => (msg: string) => lines.push({ level, msg });
+    const sup = new OperatorLeaseSupervisor(pool, opts, { log: collect('log'), warn: collect('warn'), error: collect('error') });
+    return { sup, lines };
+  };
+
+  it('claims on the first tick — held is true for the gate', async () => {
+    const { pool } = fakePool();
+    const { sup, lines } = mkSupervisor(pool);
+    await sup.tick();
+    expect(sup.held).toBe(true);
+    expect(lines.some((l) => l.level === 'log' && /operator lease held/.test(l.msg))).toBe(true);
+  });
+
+  it('a refused startup self-heals: re-claims every tick until the predecessor expires', async () => {
+    const { pool, state } = fakePool();
+    await new OperatorLease(pool, { ttlMs: 60_000 }).claim(); // live predecessor
+    const { sup, lines } = mkSupervisor(pool, { ttlMs: 60_000 });
+
+    await sup.tick();
+    expect(sup.held).toBe(false);
+    expect(lines.some((l) => l.level === 'error' && /REFUSED/.test(l.msg))).toBe(true);
+
+    state.now += 61_000; // predecessor's TTL lapses
+    await sup.tick();
+    expect(sup.held).toBe(true);
+    expect(lines.some((l) => /acquired on retry/.test(l.msg))).toBe(true);
+  });
+
+  it('repeated refusals log once per holder, not once per tick', async () => {
+    const { pool } = fakePool();
+    await new OperatorLease(pool).claim();
+    const { sup, lines } = mkSupervisor(pool);
+    await sup.tick();
+    await sup.tick();
+    await sup.tick();
+    expect(lines.filter((l) => /REFUSED/.test(l.msg))).toHaveLength(1);
+  });
+
+  it('a superseded heartbeat clears the hold and the next tick re-claims', async () => {
+    const { pool, state } = fakePool();
+    const { sup, lines } = mkSupervisor(pool, { ttlMs: 30_000 });
+    await sup.tick();
+    expect(sup.held).toBe(true);
+
+    const contested = await new OperatorLease(pool, { ttlMs: 30_000 }).claim(); // refused — we're live
+    expect(contested.held).toBe(false);
+    state.now += 31_000;
+    await new OperatorLease(pool, { ttlMs: 30_000 }).claim();  // expired → superseded
+    await sup.tick();                                         // heartbeat touches 0 rows
+    expect(sup.held).toBe(false);
+    expect(lines.some((l) => /LOST/.test(l.msg))).toBe(true);
+
+    state.now += 31_000;                                      // superseder's TTL lapses too
+    await sup.tick();                                         // re-claim
+    expect(sup.held).toBe(true);
+    expect(lines.some((l) => /acquired on retry/.test(l.msg))).toBe(true);
+  });
+
+  it('release failures are logged, not swallowed — and the hold still clears', async () => {
+    const { pool } = fakePool();
+    const realQuery = pool.query.bind(pool);
+    const endingPool = {
+      query: async (text: string, values?: unknown[]) => {
+        if (/released_at = now\(\)/.test(text)) throw new Error('pool is ending');
+        return realQuery(text, values);
+      },
+    } as unknown as Pool;
+    const { sup, lines } = mkSupervisor(endingPool);
+    await sup.tick();
+    expect(sup.held).toBe(true);
+
+    await sup.release();
+    expect(sup.held).toBe(false);
+    expect(lines.some((l) => l.level === 'warn' && /lease release failed: pool is ending/.test(l.msg))).toBe(true);
   });
 });
