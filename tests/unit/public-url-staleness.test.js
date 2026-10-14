@@ -8,6 +8,7 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { detectStaleBaseUrl, syncHumanActions } = require('../../lib/human-actions/detector');
+const { runVerifier } = require('../../lib/human-actions/verifiers');
 const { parseWhsecSecret, upsertEnvVar } = require('../../scripts/stripe-webhook-listener');
 
 const envWith = (kv) => ({
@@ -41,8 +42,46 @@ describe('detectStaleBaseUrl', () => {
     expect(r.created).toBe(true);
     const a = s.get(r.actionId);
     expect(a.blockerKey).toBe('protoforge:public-base-url-stale');
-    expect(a.verifier).toEqual({ name: 'http-reachable', spec: { urlEnv: 'NEXT_PUBLIC_APP_URL' } });
+    expect(a.verifier).toEqual({ name: 'http-reachable', spec: { urlEnv: 'NEXT_PUBLIC_APP_URL', probePath: '/api/ping' } });
     expect(a.instructions.join(' ')).toMatch(/4040\/api\/tunnels/);
+  });
+
+  test('ingress gate 404s / but answers /api/ping → not stale', async () => {
+    const s = new HumanActionService({});
+    const probed = [];
+    const fetch = async (u) => {
+      const url = String(u);
+      probed.push(url);
+      if (url.includes('4040')) return { ok: true, json: async () => ({ tunnels: [] }) };
+      // The ingress gate's real behavior: 404 on the bare origin, 200 on the
+      // public liveness endpoint. Probing / must never mint an action.
+      if (url.endsWith('/api/ping')) return { ok: true, status: 200 };
+      return { ok: false, status: 404 };
+    };
+    const r = await detectStaleBaseUrl(s, envWith({ NEXT_PUBLIC_APP_URL: 'https://alive.ngrok-free.dev' }), { fetch });
+    expect(r.stale).toBe(false);
+    expect(probed[0]).toBe('https://alive.ngrok-free.dev/api/ping');
+    expect(s.listOpen().filter((a) => a.blockerKey === 'protoforge:public-base-url-stale').length).toBe(0);
+  });
+
+  test('open action seeded with an older verifier spec is amended to the current probe', async () => {
+    const env = envWith({ NEXT_PUBLIC_APP_URL: 'https://alive.ngrok-free.dev' });
+    const s = new HumanActionService({});
+    const seed = s.request({
+      blockerKey: 'protoforge:public-base-url-stale',
+      type: 'deployment', title: 'stale', description: 'd', instructions: ['old'],
+      verifier: { name: 'http-reachable', spec: { urlEnv: 'NEXT_PUBLIC_APP_URL' } },
+      priority: 'high', source: 'test',
+    }).action;
+    const fetch = async (u) => String(u).includes('4040')
+      ? { ok: true, json: async () => ({ tunnels: [] }) }
+      : { ok: true, status: 200 };
+    const r = await detectStaleBaseUrl(s, env, { fetch });
+    expect(r.stale).toBe(false);
+    expect(r.reconciled).toBe(1);
+    const a = s.get(seed.id);
+    expect(a.verifier.spec.probePath).toBe('/api/ping');
+    expect(a.instructions.join(' ')).toMatch(/api\/ping/);
   });
 
   test('dedupe: second detection does not create a second action', async () => {
@@ -99,6 +138,33 @@ describe('detectStaleBaseUrl', () => {
     const a = s.get(r.actionId);
     expect(a.status).toBe('RESOLVED');
     expect(a.resolution).toBe('auto_verified');
+  });
+});
+
+describe('http-reachable probePath', () => {
+  test('probes the spec path, not the bare origin — gate-404 flap cannot resolve-then-redetect', async () => {
+    const hit = [];
+    const fetch = async (u) => {
+      const url = String(u);
+      hit.push(url);
+      return url.endsWith('/api/ping') ? { ok: true, status: 200 } : { ok: false, status: 404 };
+    };
+    const r = await runVerifier('http-reachable', {
+      url: 'https://alive.ngrok-free.dev', probePath: '/api/ping',
+    }, { fetch });
+    expect(r.status).toBe('VERIFIED');
+    expect(hit).toEqual(['https://alive.ngrok-free.dev/api/ping']);
+    expect(r.checks.find((c) => c.name === 'reachable').detail).toBe('HTTP 200 @ /api/ping');
+    expect(r.evidence.target).toBe('/api/ping');
+  });
+
+  test('no probePath keeps bare-origin semantics', async () => {
+    const hit = [];
+    const fetch = async (u) => { hit.push(String(u)); return { ok: true, status: 200 }; };
+    const r = await runVerifier('http-reachable', { url: 'https://x.example.dev' }, { fetch });
+    expect(r.status).toBe('VERIFIED');
+    expect(hit).toEqual(['https://x.example.dev']);
+    expect(r.evidence.target).toBe('/');
   });
 });
 
