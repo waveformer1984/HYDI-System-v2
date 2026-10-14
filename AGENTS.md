@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidelines for AI agents (Claude Code, Codex, Cursor, etc.) working autonomously in this repository. For comprehensive architecture reference, see `CLAUDE.md`. For prescriptive Cursor IDE rules, see `.cursorrules`.
+Guidelines for AI agents (Claude Code, Codex, Cursor, etc.) working autonomously in this repository. For comprehensive architecture reference, see `CLAUDE.md`. For prescriptive Cursor IDE rules, see `.cursorrules`. For mobile-first remote operations (phone → cloud agent → PR), see `.cursor/rules/hydi-mobile-operations.mdc` (`alwaysApply`).
 
 ## Orientation
 
