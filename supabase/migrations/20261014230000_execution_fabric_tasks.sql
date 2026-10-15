@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.execution_fabric_tasks (
   role              text        NOT NULL,
   environment       text        NOT NULL DEFAULT 'heidi-web',
   plan              jsonb       NOT NULL DEFAULT '{}'::jsonb,
-  authorization     jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  "authorization"   jsonb       NOT NULL DEFAULT '{}'::jsonb,
   input             jsonb       NOT NULL DEFAULT '{}'::jsonb,
   checkpoint        jsonb,
   job_id            text,
