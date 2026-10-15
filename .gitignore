@@ -105,6 +105,9 @@ hydi.db
 # HYDI operational runtime data — durable event logs and decision records (local-only)
 .hydi-operational/
 
+# Observatory telemetry — local runtime evidence, never committed
+.observatory/
+
 # Daemon runtime artifacts
 .heidi-daemon.lock
 .heidi-daemon-audit.jsonl
