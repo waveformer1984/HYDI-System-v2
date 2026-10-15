@@ -100,7 +100,12 @@ describe('execution fabric phase 5 identity and tenant isolation', () => {
   it('blocks execution when permission is revoked after approval', async () => {
     const gw = gateway();
     const pending = await gw.submit({ capabilityId: 'tests.run', role: 'operator', confirm: false, principal: tenantA });
-    const approved = await gw.approveTask(pending.task.id, 'viewer', true, {}, { ...tenantA, role: 'viewer' });
+    // The approver holds fabric:control, but the permission recorded on the
+    // task is one operators no longer have (an owner-only grant).
+    const stored = await gw.store.get(pending.task.id);
+    stored.authorization = { ...stored.authorization, permission: 'billing:refund:request' };
+    await gw.store.persist(stored);
+    const approved = await gw.approveTask(pending.task.id, 'operator', true, {}, tenantA);
     expect(approved.error).toBe('forbidden');
     expect((await gw.store.get(pending.task.id)).state).toBe('NEEDS_HUMAN');
   });

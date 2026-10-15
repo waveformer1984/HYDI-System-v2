@@ -86,3 +86,43 @@ describe('tenant-aware re-verification', () => {
     expect(out.error).not.toBe('tenant_binding_required');
   });
 });
+
+describe('approve, cancel and resume require fabric:control (operator)', () => {
+  const { hasPermission } = require('../../lib/auth/rbac');
+  const { ACTIONS } = require('../../lib/mobile-ops/action-catalog');
+
+  it('only operator and owner hold fabric:control', () => {
+    expect(hasPermission('owner', 'fabric:control')).toBe(true);
+    expect(hasPermission('operator', 'fabric:control')).toBe(true);
+    expect(hasPermission('viewer', 'fabric:control')).toBe(false);
+    expect(hasPermission('agent', 'fabric:control')).toBe(false);
+  });
+
+  it('the action catalog requires it for approve, cancel and resume', () => {
+    for (const a of ['ops.task_approve', 'ops.task_cancel', 'ops.task_resume']) {
+      expect(ACTIONS[a].permission).toBe('fabric:control');
+    }
+  });
+
+  it('a viewer cannot approve, cancel or retry through the gateway; the task is left untouched', async () => {
+    const gw = gateway();
+    const pending = await gw.submit({ capabilityId: 'tests.run', role: 'operator', confirm: false });
+    const id = pending.task.id;
+    expect((await gw.approveTask(id, 'viewer', true)).error).toBe('forbidden');
+    expect((await gw.cancel(id, 'viewer')).error).toBe('forbidden');
+    expect((await gw.retryTask(id, 'viewer')).error).toBe('forbidden');
+    expect((await gw.store.get(id)).state).toBe('AWAITING_APPROVAL');
+    const cancelled = await gw.cancel(id, 'operator');
+    expect(cancelled.ok).toBe(true);
+  });
+
+  it('a viewer is refused through the typed-action gate before any runner', async () => {
+    const gw = gateway();
+    const pending = await gw.submit({ capabilityId: 'tests.run', role: 'operator', confirm: false });
+    const out = await executeTypedAction({
+      action: 'ops.task_cancel', args: { task_id: pending.task.id }, confirm: true, role: 'viewer', ctx: { executionGateway: gw },
+    });
+    expect(out).toMatchObject({ ok: false, error: 'forbidden' });
+    expect((await gw.store.get(pending.task.id)).state).toBe('AWAITING_APPROVAL');
+  });
+});

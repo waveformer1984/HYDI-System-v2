@@ -142,7 +142,7 @@ export default async function handler(req, res) {
 
   switch (requestAction) {
     case 'approve': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-approve' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-approve' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
@@ -155,20 +155,22 @@ export default async function handler(req, res) {
     }
 
     case 'retry': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-retry' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-retry' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
       }
-      const out = await gateway.orchestrator.retryObjective(body.task_id, auth.role, {
+      // Through the gateway, not the orchestrator directly: retryTask applies
+      // the tenant check and the fabric:control permission before retrying.
+      const out = await gateway.retryTask(body.task_id, auth.role, {
         loadServiceStatus: loadServiceStatusSnapshot,
-      });
-      const code = out.error === 'not_found' ? 404 : out.ok ? 200 : 400;
+      }, fabricPrincipal(auth));
+      const code = out.error === 'not_found' ? 404 : out.error === 'forbidden' ? 403 : out.ok ? 200 : 400;
       return res.status(code).json(out);
     }
 
     case 'cancel': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-cancel' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-cancel' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
