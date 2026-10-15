@@ -266,9 +266,12 @@ Generate secrets by direct injection (SECURITY_PROTOCOL.md), never by echoing th
 7. Negative checks: test card `4000 0000 0000 0341` (attach succeeds, charge fails) → no access; `stripe trigger` duplicates → no duplicate rows; stop the webhook listener, buy, then `POST /api/billing/admin/reconcile` → access appears.
 8. Tier 2: `npm run test:local` runs the Postgres acceptance suite against local Supabase (**it truncates billing tables** — never point it at real data).
 
-Note: in this repo `npm run dev` currently fails under Next 16's default Turbopack because of the
-custom `webpack` config (pre-existing); `npx next dev --webpack` works. `next dev` also rewrites
-`tsconfig.json` and `AGENTS.md`; do not commit those edits with unrelated work.
+Note: this repo uses a custom `webpack` config (`next.config.js`). **`npm run dev` already passes
+`--webpack`** (Turbopack is not used for dev). Plain `npx next dev` without `--webpack` may fail.
+`next dev` can rewrite `tsconfig.json` and `AGENTS.md`; do not commit those edits with unrelated work.
+
+Preflight: `node scripts/billing-preflight.js` after `supabase start` (checks Postgres + env var
+presence, never prints secrets). Sandbox evidence log: `docs/billing/SANDBOX_RUN_2026-10-15.md`.
 
 ## K. Deployment, monitoring, reconciliation, rollback
 

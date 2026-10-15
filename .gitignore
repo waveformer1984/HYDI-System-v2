@@ -15,6 +15,7 @@ node_modules/
 
 # tools/verify.ps1 output — evidence for the operator, not project history
 .hydi/verification/
+.hydi/billing-verify/
 
 # Heidi runtime secrets
 .vapid-keys.json
