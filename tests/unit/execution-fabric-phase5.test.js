@@ -140,8 +140,16 @@ describe('execution fabric phase 5 identity and tenant isolation', () => {
   });
 
   it('billing evidence fails closed and does not retry charges', () => {
-    expect(integrationStatus().integrated).toBe(false);
-    expect(integrationStatus().disposition).toBe('blocked_pending_pr_368');
+    // #368 (lib/billing/verified-execution) is merged on clean-main, so the
+    // adapter reports integrated. Integration only changes the label: it must
+    // never enable real money or claim verification on its own.
+    expect(integrationStatus()).toMatchObject({
+      integrated: true,
+      disposition: 'adapter_ready',
+      real_money_enabled: false,
+      verified: false,
+      pr: null,
+    });
     expect(evaluateBillingEvidence(null, { tenant_id: 'tenant-a' }).reason).toBe('missing_evidence');
     const stale = evaluateBillingEvidence(
       { tenant_id: 'tenant-a', observed_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(), provider_status: 'succeeded', idempotency_key: 'k', provider_object_id: 'ch_1' },
