@@ -26,6 +26,15 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const TASK_ID_RE = /^[a-f0-9]{24}$/;
 
+function fabricPrincipal(auth) {
+  return {
+    subject: auth.deviceId || auth.role,
+    role: auth.role,
+    tenant_id: null,
+    auth_source: auth.deviceId ? 'device' : 'service',
+  };
+}
+
 function normalizeRequestAction(body) {
   if (!body || typeof body !== 'object') return null;
 
@@ -112,7 +121,7 @@ export default async function handler(req, res) {
     const taskId = typeof req.query?.task_id === 'string' ? req.query.task_id : null;
     if (taskId) {
       if (!TASK_ID_RE.test(taskId)) return res.status(400).json({ error: 'invalid_task_id' });
-      const out = await gateway.getTask(taskId, auth.role);
+      const out = await gateway.getTask(taskId, auth.role, fabricPrincipal(auth));
       if (!out.ok) return res.status(out.error === 'not_found' ? 404 : 403).json(out);
       return res.status(200).json(out);
     }
@@ -140,7 +149,7 @@ export default async function handler(req, res) {
       }
       const out = await gateway.approveTask(body.task_id, auth.role, body.confirm === true, {
         loadServiceStatus: loadServiceStatusSnapshot,
-      });
+      }, fabricPrincipal(auth));
       const code = out.error === 'not_found' ? 404 : out.error === 'forbidden' ? 403 : out.ok || out.awaiting_approval ? 200 : 400;
       return res.status(code).json(out);
     }
@@ -164,7 +173,7 @@ export default async function handler(req, res) {
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
       }
-      const out = await gateway.cancel(body.task_id, auth.role);
+      const out = await gateway.cancel(body.task_id, auth.role, fabricPrincipal(auth));
       await supabase
         .from('auth_audit_log')
         .insert({
@@ -217,6 +226,7 @@ export default async function handler(req, res) {
         confirm: body.confirm === true,
         role: auth.role,
         actor: auth.deviceId || auth.role,
+        principal: fabricPrincipal(auth),
         objective: typeof body.objective === 'string' ? body.objective.slice(0, 500) : null,
         idempotencyKey,
         correlationId:
