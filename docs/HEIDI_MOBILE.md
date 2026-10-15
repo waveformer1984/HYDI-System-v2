@@ -31,6 +31,7 @@ Phone (/heidi, PWA)                     Heidi server (Next.js, same origin)     
 | `GET /api/heidi-mobile/activity` | `/api/notifications` | Briefing feed (no model summarisation) |
 | `POST /api/heidi-mobile/control` | `POST /api/agent-manager/control` | start / restart / stop only, `confirm: true` required |
 | `GET/POST /api/heidi-mobile/ops` | `GET/POST /api/mobile-ops/run` | Typed diagnostics (`health.check`, `service.status`, `git.inspect`, `tests.run`); allowlisted, RBAC + audit |
+| `GET/POST /api/heidi-mobile/fabric` | `GET/POST /api/mobile-ops/fabric` | Durable task lifecycle. Phone shows verified only when fabric verification passed. Client `tenant_id` is stripped. |
 | `POST /api/heidi-mobile/chat` | `POST /api/chat` (SSE) | Streams `delta/tool/meta/actions/error/done` |
 | `GET /api/heidi-mobile/events` | `/api/events/stream` (SSE) | Realtime relay, 5-min connection cap |
 
