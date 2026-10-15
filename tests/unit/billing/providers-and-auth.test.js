@@ -105,7 +105,8 @@ describe('customer tokens', () => {
 
   it('round-trips and binds exactly one tenant', () => {
     const { token } = issueCustomerToken(tenantId, { secret });
-    expect(verifyCustomerToken(token, { secret })).toEqual({ valid: true, tenantId });
+    expect(verifyCustomerToken(token, { secret })).toMatchObject({ valid: true, tenantId });
+    expect(verifyCustomerToken(token, { secret }).tokenNonce).toMatch(/^[a-f0-9]+$/);
   });
 
   it('rejects tampering, the wrong key, expiry and a weak/unset secret', () => {
