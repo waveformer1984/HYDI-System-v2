@@ -12,6 +12,7 @@ const { redactSensitive } = require('../../lib/execution-fabric/access');
 const { buildOperationalSummary } = require('../../lib/execution-fabric/operational-summary');
 const ops = require('../../lib/mobile-ops/ops-task-actions');
 const { executeTypedAction } = require('../../lib/mobile-ops/typed-actions');
+const { runAction } = require('../../lib/mobile-ops/action-runners');
 
 function gateway() {
   const store = new TaskStore({ now: () => Date.now(), randomBytes: () => Buffer.alloc(12, 7) });
@@ -53,6 +54,16 @@ describe('role handling', () => {
     }
     const approve = await ops.opsTaskApprove({ task_id: created.task.id, confirm: true }, { executionGateway: gw });
     expect(approve).toEqual({ ok: false, error: 'role_required' });
+  });
+
+  it('runAction re-checks the role against the catalog before any ops runner', async () => {
+    const gw = gateway();
+    const noRole = await runAction('ops.recovery_execute', { confirm: true }, { executionGateway: gw });
+    expect(noRole).toMatchObject({ ok: false, error: 'forbidden' });
+    const viewer = await runAction('ops.recovery_preview', {}, { executionGateway: gw, role: 'viewer' });
+    expect(viewer).toMatchObject({ ok: false, error: 'forbidden' });
+    const unknown = await runAction('ops.__proto__', {}, { executionGateway: gw, role: 'owner' });
+    expect(unknown).toMatchObject({ ok: false, error: 'unknown_action' });
   });
 
   it('the typed-action gate passes the caller role through to the runner', async () => {
