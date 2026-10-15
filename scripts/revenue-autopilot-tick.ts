@@ -60,7 +60,12 @@ export async function runOnce(deps: { goals?: any; service?: any; realization?: 
     deps.service ||
     new HumanActionService({ verifierDeps: { jobManager: new JobManager() } });
 
-  await syncHumanActions(service, goals);
+  // Resolution is deliberately disabled on this cadence: an unattended
+  // pool-less sweep bypasses the unattended-authority gate (env flag +
+  // operator lease + durable bounds all live behind the pooled path).
+  // Governed resolution belongs to the lease-holding daemon; the tick's
+  // mandate is detect → seed → verify → resume, per the header contract.
+  await syncHumanActions(service, goals, { resolve: { disabled: true } });
 
   // Payment signals: re-check open claims against internal records — a
   // webhook that landed since the last tick may now attribute them.
