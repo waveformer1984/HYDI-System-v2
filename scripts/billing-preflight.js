@@ -63,6 +63,23 @@ async function main() {
     detail: 'HYDI_SERVICE_SECRET (operator admin routes)',
   });
 
+  const supabaseAuth = process.env.BILLING_SUPABASE_AUTH !== 'false';
+  checks.push({
+    id: 'billing_supabase_auth_config',
+    ok: !supabaseAuth || (hasEnv('NEXT_PUBLIC_SUPABASE_URL') && hasEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')),
+    detail: supabaseAuth
+      ? 'BILLING_SUPABASE_AUTH enabled — public Supabase URL + anon key required'
+      : 'BILLING_SUPABASE_AUTH disabled (legacy/walkie only)',
+  });
+  checks.push({
+    id: 'billing_legacy_token_flag',
+    ok: true,
+    detail:
+      process.env.BILLING_LEGACY_CUSTOMER_TOKEN === 'false'
+        ? 'BILLING_LEGACY_CUSTOMER_TOKEN=false (hbc1 disabled)'
+        : 'BILLING_LEGACY_CUSTOMER_TOKEN not false (hbc1 enabled unless overridden)',
+  });
+
   let pool;
   try {
     pool = new Pool(pgConfig());

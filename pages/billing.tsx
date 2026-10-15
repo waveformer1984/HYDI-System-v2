@@ -43,7 +43,15 @@ export default function BillingPage() {
   const polls = useRef(0);
 
   const load = useCallback(async () => {
-    if (!customerToken()) { setError('Open the access link you were given to view billing.'); return null; }
+    const token = customerToken();
+    if (!token) {
+      const sess = await fetch('/api/billing/auth/session', { credentials: 'include' });
+      const s = await sess.json().catch(() => ({}));
+      if (!sess.ok || !(s as { authenticated?: boolean }).authenticated) {
+        setError('Sign in at /billing/signin or use your legacy access link.');
+        return null;
+      }
+    }
     const r = await customerFetch<Account>('/api/billing/account');
     if (r.ok) { setAccount(r.data as Account); setError(null); return r.data as Account; }
     setError(r.status === 401 ? 'Your access link is missing or expired. Ask your Hydi(ai) contact for a new one.' : 'Could not load billing details.');

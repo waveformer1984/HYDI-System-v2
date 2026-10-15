@@ -33,7 +33,9 @@ describe('billing sandbox workflow', () => {
 
   it('lists all migration billing tables', () => {
     expect(BILLING_TABLES).toContain('billing_webhook_events');
-    expect(BILLING_TABLES.length).toBe(14);
+    expect(BILLING_TABLES).toContain('billing_tenant_members');
+    expect(BILLING_TABLES).toContain('billing_walkie_tenant_bindings');
+    expect(BILLING_TABLES.length).toBe(16);
   });
 
   it('marks env_secrets BLOCKED when secrets missing', async () => {

@@ -17,7 +17,7 @@ import { LocalModelClient } from '../../../../api/local-model';
 
 export default async function handler(req, res) {
   if (!allowMethods(req, res, ['POST'])) return;
-  const tenantId = requireCustomer(req, res, { routeName: 'ai-complete', rateMax: 30 });
+  const tenantId = await requireCustomer(req, res, { routeName: 'ai-complete', rateMax: 30 });
   if (!tenantId) return;
   try {
     const b = body(req);

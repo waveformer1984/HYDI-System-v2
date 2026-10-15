@@ -49,7 +49,11 @@ export async function customerFetch<T>(path: string, init: RequestInit = {}): Pr
   const token = customerToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  const r = await fetch(path, {
+    ...init,
+    credentials: token ? 'same-origin' : 'include',
+    headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+  });
   const data = (await r.json().catch(() => ({ error: 'bad_response' }))) as T | ApiError;
   return { ok: r.ok, status: r.status, data };
 }

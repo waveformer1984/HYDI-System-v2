@@ -7,7 +7,7 @@ import { getBillingService, sendError, allowMethods, requireCustomer } from '../
 
 export default async function handler(req, res) {
   if (!allowMethods(req, res, ['POST'])) return;
-  const tenantId = requireCustomer(req, res, { routeName: 'portal', rateMax: 20 });
+  const tenantId = await requireCustomer(req, res, { routeName: 'portal', rateMax: 20 });
   if (!tenantId) return;
   try {
     res.status(200).json(await getBillingService().createPortalSession(tenantId));

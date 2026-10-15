@@ -9,7 +9,7 @@ import { getBillingService, sendError, allowMethods, requireCustomer, body } fro
 
 export default async function handler(req, res) {
   if (!allowMethods(req, res, ['POST'])) return;
-  const tenantId = requireCustomer(req, res, { routeName: 'checkout', rateMax: 20 });
+  const tenantId = await requireCustomer(req, res, { routeName: 'checkout', rateMax: 20 });
   if (!tenantId) return;
   try {
     const b = body(req);
