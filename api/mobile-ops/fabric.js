@@ -73,19 +73,30 @@ export default async function handler(req, res) {
     if (!auth.ok) return;
 
     if (req.query?.readiness === '1' || req.query?.readiness === 'true') {
-      return res.status(200).json(assessExecutionFabricReadiness());
+      return res.status(200).json(
+        assessExecutionFabricReadiness({
+          store: gateway.store,
+          supabaseConfigured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+        }),
+      );
+    }
+
+    if (req.query?.recovery === '1' || req.query?.recovery === 'true') {
+      const status = await gateway.recoveryStatus();
+      return res.status(200).json(status);
     }
 
     const taskId = typeof req.query?.task_id === 'string' ? req.query.task_id : null;
     if (taskId) {
       if (!TASK_ID_RE.test(taskId)) return res.status(400).json({ error: 'invalid_task_id' });
-      const out = gateway.getTask(taskId, auth.role);
+      const out = await gateway.getTask(taskId, auth.role);
       if (!out.ok) return res.status(out.error === 'not_found' ? 404 : 403).json(out);
       return res.status(200).json(out);
     }
 
     if (req.query?.history === '1' || req.query?.history === 'true') {
-      return res.status(200).json(gateway.listTasks({ limit: Number(req.query.limit || 20) }));
+      const listed = await gateway.listTasks({ limit: Number(req.query.limit || 20) });
+      return res.status(200).json(listed);
     }
 
     return res.status(200).json({ capabilities: gateway.listCapabilities(auth.role) });
@@ -97,13 +108,59 @@ export default async function handler(req, res) {
   const idempotencyKey =
     typeof req.headers['x-idempotency-key'] === 'string' ? req.headers['x-idempotency-key'].slice(0, 128) : body.idempotency_key || null;
 
+  if (body.approve === true) {
+    const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-approve' });
+    if (!auth.ok) return;
+    if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
+      return res.status(400).json({ error: 'invalid_task_id' });
+    }
+    const out = await gateway.approveTask(body.task_id, auth.role, body.confirm === true, {
+      loadServiceStatus: loadServiceStatusSnapshot,
+    });
+    const code = out.error === 'not_found' ? 404 : out.error === 'forbidden' ? 403 : out.ok || out.awaiting_approval ? 200 : 400;
+    return res.status(code).json(out);
+  }
+
+  if (body.retry === true) {
+    const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-retry' });
+    if (!auth.ok) return;
+    if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
+      return res.status(400).json({ error: 'invalid_task_id' });
+    }
+    const out = await gateway.orchestrator.retryObjective(body.task_id, auth.role, {
+      loadServiceStatus: loadServiceStatusSnapshot,
+    });
+    const code = out.error === 'not_found' ? 404 : out.ok ? 200 : 400;
+    return res.status(code).json(out);
+  }
+
+  if (body.objective || body.objective_id) {
+    const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-objective' });
+    if (!auth.ok) return;
+    const objectiveId = body.objective_id || body.objective;
+    const out = await gateway.orchestrator.submitObjective({
+      objectiveId,
+      role: auth.role,
+      actor: auth.deviceId || auth.role,
+      idempotencyKey,
+      confirm: body.confirm === true,
+      ctx: { loadServiceStatus: loadServiceStatusSnapshot },
+    });
+    if (out.error === 'unknown_objective' || out.error === 'forbidden') {
+      return res.status(out.error === 'forbidden' ? 403 : 400).json(out);
+    }
+    if (out.awaiting_approval) return res.status(202).json(out);
+    const http = out.ok ? 200 : 502;
+    return res.status(http).json(out);
+  }
+
   if (body.cancel === true) {
     const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-cancel' });
     if (!auth.ok) return;
     if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
       return res.status(400).json({ error: 'invalid_task_id' });
     }
-    const out = gateway.cancel(body.task_id, auth.role);
+    const out = await gateway.cancel(body.task_id, auth.role);
     await supabase
       .from('auth_audit_log')
       .insert({

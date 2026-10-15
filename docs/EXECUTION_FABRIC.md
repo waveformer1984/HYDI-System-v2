@@ -10,7 +10,7 @@ no second shell, queue, or auth system.
 DISCOVER → PLAN → AUTHORIZE → EXECUTE → VERIFY → CHECKPOINT → LEARN → REPORT
 ```
 
-Task states (persisted in-process, reconnect-safe via task id):
+Task states (durable when `EXECUTION_FABRIC_PERSIST=postgres`, else in-process):
 
 `QUEUED` → `PLANNING` → (`AWAITING_APPROVAL`) → `RUNNING` → `VERIFYING` → `COMPLETED` | `FAILED` | `CANCELLED`
 
@@ -36,11 +36,17 @@ stateDiagram-v2
 | same | GET `?task_id=` | Task status + steps |
 | same | GET `?history=1` | Recent tasks |
 | same | POST | `{ capability, args?, confirm?, objective? }` |
-| same | POST | `{ task_id, cancel: true }` (job-backed only) |
+| same | POST | `{ task_id, cancel: true }` |
+| same | POST | `{ task_id, approve: true, confirm: true }` |
+| same | POST | `{ objective_id: "ops.host-health-snapshot" }` |
+| same | POST | `{ task_id, retry: true }` (failed objectives) |
+| same | GET `?recovery=1` | Persistence mode + startup recovery actions |
 
 BFF: `/api/heidi-mobile/fabric` (signed upstream).
 
-**Idempotency:** header `x-idempotency-key` or body `idempotency_key` (24h, in-process).
+**Idempotency:** header `x-idempotency-key` or body `idempotency_key` (scope `mobile-ops`; Postgres unique index when durable).
+
+**Persistence:** set `EXECUTION_FABRIC_PERSIST=postgres` with `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`. Migration `20261014230000_execution_fabric_tasks.sql`.
 
 ## Capabilities
 
@@ -58,9 +64,11 @@ Registry: `lib/execution-fabric/capabilities.js`.
 | Long jobs | `job-manager` (in-memory) | Task record + lifecycle + job link |
 | Heidi cognitive registry | `lib/heidi/CapabilityRegistry.ts` | Mobile ops slice (separate tree) |
 | Recovery authorizer | `CapabilityAuthorizer.ts` | Not duplicated |
-| Persistence | Audit log only | Task store (process-global; restart clears) |
+| Persistence | Audit log only | Postgres `execution_fabric_tasks` (optional) + in-memory fallback |
+| Heidi registry | `CapabilityRegistry.ts` (cognitive) | Enriched metadata via `registry-unified.js` |
+| Objectives | — | `ops.host-health-snapshot` bounded orchestrator |
 
-**Not in this slice:** Supabase-backed task persistence, PAUSE/RECOVER for sync ops, automatic code changes from LEARN phase.
+**Not in this slice:** Automatic code/policy changes from LEARN; PAUSE/resume for in-flight sync without idempotency.
 
 ## Safe test (hermetic)
 

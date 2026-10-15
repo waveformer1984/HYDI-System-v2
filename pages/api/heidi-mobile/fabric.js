@@ -12,6 +12,7 @@ export default async function handler(req, res) {
 
   const q = new URLSearchParams();
   if (req.query?.readiness) q.set('readiness', '1');
+  if (req.query?.recovery) q.set('recovery', '1');
   if (req.query?.task_id) q.set('task_id', String(req.query.task_id));
   if (req.query?.history) q.set('history', '1');
   if (req.query?.limit) q.set('limit', String(req.query.limit));
