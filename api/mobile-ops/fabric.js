@@ -104,6 +104,11 @@ export default async function handler(req, res) {
       return res.status(200).json(status);
     }
 
+    if (req.query?.operational === '1' || req.query?.operational === 'true') {
+      const { buildOperationalSummary } = await import('../../lib/execution-fabric/operational-summary.js');
+      return res.status(200).json(await buildOperationalSummary(gateway.store));
+    }
+
     const taskId = typeof req.query?.task_id === 'string' ? req.query.task_id : null;
     if (taskId) {
       if (!TASK_ID_RE.test(taskId)) return res.status(400).json({ error: 'invalid_task_id' });
@@ -214,6 +219,12 @@ export default async function handler(req, res) {
         actor: auth.deviceId || auth.role,
         objective: typeof body.objective === 'string' ? body.objective.slice(0, 500) : null,
         idempotencyKey,
+        correlationId:
+          typeof body.correlation_id === 'string'
+            ? body.correlation_id.slice(0, 128)
+            : typeof body.correlationId === 'string'
+              ? body.correlationId.slice(0, 128)
+              : null,
         ctx: { loadServiceStatus },
       });
 

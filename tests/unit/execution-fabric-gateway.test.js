@@ -34,7 +34,11 @@ describe('execution-fabric gateway', () => {
   });
 
   it('runs sync capabilities through COMPLETED with verification', async () => {
-    const executeSync = jest.fn(async () => ({ ok: true, correlation_id: 'abc' }));
+    const executeSync = jest.fn(async () => ({
+      ok: true,
+      correlation_id: 'abc',
+      probes: [{ ok: true, name: 'heidi-web' }],
+    }));
     const out = await gw({ executeSync }).submit({
       capabilityId: 'health.check',
       role: 'operator',
