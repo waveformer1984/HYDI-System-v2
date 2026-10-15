@@ -29,7 +29,7 @@ jobs:
         run: |
           echo '[{"name":"x","pid":1,"pm2_env":{"status":"online","restart_time":2,"pm_uptime":1000,"env":{"username":"a","USERNAME":"b","SECRET":"redact-me"}},"monit":{"memory":1048576,"cpu":1}}]' \
             | node scripts/observatory/pm2_sanitizer.js \
-            | node -e "const o=JSON.parse(require('fs').readFileSync(0,'utf8'))[0];if('env' in o||'pm2_env' in o)throw new Error('env leaked');if(o.name!=='x'||o.restarts!==2)throw new Error('fields wrong');console.log('sanitizer OK: no env, fields correct')"
+            | node -e "const o=JSON.parse(require('fs').readFileSync(0,'utf8'))[0];if('env' in o||'pm2_env' in o)throw new Error('env leaked');if(o.name!=='x'||o.restarts!==2)throw new Error('field mismatch')"
       - name: PowerShell syntax check
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq powershell >/dev/null 2>&1 || true
@@ -64,3 +64,4 @@ jobs:
           name: observatory-snapshot
           path: .observatory/
           if-no-files-found: error
+          include-hidden-files: true
