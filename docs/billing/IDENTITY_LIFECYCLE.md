@@ -30,7 +30,7 @@ Pairing registers/approves a device in `devices`; billing access requires an ope
 | Credential | After membership revoke | After walkie binding revoke |
 |------------|-------------------------|-----------------------------|
 | Supabase session cookie | Still valid for Auth; billing routes deny unless legacy/Walkie | N/A |
-| Legacy hbc1 token | Unchanged (separate path) | N/A |
+| Legacy hbc1 token | **Revoke via nonce or tenant `min_valid_iat` floor** (Phase 3) | N/A |
 | Device token | N/A | Still valid for device auth; billing denied without binding |
 
 ### Audit
