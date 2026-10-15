@@ -126,7 +126,22 @@ Custom `webpack` config in `next.config.js` requires `--webpack`; default Turbop
 
 ---
 
-## 10. Next steps (operator on `C:\Users\Owner\HYDI-System-v2`)
+## 10. Tooling added (PR #366 follow-up)
+
+| Artifact | Purpose |
+|----------|---------|
+| `docs/billing/SANDBOX_RUN_OPERATOR.md` | Full Windows operator sequence (§J-aligned) |
+| `docs/billing/SANDBOX_RUN_2026-10-15-operator.md` | Fillable evidence template (NOT_STARTED) |
+| `scripts/billing-sandbox-workflow.js` | Task id, automated steps, DB snapshot |
+| `lib/billing/sandbox-workflow.js` | PASS/FAIL/BLOCKED/NOT_RUN step model |
+| `billing.preflight` / `billing.verify_workflow` | Mobile typed actions (no secret output) |
+| Objective `ops.billing-sandbox-verify` | Execution fabric bounded plan |
+
+Cloud agent re-check **2026-10-15:** `npx supabase start` still **exit 1** (`DbSetupError`).
+
+---
+
+## 11. Next steps (operator on `C:\Users\Owner\HYDI-System-v2`)
 
 1. Ensure Docker Desktop is running; `npx supabase start` then `node scripts/billing-preflight.js --require-stripe-env`.
 2. Inject secrets per SECURITY_PROTOCOL.md (variable names only): `STRIPE_SECRET_KEY`, `BILLING_CUSTOMER_TOKEN_SECRET`, `BILLING_STRIPE_WEBHOOK_SECRET`, `HYDI_SERVICE_SECRET`.

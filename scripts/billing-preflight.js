@@ -11,16 +11,7 @@
 
 const { Pool } = require('pg');
 
-const BILLING_TABLES = [
-  'billing_tenants',
-  'billing_products',
-  'billing_plans',
-  'billing_price_versions',
-  'billing_subscriptions',
-  'billing_entitlements',
-  'billing_webhook_events',
-  'billing_usage_events',
-];
+const { BILLING_TABLES } = require('../lib/billing/sandbox-workflow');
 
 function hasEnv(name) {
   const v = process.env[name];
@@ -88,7 +79,7 @@ async function main() {
     checks.push({
       id: 'billing_tables',
       ok: missing.length === 0,
-      detail: missing.length === 0 ? `${BILLING_TABLES.length} billing_* core tables present` : `missing: ${missing.join(', ')}`,
+      detail: missing.length === 0 ? `${BILLING_TABLES.length} billing_* tables present` : `missing: ${missing.join(', ')}`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';
