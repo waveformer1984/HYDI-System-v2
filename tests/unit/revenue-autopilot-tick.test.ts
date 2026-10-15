@@ -61,11 +61,22 @@ describe('revenue-autopilot-tick: runOnce', () => {
     expect(result.stage).toBeNull();
   });
 
+  it('always syncs with resolver execution disabled — the tick is unattended and holds no lease', async () => {
+    // An unattended pool-less sweep bypasses the authority gate entirely
+    // (env flag, operator lease, heidi_decision_bounds). The tick must
+    // never resolve actions itself — only the leased daemon may.
+    await runOnce();
+    await runOnce({ goals: {}, service: {} });
+    for (const call of mockSync.mock.calls) {
+      expect(call[2]).toEqual({ resolve: { disabled: true } });
+    }
+  });
+
   it('uses injected goals/service instead of constructing them', async () => {
     const goals = { injected: true };
     const service = { injected: true };
     await runOnce({ goals, service });
-    expect(mockSync).toHaveBeenCalledWith(service, goals);
+    expect(mockSync).toHaveBeenCalledWith(service, goals, { resolve: { disabled: true } });
     expect(mockAdvance).toHaveBeenCalledWith(expect.objectContaining({ goals }));
     expect(MockService).not.toHaveBeenCalled();
   });
