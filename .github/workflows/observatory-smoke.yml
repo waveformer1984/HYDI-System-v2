@@ -1,0 +1,66 @@
+name: Observatory Smoke
+
+on:
+  push:
+    branches: [observatory/**]
+    paths:
+      - 'scripts/observatory/**'
+      - '.github/workflows/observatory-smoke.yml'
+  pull_request:
+    paths:
+      - 'scripts/observatory/**'
+      - '.github/workflows/observatory-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax-check pm2 sanitizer
+        run: node --check scripts/observatory/pm2_sanitizer.js
+      - name: Sanitizer unit probe (fixture)
+        run: |
+          echo '[{"name":"x","pid":1,"pm2_env":{"status":"online","restart_time":2,"pm_uptime":1000,"env":{"username":"a","USERNAME":"b","SECRET":"redact-me"}},"monit":{"memory":1048576,"cpu":1}}]' \
+            | node scripts/observatory/pm2_sanitizer.js \
+            | node -e "const o=JSON.parse(require('fs').readFileSync(0,'utf8'))[0];if('env' in o||'pm2_env' in o)throw new Error('env leaked');if(o.name!=='x'||o.restarts!==2)throw new Error('fields wrong');console.log('sanitizer OK: no env, fields correct')"
+      - name: PowerShell syntax check
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq powershell >/dev/null 2>&1 || true
+          pwsh -NoProfile -Command "
+            \$errs = \$null; \$tokens = \$null
+            [void][System.Management.Automation.PSParser]::Tokenize((Get-Content 'scripts/observatory/collect.ps1' -Raw), [ref]\$errs)
+            if (\$errs.Count -gt 0) { \$errs | ForEach-Object { Write-Host \$_ }; exit 1 }
+            Write-Host 'collect.ps1 parses clean'"
+
+  smoke-collect-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run collector once
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\observatory\collect.ps1 -Once
+      - name: Validate snapshot
+        shell: powershell
+        run: |
+          $o = Get-Content .observatory\current.json -Raw | ConvertFrom-Json
+          if (-not $o.schema -or -not $o.ts) { throw 'current.json missing schema/ts' }
+          $bytes = [IO.File]::ReadAllBytes("$PWD\.observatory\current.json")
+          if ($bytes[0] -eq 0xEF) { throw 'UTF-8 BOM detected - must be BOM-free' }
+          if ($o.PSObject.Properties.Name -contains 'pm2' -and $o.pm2.available) {
+            if ($o.pm2.processes[0].PSObject.Properties.Name -match 'env|pm2_env') { throw 'env fields leaked into telemetry' }
+          }
+          Write-Host "schema=$($o.schema) ts=$($o.ts) collect_ms=$($o.collect_ms) findings=$($o.findings_active.Count)"
+      - name: Upload observatory artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observatory-snapshot
+          path: .observatory/
+          if-no-files-found: error
