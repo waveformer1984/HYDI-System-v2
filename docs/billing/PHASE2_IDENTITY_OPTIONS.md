@@ -1,6 +1,6 @@
-# Phase 2 — Customer identity options (proposal only)
+# Phase 2 — Customer identity options
 
-**No implementation until the owner selects A, B, or A+B.**
+**Owner decision (2026-10-15): A+B** — implemented on branch `Cusor_agent01billing-identity-phase2-1ec4`. See `docs/billing/CUSTOMER_IDENTITY.md`.
 
 Current state: interim **operator-issued** tenant bearer tokens (`BILLING_CUSTOMER_TOKEN_SECRET`, `lib/billing/customer-auth.js`). Launch blocker §L.
 

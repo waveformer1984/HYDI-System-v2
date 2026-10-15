@@ -8,7 +8,7 @@ import { getBillingService, sendError, allowMethods, requireCustomer } from '../
 
 export default async function handler(req, res) {
   if (!allowMethods(req, res, ['GET'])) return;
-  const tenantId = requireCustomer(req, res, { routeName: 'account', rateMax: 120 });
+  const tenantId = await requireCustomer(req, res, { routeName: 'account', rateMax: 120 });
   if (!tenantId) return;
   try {
     res.setHeader('Cache-Control', 'no-store');
