@@ -77,6 +77,35 @@ describe('billing identity lifecycle', () => {
     expect(await getActiveMembershipForUser(store, userId)).toBeNull();
   });
 
+  it('valid Supabase session without active membership does not authorize checkout', async () => {
+    jest.resetModules();
+    const userId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    await store.insert('billing_tenant_members', {
+      tenant_id: tenant.tenant_id,
+      auth_user_id: userId,
+      role: 'owner',
+      status: 'revoked',
+    });
+    jest.doMock('../../../lib/billing/supabase-server', () => ({
+      createBillingSupabaseServer: () => ({
+        auth: { getUser: async () => ({ data: { user: { id: userId } }, error: null }) },
+      }),
+      createBillingSupabaseAdmin: () => null,
+      parseCookieHeader: () => [],
+    }));
+    process.env.BILLING_SUPABASE_AUTH = 'true';
+    process.env.BILLING_LEGACY_CUSTOMER_TOKEN = 'false';
+    const { setBillingService } = require('../../../lib/billing/http');
+    const { BillingService } = require('../../../lib/billing/service');
+    const { FakeBillingProvider } = require('../../../lib/billing/providers/fake-provider');
+    setBillingService(new BillingService({ store, provider: new FakeBillingProvider() }));
+    const checkoutRoute = require('../../../pages/api/billing/checkout').default;
+    const req = { method: 'POST', headers: { 'x-forwarded-for': '10.0.0.2' }, body: {}, query: {}, socket: {} };
+    const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    await checkoutRoute(req, res);
+    expect(res.statusCode).toBe(401);
+  });
+
   it('rejects cross-tenant rebind without revoke', async () => {
     const other = await store.insert('billing_tenants', { name: 'O', email: 'o@test.example', status: 'active' });
     await bindWalkieOwner(store, {
