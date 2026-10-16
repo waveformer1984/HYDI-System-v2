@@ -74,9 +74,11 @@ source .env.hydi
 node hydi-chat-server.js
 ```
 
-Open **http://localhost:8787** in your phone's browser. In the chat's ⚙️
-settings leave the API URL **blank** (same origin) — no secret is needed
-unless you set `HYDI_SERVICE_SECRET`.
+Open **http://localhost:8787** in your phone's browser (or whatever `PORT`
+`hydi-chat-server.js` is actually using). 5056 and 8080 are not this UI.
+3006 is the PC `heidi-mobile-chat` process and the separate `hydi.py` PWA.
+In the chat's ⚙️ settings leave the API URL **blank** (same origin) — no
+secret is needed unless you set `HYDI_SERVICE_SECRET`.
 
 ## What works on this node
 
@@ -104,6 +106,8 @@ npm i -g pm2 && pm2 start hydi-chat-server.js --name hydi-chat && pm2 save
 
 Termux tip: run `termux-wake-lock` so Android doesn't kill the process, and
 install the Termux:Boot app to start it automatically after reboot.
+
+From the repo root: `chmod +x scripts/hydi-doctor.sh && ln -sf "$PWD/scripts/hydi-doctor.sh" "$PREFIX/bin/hydi-doctor"`
 
 ## Security notes
 
