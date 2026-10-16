@@ -26,6 +26,15 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const TASK_ID_RE = /^[a-f0-9]{24}$/;
 
+function fabricPrincipal(auth) {
+  return {
+    subject: auth.deviceId || auth.role,
+    role: auth.role,
+    tenant_id: null,
+    auth_source: auth.deviceId ? 'device' : 'service',
+  };
+}
+
 function normalizeRequestAction(body) {
   if (!body || typeof body !== 'object') return null;
 
@@ -104,10 +113,15 @@ export default async function handler(req, res) {
       return res.status(200).json(status);
     }
 
+    if (req.query?.operational === '1' || req.query?.operational === 'true') {
+      const { buildOperationalSummary } = await import('../../lib/execution-fabric/operational-summary.js');
+      return res.status(200).json(await buildOperationalSummary(gateway.store));
+    }
+
     const taskId = typeof req.query?.task_id === 'string' ? req.query.task_id : null;
     if (taskId) {
       if (!TASK_ID_RE.test(taskId)) return res.status(400).json({ error: 'invalid_task_id' });
-      const out = await gateway.getTask(taskId, auth.role);
+      const out = await gateway.getTask(taskId, auth.role, fabricPrincipal(auth));
       if (!out.ok) return res.status(out.error === 'not_found' ? 404 : 403).json(out);
       return res.status(200).json(out);
     }
@@ -128,38 +142,40 @@ export default async function handler(req, res) {
 
   switch (requestAction) {
     case 'approve': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-approve' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-approve' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
       }
       const out = await gateway.approveTask(body.task_id, auth.role, body.confirm === true, {
         loadServiceStatus: loadServiceStatusSnapshot,
-      });
+      }, fabricPrincipal(auth));
       const code = out.error === 'not_found' ? 404 : out.error === 'forbidden' ? 403 : out.ok || out.awaiting_approval ? 200 : 400;
       return res.status(code).json(out);
     }
 
     case 'retry': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-retry' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-retry' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
       }
-      const out = await gateway.orchestrator.retryObjective(body.task_id, auth.role, {
+      // Through the gateway, not the orchestrator directly: retryTask applies
+      // the tenant check and the fabric:control permission before retrying.
+      const out = await gateway.retryTask(body.task_id, auth.role, {
         loadServiceStatus: loadServiceStatusSnapshot,
-      });
-      const code = out.error === 'not_found' ? 404 : out.ok ? 200 : 400;
+      }, fabricPrincipal(auth));
+      const code = out.error === 'not_found' ? 404 : out.error === 'forbidden' ? 403 : out.ok ? 200 : 400;
       return res.status(code).json(out);
     }
 
     case 'cancel': {
-      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-ops-fabric-cancel' });
+      const auth = await requireAuth(req, res, supabase, { permission: 'fabric:control', routeName: 'mobile-ops-fabric-cancel' });
       if (!auth.ok) return;
       if (typeof body.task_id !== 'string' || !TASK_ID_RE.test(body.task_id)) {
         return res.status(400).json({ error: 'invalid_task_id' });
       }
-      const out = await gateway.cancel(body.task_id, auth.role);
+      const out = await gateway.cancel(body.task_id, auth.role, fabricPrincipal(auth));
       await supabase
         .from('auth_audit_log')
         .insert({
@@ -212,8 +228,15 @@ export default async function handler(req, res) {
         confirm: body.confirm === true,
         role: auth.role,
         actor: auth.deviceId || auth.role,
+        principal: fabricPrincipal(auth),
         objective: typeof body.objective === 'string' ? body.objective.slice(0, 500) : null,
         idempotencyKey,
+        correlationId:
+          typeof body.correlation_id === 'string'
+            ? body.correlation_id.slice(0, 128)
+            : typeof body.correlationId === 'string'
+              ? body.correlationId.slice(0, 128)
+              : null,
         ctx: { loadServiceStatus },
       });
 

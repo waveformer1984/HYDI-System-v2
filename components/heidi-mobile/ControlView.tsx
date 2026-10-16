@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import styles from '../../styles/heidi-mobile.module.css';
 import { heidiRequest, type ApiError } from '../../lib/heidi-mobile/client/api';
+import { summarizeFabricResult } from '../../lib/heidi-mobile/client/fabricSummary';
 import { relativeTime } from '../../lib/heidi-mobile/client/format';
 import { isSpeechInputSupported, isSpeechOutputSupported } from '../../lib/heidi-mobile/client/voice';
 import type { RealtimeState } from '../../lib/heidi-mobile/client/realtime';
@@ -25,6 +26,48 @@ interface Props {
   onUnpair: () => Promise<void>;
   onAuthError: (_error: ApiError) => void;
   onCommandQueued: () => void;
+}
+
+function FabricHealth({ online, onAuthError }: { online: boolean; onAuthError: (_error: ApiError) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [idempotencyKey] = useState(() => `heidi-health-${Date.now().toString(36)}`);
+  const [report, setReport] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setReport(null);
+    const result = await heidiRequest<Record<string, unknown>>('/fabric', {
+      method: 'POST',
+      timeoutMs: 35_000,
+      body: { capability: 'health.check', idempotency_key: idempotencyKey },
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setReport(`Health check did not return a task: ${result.error.message}`);
+      if (['not_paired', 'unauthorized'].includes(result.error.kind)) onAuthError(result.error);
+      return;
+    }
+    const summary = summarizeFabricResult(result.data);
+    const id = summary.task_id ? ` task ${summary.task_id}` : '';
+    const corr = summary.correlation_id ? ` correlation ${summary.correlation_id}` : '';
+    setReport(`${summary.headline}.${id}${corr}`.trim());
+  };
+
+  return (
+    <div className={styles.card}>
+      <p className={`${styles.muted} ${styles.small}`}>
+        Runs health.check through the execution fabric. A response is verified only after independent checks pass. Repeating uses the same idempotency key.
+      </p>
+      <div className={styles.btnRow}>
+        <button type="button" className={styles.btn} disabled={!online || busy} onClick={() => void run()}>
+          {busy ? 'Checking…' : 'Verified health check'}
+        </button>
+      </div>
+      {report && (
+        <pre className={styles.code} style={{ marginTop: 8, whiteSpace: 'pre-wrap', fontSize: 11 }}>{report}</pre>
+      )}
+    </div>
+  );
 }
 
 function OpsDiagnostics({ online, onAuthError }: { online: boolean; onAuthError: (_error: ApiError) => void }) {
@@ -179,6 +222,7 @@ export default function ControlView(props: Props) {
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Remote diagnostics</h2>
+        <FabricHealth online={online} onAuthError={props.onAuthError} />
         <OpsDiagnostics online={online} onAuthError={props.onAuthError} />
       </section>
 

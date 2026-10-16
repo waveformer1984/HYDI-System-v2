@@ -591,3 +591,75 @@ describe('activity and realtime relay', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe('POST /api/heidi-mobile/fabric', () => {
+  const task = {
+    id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    state: 'COMPLETED',
+    public_state: 'succeeded',
+    correlation_id: 'corr-phone',
+    verification: { verified: true },
+  };
+
+  it('rejects an unpaired phone before calling HYDI', async () => {
+    const res = await call('fabric', { method: 'POST', cookie: null, body: { capability: 'health.check' } });
+    expect(res.statusCode).toBe(401);
+    expect(res.body.error).toBe('not_paired');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('forwards a device-authenticated health check and strips client tenant_id', async () => {
+    routes['POST /api/mobile-ops/fabric'] = requireDevice(({ body }) => json(200, { ok: true, task, echo: body }));
+    const res = await call('fabric', {
+      method: 'POST',
+      headers: { 'x-idempotency-key': 'phone-key-1' },
+      body: { capability: 'health.check', tenant_id: 'spoofed', principal: { tenant_id: 'spoofed' }, role: 'owner' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.task.state).toBe('COMPLETED');
+    expect(res.body.echo.tenant_id).toBeUndefined();
+    expect(res.body.echo.principal).toBeUndefined();
+    expect(res.body.echo.role).toBeUndefined();
+    expect(res.body.echo.capability).toBe('health.check');
+    const upstream = calls.find((c) => c.path === '/api/mobile-ops/fabric');
+    expect(upstream.auth.valid).toBe(true);
+    expect(upstream.headers['x-idempotency-key']).toBe('phone-key-1');
+    expectNoSecrets(res);
+  });
+
+  it('returns a failed verification body instead of hiding it behind a generic 502', async () => {
+    routes['POST /api/mobile-ops/fabric'] = requireDevice(() => json(502, {
+      ok: false,
+      task: { id: task.id, state: 'FAILED', public_state: 'failed', verification: { verified: false }, api_key: 'sk_test_secret' },
+    }));
+    const res = await call('fabric', { method: 'POST', body: { capability: 'health.check' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.upstream_status).toBe(502);
+    expect(res.body.task.state).toBe('FAILED');
+    expect(res.body.task.verification.verified).toBe(false);
+    expect(res.body.task.api_key).toBe('[redacted]');
+  });
+
+  it('relays an idempotent duplicate without claiming a new run', async () => {
+    routes['POST /api/mobile-ops/fabric'] = requireDevice(() => json(200, { ok: true, duplicate: true, task }));
+    const res = await call('fabric', { method: 'POST', body: { capability: 'health.check', idempotency_key: 'phone-key-1' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.duplicate).toBe(true);
+    expect(res.body.task.id).toBe(task.id);
+  });
+
+  it('relays capability rejection', async () => {
+    routes['POST /api/mobile-ops/fabric'] = requireDevice(() => json(400, { error: 'unknown_capability', message: 'Capability is not registered.' }));
+    const res = await call('fabric', { method: 'POST', body: { capability: 'shell.exec' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('unknown_capability');
+    expect(res.body.upstream_status).toBe(400);
+  });
+
+  it('classifies an upstream disconnect', async () => {
+    routes['POST /api/mobile-ops/fabric'] = () => { throw new Error('socket hang up'); };
+    const res = await call('fabric', { method: 'POST', body: { capability: 'health.check' } });
+    expect(res.statusCode).toBe(502);
+    expect(res.body.error).toBe('network');
+  });
+});
