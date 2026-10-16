@@ -66,6 +66,8 @@ async function runCycle() {
 }
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-failed-webhook-retry');
   console.log(`[${new Date().toISOString()}] Failed Webhook Retry Scheduler starting`);
   console.log(`  Interval: ${INTERVAL_MS}ms (${Math.round(INTERVAL_MS / 60000)} minutes)`);
   console.log(`  Stale processing threshold: ${STALE_THRESHOLD_MS}ms (${Math.round(STALE_THRESHOLD_MS / 60000)} minutes)`);

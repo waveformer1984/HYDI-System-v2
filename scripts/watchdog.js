@@ -854,6 +854,8 @@ async function runCheck() {
 let selfCheckCounter = 0;
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-watchdog');
   log(`watchdog started (mode=${ONCE ? 'once' : 'continuous'}, interval=${INTERVAL_MS}ms, webhook=${WEBHOOK_URL ? 'on' : 'off'})`);
 
   if (ONCE) {

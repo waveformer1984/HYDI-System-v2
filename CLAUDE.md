@@ -135,6 +135,56 @@ recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
 daemon exists and is failing. PM2 "online" is process liveness — the status
 file is what the loop actually did. Don't read PM2 alone as health.
 
+#### Runtime provenance (which code is running)
+
+PM2 "online" does not say which commit is in memory. Three failures followed
+from that gap: `hydi-daemon` kept serving a ~26h-old build, PM2's in-memory
+settings drifted from `ecosystem.config.js` (`max_restarts` ignored), and
+`hydi-revenue-autopilot-tick` ran a two-day-old module from an unmerged
+branch. Every long-running process writes `.runtime/provenance/<name>.json`
+at startup (`lib/runtime/provenance.js`, atomic tmp+rename, same contract as
+the daemon status file). The record is `{ name, pid, gitSha, gitDirty,
+branch, startedAt, node, cwd }`. `gitSha` is `BUILD_SHA` when that env var
+is set, otherwise `git rev-parse HEAD` with a 3 second timeout. If the
+commit cannot be determined, `gitSha` is null — it is never invented.
+`heidi-web` (`next start`) serves the production build, not the working
+tree: `npm run build` writes `.next/hydi-build.json` after `next build`,
+and the server reads that stamp.
+
+`npm run runtime:audit` (`lib/runtime/drift-audit.js`) compares those files
+with `pm2 jlist` and `ecosystem.config.js`. It only reports. It never
+restarts, kills, or starts a process. Each row is one of:
+
+| Verdict | Meaning |
+|---|---|
+| OK | SHA matches HEAD, the tree is not dirty, and the live PM2 settings match the file |
+| STALE_CODE | SHA differs from HEAD, or `gitDirty` is true |
+| UNDECLARED | online under PM2, absent from `ecosystem.config.js` |
+| MISSING | declared, not online |
+| UNKNOWN_CODE | online, but no provenance file or `gitSha` is null |
+| CONFIG_DRIFT | live `max_restarts`, `exp_backoff_restart_delay`, `kill_timeout`, `script`, `args`, or `cwd` differ from the file |
+| UNKNOWN | `pm2 jlist` could not be read. This is not OK |
+
+The command prints a table and a `pm2` suggestion per row, and exits
+non-zero on anything other than OK. `/api/heidi-health` embeds the same
+rows. `/api/health` downgrades `status` to `degraded` on `STALE_CODE`,
+`UNDECLARED`, `UNKNOWN_CODE`, or an unreadable PM2 (`UNKNOWN`).
+`CONFIG_DRIFT` and `MISSING` still fail the audit command; they do not by
+themselves flip `/api/health`. The daemon status file and
+`.model-prep-executor-status.json` embed the same provenance record.
+
+Operator runbook, on the machine that runs the processes:
+
+```bash
+npm run runtime:audit
+# apply the printed pm2 suggestion yourself, then:
+npm run runtime:audit
+```
+
+The first audit after a deploy is the cleanup list: anything still stale
+or undeclared is named there. Do not treat a green `/api/health` from
+before this change as proof of which code was running.
+
 ### Build / test / lint
 
 ```bash

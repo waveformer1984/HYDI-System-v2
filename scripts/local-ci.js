@@ -355,7 +355,11 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().catch((err) => {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  recordProcessProvenance('hydi-local-ci')
+    .catch(() => null)
+    .then(() => main())
+    .catch((err) => {
     console.error(`[local-ci] ${err instanceof Error ? err.message : 'Unknown error'}`);
     process.exitCode = 1;
   });

@@ -4,6 +4,9 @@ node_modules/
 # Next.js
 .next/
 
+# Per-process code identity written at startup (lib/runtime/provenance.js)
+.runtime/
+
 # Environment — never commit secrets
 .env
 .env.*

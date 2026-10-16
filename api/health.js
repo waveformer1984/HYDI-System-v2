@@ -4,7 +4,10 @@
  * and a local JSON dashboard store (default for local-first HYDI).
  */
 
+import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { collectRuntimeAudit } from '../lib/runtime/collect.js';
+import { auditDrift, degradesApiHealth } from '../lib/runtime/drift-audit.js';
 
 let _supabase = null;
 function getSupabase() {
@@ -60,15 +63,69 @@ async function daemonSection() {
   }
 }
 
-function buildResponse(dashboard, cloud, daemon) {
+function summarizeRuntime(runtime) {
+  if (!runtime || typeof runtime !== 'object') {
+    return {
+      overall: 'UNKNOWN',
+      ok: false,
+      counts: { UNKNOWN: 1 },
+      rows: [],
+      repoHead: null,
+      degradesHealth: true,
+    };
+  }
+  return {
+    overall: runtime.overall || 'UNKNOWN',
+    ok: runtime.ok === true,
+    counts: runtime.counts || {},
+    rows: Array.isArray(runtime.rows) ? runtime.rows : [],
+    repoHead: runtime.repoHead || null,
+    degradesHealth: degradesApiHealth(runtime),
+  };
+}
+
+async function runtimeSection() {
+  // Tests pass auditDrift inputs through a file. Jest in this repo does not
+  // force NODE_ENV=test (it is development), and the handler is loaded
+  // outside the Jest global, so a global override is not visible here.
+  // Ignored in production so a stray env var cannot paint a live host green.
+  if (process.env.NODE_ENV !== 'production' && process.env.HYDI_RUNTIME_AUDIT_FIXTURE) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(process.env.HYDI_RUNTIME_AUDIT_FIXTURE, 'utf8'));
+      return auditDrift(parsed);
+    } catch (_) {
+      return auditDrift({ pm2Readable: false });
+    }
+  }
+  try {
+    return await collectRuntimeAudit({ root: process.cwd() });
+  } catch (e) {
+    return {
+      overall: 'UNKNOWN',
+      ok: false,
+      counts: { UNKNOWN: 1 },
+      rows: [],
+      degradesHealth: true,
+      suggestion: `runtime audit failed: ${e instanceof Error ? e.message : 'unknown'}. No process was restarted.`,
+    };
+  }
+}
+
+function buildResponse(dashboard, cloud, daemon, runtime) {
   // The dashboard verdict and the daemon verdict are both evidence. Only a
   // present-and-failing daemon (DEGRADED/STALE/CORRUPT) can downgrade
   // status — NOT_RUNNING means no daemon runs here (e.g. Vercel), which is
   // information, not failure.
+  //
+  // Runtime drift downgrades on STALE_CODE, UNDECLARED, UNKNOWN_CODE, and
+  // an unreadable PM2 (overall UNKNOWN). CONFIG_DRIFT and MISSING fail
+  // `npm run runtime:audit` but do not by themselves flip this status.
   const daemonDegrading = daemon && ['DEGRADED', 'STALE', 'CORRUPT'].includes(daemon.state);
+  const runtimeDegrading = degradesApiHealth(runtime);
   const isHealthy = dashboard.current_status === 'OK' &&
     dashboard.escalation_level !== 'CRITICAL' &&
-    !daemonDegrading;
+    !daemonDegrading &&
+    !runtimeDegrading;
 
   // Transport status answers "did this handler run and produce a report?", not
   // "is the system well?". Those are different questions and conflating them
@@ -105,6 +162,7 @@ function buildResponse(dashboard, cloud, daemon) {
       vercel: true,
       cloud,
       daemon,
+      runtime: summarizeRuntime(runtime),
       metrics: {
         jobs_queued: dashboard.jobs_queued,
         jobs_failed: dashboard.jobs_failed,
@@ -146,7 +204,7 @@ export default async function handler(req, res) {
       dashboard = await fetchLocalDashboard();
     }
 
-    const { statusCode, body } = buildResponse(dashboard, cloud, await daemonSection());
+    const { statusCode, body } = buildResponse(dashboard, cloud, await daemonSection(), await runtimeSection());
     res.status(statusCode).json(body);
 
   } catch (error) {
@@ -161,6 +219,9 @@ export default async function handler(req, res) {
       vercel: true,
       cloud: { available: false, source: 'none', reason: 'health source unavailable' },
       daemon: await daemonSection(),
+      runtime: summarizeRuntime(await runtimeSection()),
     });
   }
 }
+
+export { buildResponse, summarizeRuntime };

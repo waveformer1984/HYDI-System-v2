@@ -330,6 +330,10 @@ const server = useTLS
 const lanIP = getLANIP();
 
 server.listen(PORT, '0.0.0.0', async () => {
+    if (require.main === module) {
+        const { recordProcessProvenance } = require('./lib/runtime/provenance');
+        await recordProcessProvenance('heidi-mobile-chat');
+    }
     const portStr = PORT.toString();
     const ipLine = `${protocol}://${lanIP}:${portStr}`;
     console.log('\n╔══════════════════════════════════════════════╗');

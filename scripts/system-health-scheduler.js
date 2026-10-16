@@ -273,6 +273,8 @@ async function recordEscalation(supabase) {
 }
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-system-health');
   log(`system-health-scheduler starting (mode=${ONCE ? 'once' : 'continuous'}, interval=${INTERVAL_MS}ms, timeout=${RUN_TIMEOUT_MS}ms)`);
 
   const first = await runCycle();

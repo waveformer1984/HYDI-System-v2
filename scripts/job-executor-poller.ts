@@ -141,6 +141,10 @@ function handleShutdown(signal: string) {
 // directly (`npx tsx scripts/job-executor-poller.ts`, as boot.config.json
 // does). When imported by a test, none of this side-effecting code runs.
 if (require.main === module) {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance') as {
+    recordProcessProvenance: (name: string) => Promise<unknown>;
+  };
+  void recordProcessProvenance('job-executor-poller');
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGINT', () => handleShutdown('SIGINT'));
 

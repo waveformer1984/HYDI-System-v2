@@ -479,5 +479,96 @@ module.exports = {
       merge_logs: true,
       kill_timeout: 10000,
     },
+    {
+      // Revenue autopilot tick. boot.config.json also starts this as
+      // `npx tsx scripts/revenue-autopilot-tick.ts`. PM2 on Windows cannot
+      // run the .bin/tsx shim, so this entry uses the tsx CLI directly —
+      // the same program, the same arguments. scripts/lib/process-lock.js
+      // refuses a second copy. If the audit says MISSING while work is
+      // still happening, the boot child holds the lock; pick one supervisor.
+      name: 'hydi-revenue-autopilot-tick',
+      script: 'node_modules/tsx/dist/cli.mjs',
+      args: 'scripts/revenue-autopilot-tick.ts',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-revenue-autopilot-tick.err.log',
+      out_file: './logs/pm2-revenue-autopilot-tick.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Declared from the script header:
+      //   pm2 start scripts/stripe-webhook-listener.js --name hydi-stripe-webhook-listener
+      // Dev/test-mode `stripe listen` bridge. Exits if the Stripe CLI is absent.
+      name: 'hydi-stripe-webhook-listener',
+      script: 'scripts/stripe-webhook-listener.js',
+      args: '',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-stripe-webhook-listener.err.log',
+      out_file: './logs/pm2-stripe-webhook-listener.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Declared from LOCAL_CI.md:
+      //   pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch --include-main --interval 10
+      // Posts local-ci/* commit statuses. Stop it on a machine that should
+      // not watch GitHub; the audit will then report MISSING.
+      name: 'hydi-local-ci',
+      script: 'scripts/local-ci.js',
+      args: '--watch --include-main --interval 10',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-local-ci.err.log',
+      out_file: './logs/pm2-local-ci.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
   ],
 };

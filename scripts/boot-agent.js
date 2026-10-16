@@ -825,6 +825,8 @@ process.on('message', (msg) => {
 const CONFIG = loadConfig();
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-boot');
   banner('HYDI Boot Agent');
 
   if (isPartialBoot) {

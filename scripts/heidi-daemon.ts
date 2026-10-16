@@ -96,6 +96,8 @@ async function probePersistence(): Promise<PersistenceTruth> {
   return { pg, rest, checkedAt };
 }
 
+let processProvenance: Record<string, unknown> | null = null;
+
 function writeStatusSnapshot(status: LoopStatus): void {
   writeDaemonStatus(STATUS_ROOT, {
     pid: process.pid,
@@ -109,6 +111,7 @@ function writeStatusSnapshot(status: LoopStatus): void {
     lastErrorAt: status.lastErrorAt,
     persistence: persistenceTruth,
     updatedAt: new Date().toISOString(),
+    provenance: processProvenance as import('../lib/heidi/DaemonStatusSurface').RuntimeProvenanceStamp | null,
   });
 }
 
@@ -519,6 +522,11 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
 // ─── Daemon Main ─────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance') as {
+    recordProcessProvenance: (name: string) => Promise<Record<string, unknown> | null>;
+  };
+  processProvenance = await recordProcessProvenance('hydi-daemon');
+
   const config = parseArgs();
 
   console.log('');

@@ -26,6 +26,34 @@ const os = require('os');
 const path = require('path');
 
 const localStore = require('../../lib/health/local-dashboard-store');
+const HEAD = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+function okRuntimeInput() {
+  return {
+    pm2Readable: true,
+    repoHead: HEAD,
+    declared: [{
+      name: 'hydi-boot',
+      script: 'scripts/boot-agent.js',
+      args: '',
+      cwd: '/repo',
+      max_restarts: 10,
+      exp_backoff_restart_delay: 1000,
+      kill_timeout: 20000,
+    }],
+    running: [{
+      name: 'hydi-boot',
+      status: 'online',
+      script: '/repo/scripts/boot-agent.js',
+      args: '',
+      cwd: '/repo',
+      max_restarts: 10,
+      exp_backoff_restart_delay: 1000,
+      kill_timeout: 20000,
+    }],
+    provenance: { 'hydi-boot': { gitSha: HEAD, gitDirty: false } },
+  };
+}
 
 /** The exact acceptance predicate scripts/boot-agent.js uses for a health gate. */
 function bootAgentAcceptsStatus(statusCode) {
@@ -61,13 +89,23 @@ describe('/api/health transport contract', () => {
     process.env.HYDI_HEALTH_SOURCE = 'local';
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Existing cases judge the dashboard. An OK runtime audit keeps a missing
+    // pm2 from turning every one of them into UNKNOWN.
+    useRuntimeInput(okRuntimeInput());
   });
 
   afterEach(() => {
     delete process.env.HYDI_HEALTH_DATA_DIR;
     delete process.env.HYDI_HEALTH_SOURCE;
+    delete process.env.HYDI_RUNTIME_AUDIT_FIXTURE;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function useRuntimeInput(input) {
+    const file = path.join(tmpDir, 'runtime-audit.json');
+    fs.writeFileSync(file, JSON.stringify(input));
+    process.env.HYDI_RUNTIME_AUDIT_FIXTURE = file;
+  }
 
   describe('1. no health evidence recorded', () => {
     it('returns HTTP 200 and reports "unmeasured", not a fabricated OK', async () => {
@@ -217,6 +255,78 @@ describe('/api/health transport contract', () => {
       });
       expect(verdict.state).toBe('HEALTHY');
       expect(verdict.ok).toBe(true);
+    });
+  });
+
+  describe('6. runtime provenance downgrades the body, not the transport', () => {
+    beforeEach(() => {
+      localStore.setDashboard({ current_status: 'OK', escalation_level: 'OK', trend_status: 'stable' });
+    });
+
+    it('STALE_CODE downgrades status while HTTP stays 200', async () => {
+      useRuntimeInput({
+        pm2Readable: true,
+        repoHead: HEAD,
+        declared: [{ name: 'hydi-daemon', script: 'scripts/heidi-daemon-launcher.js', args: '--no-stabilization', cwd: '/repo', max_restarts: 10, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        running: [{ name: 'hydi-daemon', status: 'online', script: '/repo/scripts/heidi-daemon-launcher.js', args: '--no-stabilization', cwd: '/repo', max_restarts: 10, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        provenance: { 'hydi-daemon': { gitSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', gitDirty: false } },
+      });
+      const res = await callHandler();
+      expect(res._status).toBe(200);
+      expect(res._json.status).toBe('degraded');
+      expect(res._json.runtime.overall).toBe('DRIFT');
+      expect(res._json.runtime.rows[0].verdict).toBe('STALE_CODE');
+      expect(res._json.runtime.degradesHealth).toBe(true);
+    });
+
+    it('UNDECLARED downgrades', async () => {
+      useRuntimeInput({
+        pm2Readable: true,
+        repoHead: HEAD,
+        declared: [],
+        running: [{ name: 'hydi-revenue-autopilot-tick', status: 'online', script: 'node_modules/tsx/dist/cli.mjs', args: 'scripts/revenue-autopilot-tick.ts', cwd: '/repo' }],
+        provenance: {},
+      });
+      const res = await callHandler();
+      expect(res._json.status).toBe('degraded');
+      expect(res._json.runtime.rows[0].verdict).toBe('UNDECLARED');
+    });
+
+    it('UNKNOWN_CODE downgrades even when the dashboard is OK', async () => {
+      useRuntimeInput({
+        pm2Readable: true,
+        repoHead: HEAD,
+        declared: [{ name: 'hydi-daemon', script: 'scripts/heidi-daemon-launcher.js', args: '', cwd: '/repo', max_restarts: 10, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        running: [{ name: 'hydi-daemon', status: 'online', script: '/repo/scripts/heidi-daemon-launcher.js', args: '', cwd: '/repo', max_restarts: 10, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        provenance: {},
+      });
+      const res = await callHandler();
+      expect(res._json.status).toBe('degraded');
+      expect(res._json.runtime.rows[0].verdict).toBe('UNKNOWN_CODE');
+      expect(res._json.runtime.overall).toBe('UNKNOWN');
+    });
+
+    it('an unreadable PM2 audit is UNKNOWN and not healthy', async () => {
+      useRuntimeInput({ pm2Readable: false });
+      const res = await callHandler();
+      expect(res._status).toBe(200);
+      expect(res._json.status).toBe('degraded');
+      expect(res._json.runtime.overall).toBe('UNKNOWN');
+      expect(res._json.runtime.ok).toBe(false);
+    });
+
+    it('CONFIG_DRIFT alone does not flip /api/health', async () => {
+      useRuntimeInput({
+        pm2Readable: true,
+        repoHead: HEAD,
+        declared: [{ name: 'hydi-daemon', script: 'scripts/heidi-daemon-launcher.js', args: '', cwd: '/repo', max_restarts: 10, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        running: [{ name: 'hydi-daemon', status: 'online', script: '/repo/scripts/heidi-daemon-launcher.js', args: '', cwd: '/repo', max_restarts: 99999, exp_backoff_restart_delay: 1000, kill_timeout: 50000 }],
+        provenance: { 'hydi-daemon': { gitSha: HEAD, gitDirty: false } },
+      });
+      const res = await callHandler();
+      expect(res._json.status).toBe('healthy');
+      expect(res._json.runtime.rows[0].verdict).toBe('CONFIG_DRIFT');
+      expect(res._json.runtime.degradesHealth).toBe(false);
     });
   });
 });

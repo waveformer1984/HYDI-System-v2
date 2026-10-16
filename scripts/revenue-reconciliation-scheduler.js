@@ -65,6 +65,8 @@ async function runCycle() {
 }
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-revenue-reconciliation');
   console.log(`[${new Date().toISOString()}] Revenue Reconciliation Scheduler starting`);
   console.log(`  Interval: ${INTERVAL_MS}ms (${Math.round(INTERVAL_MS / 3600000)} hours)`);
   console.log(`  Observe only: ${OBSERVE_ONLY}`);

@@ -153,6 +153,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     checks.authorization = { healthy: false, state: 'CHECK_FAILED', details: { error: e instanceof Error ? e.message : 'unknown' } };
   }
 
+  // ─── Runtime provenance ───────────────────────────────────────────────
+  // Which code is actually running. UNKNOWN is not healthy. This check
+  // only reports — it does not restart anything.
+  try {
+    const { collectRuntimeAudit } = await import('../../lib/runtime/collect.js');
+    const { auditDrift, runtimeHealthCheck } = await import('../../lib/runtime/drift-audit.js');
+    let audit;
+    if (process.env.NODE_ENV !== 'production' && process.env.HYDI_RUNTIME_AUDIT_FIXTURE) {
+      const fs = await import('fs');
+      const parsed = JSON.parse(fs.readFileSync(process.env.HYDI_RUNTIME_AUDIT_FIXTURE, 'utf8'));
+      audit = auditDrift(parsed);
+    } else {
+      audit = await collectRuntimeAudit({ root: process.cwd() });
+    }
+    checks.runtime = runtimeHealthCheck(audit);
+  } catch (e) {
+    checks.runtime = {
+      healthy: false,
+      state: 'UNKNOWN',
+      details: { error: e instanceof Error ? e.message : 'unknown' },
+    };
+  }
+
   // ─── Overall status ───────────────────────────────────────────────────
   const allHealthy = Object.values(checks).every((c) => c.healthy);
   const anyFailed = Object.values(checks).some((c) => c.state === 'CHECK_FAILED');
