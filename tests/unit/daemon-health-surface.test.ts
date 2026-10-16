@@ -48,11 +48,27 @@ afterEach(() => {
 });
 
 describe('writeDaemonStatus / readDaemonStatus', () => {
-  it('round-trips a snapshot through the status file', () => {
+  it('round-trips a snapshot, including provenance, through the status file', () => {
     const snap = snapshot();
     expect(writeDaemonStatus(root, snap)).toBeNull();
     expect(fs.existsSync(statusPath(root))).toBe(true);
     expect(readDaemonStatus(root)).toEqual(snap);
+    const withCode = snapshot({
+      provenance: {
+        name: 'hydi-daemon',
+        pid: 1234,
+        gitSha: 'abc',
+        gitDirty: false,
+        branch: 'clean-main',
+        startedAt: '2026-10-16T00:00:00.000Z',
+        node: 'v22.0.0',
+        cwd: '/repo',
+        source: 'git',
+      },
+    });
+    expect(writeDaemonStatus(root, withCode)).toBeNull();
+    expect(readDaemonStatus(root)?.provenance?.gitSha).toBe('abc');
+    expect(assessDaemonHealth(root).details.provenance?.gitSha).toBe('abc');
   });
 
   it('leaves no temp file behind after the atomic rename', () => {

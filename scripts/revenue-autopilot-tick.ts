@@ -167,6 +167,10 @@ if (isDirectRun && ENABLED) {
     log('lock held by another instance — exiting');
     process.exit(0);
   }
+  const { recordProcessProvenance } = require('../lib/runtime/provenance') as {
+    recordProcessProvenance: (name: string) => Promise<unknown>;
+  };
+  void recordProcessProvenance('hydi-revenue-autopilot-tick');
   const shutdown = () => { shuttingDown = true; };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);

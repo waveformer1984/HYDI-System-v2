@@ -42,6 +42,19 @@ export interface PersistenceTruth {
   checkedAt: string;
 }
 
+/** Code identity captured at process start. Absent on snapshots from older daemons. */
+export interface RuntimeProvenanceStamp {
+  name: string;
+  pid: number;
+  gitSha: string | null;
+  gitDirty: boolean | null;
+  branch: string | null;
+  startedAt: string;
+  node: string;
+  cwd: string;
+  source?: string;
+}
+
 export interface DaemonStatusSnapshot {
   pid: number;
   state: string;
@@ -54,6 +67,7 @@ export interface DaemonStatusSnapshot {
   lastErrorAt: string | null;
   persistence: PersistenceTruth;
   updatedAt: string;
+  provenance?: RuntimeProvenanceStamp | null;
 }
 
 export type DaemonVerdictState =
@@ -79,6 +93,7 @@ export interface DaemonHealthVerdict {
     persistence?: PersistenceTruth;
     updatedAt?: string;
     ageMs?: number;
+    provenance?: RuntimeProvenanceStamp | null;
   };
 }
 
@@ -164,6 +179,7 @@ export function assessDaemonHealth(
     updatedAt: snapshot.updatedAt,
     ageMs: Number.isFinite(ageMs) ? ageMs : undefined,
   };
+  if (snapshot.provenance !== undefined) details.provenance = snapshot.provenance;
 
   if (!Number.isFinite(updatedAtMs) || ageMs > staleAfterMs) {
     return {

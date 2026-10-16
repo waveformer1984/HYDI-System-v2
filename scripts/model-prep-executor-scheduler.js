@@ -69,12 +69,15 @@ async function cycle() {
   }
 }
 
+let processProvenance = null;
 const writeStatus = (snapshot) =>
-  writeModelPrepStatus(ROOT, { pid: process.pid, ...snapshot });
+  writeModelPrepStatus(ROOT, { pid: process.pid, ...snapshot, provenance: processProvenance });
 
 const log = (m) => console.log(`[model-prep-executor] ${m}`);
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  processProvenance = await recordProcessProvenance('hydi-model-prep-executor', { root: ROOT });
   log(`started — interval ${INTERVAL_MS}ms`);
 
   if (ONCE) {

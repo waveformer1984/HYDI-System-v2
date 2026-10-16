@@ -200,6 +200,8 @@ async function runCycle(deps = {}) {
 }
 
 async function main() {
+  const { recordProcessProvenance } = require('../lib/runtime/provenance');
+  await recordProcessProvenance('hydi-protoforge-scout');
   log(`protoforge-opportunity-scheduler starting (mode=${ONCE ? 'once' : 'continuous'}, interval=${INTERVAL_MS}ms, timeout=${RUN_TIMEOUT_MS}ms)`);
   const first = await runCycle();
   if (ONCE) {

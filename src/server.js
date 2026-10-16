@@ -1568,6 +1568,10 @@ const server = http.createServer(app);
 new ChatWebSocketServer(server);
 
 server.listen(PORT, async () => {
+  if (require.main === module) {
+    const { recordProcessProvenance } = require('../lib/runtime/provenance');
+    await recordProcessProvenance('protoforge-core');
+  }
   console.log(`Server running on port ${PORT}`);
   console.log('ProtoForge Validation Gate - Operational');
   console.log('[DATABASE] Single Supabase client initialized');
