@@ -119,13 +119,28 @@ ports_from_run "$SVDIR/hydi-daemon/run" "hydi-daemon/run"
 say "== sv status"
 HYDI_STATUS=""
 DAEMON_STATUS=""
+HYDI_LOG_STATUS=""
+DAEMON_LOG_STATUS=""
 if command -v sv >/dev/null 2>&1; then
   HYDI_STATUS=$(sv status hydi 2>&1 || true)
+  HYDI_LOG_STATUS=$(sv status hydi/log 2>&1 || true)
   DAEMON_STATUS=$(sv status hydi-daemon 2>&1 || true)
-  say "$HYDI_STATUS"
-  say "$DAEMON_STATUS"
+  DAEMON_LOG_STATUS=$(sv status hydi-daemon/log 2>&1 || true)
+  say "hydi: $HYDI_STATUS"
+  say "hydi/log: $HYDI_LOG_STATUS"
+  say "hydi-daemon: $DAEMON_STATUS"
+  say "hydi-daemon/log: $DAEMON_LOG_STATUS"
 else
   say "sv: not on PATH (termux-services). Service dirs still checked under $SVDIR"
+fi
+backend="${HYDI_BACKEND-}"
+if [ -z "$backend" ] && [ -f "$HOME/.hydi/thin-client.env" ]; then
+  backend=$(sed -n 's/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}HYDI_BACKEND=//p' "$HOME/.hydi/thin-client.env" | tail -n 1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+fi
+if [ -n "$backend" ]; then
+  say "HYDI_BACKEND: $backend"
+else
+  say "HYDI_BACKEND: unset"
 fi
 
 classify() {
@@ -227,17 +242,27 @@ probe_run() {
   sh "$script" > "$out" 2>&1 &
   pid=$!
   i=0
+  stopped=0
   while [ "$i" -lt 15 ]; do
     kill -0 "$pid" 2>/dev/null || break
     sleep 1
     i=$((i + 1))
   done
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    stopped=1
+  fi
+  ec=0
+  wait "$pid" 2>/dev/null || ec=$?
   if [ -s "$out" ]; then
     tail -n 30 "$out"
   else
     say "(no output)"
+  fi
+  if [ "$stopped" = 1 ]; then
+    say "foreground exit code: $ec (stopped after 15s)"
+  else
+    say "foreground exit code: $ec"
   fi
   rm -f "$out"
 }

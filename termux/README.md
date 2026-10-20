@@ -127,6 +127,21 @@ sh scripts/hydi-doctor.sh
 
 `install-services.sh` copies any existing `run` to `run.bak-<date>` before replacing it. Restore with `cp -p` of that backup back to `run`, then `sv restart hydi hydi-daemon`.
 
+## Thin client to Frank
+
+`hydi.py` uses `OLLAMA_URL` (`hydi.py` line 152). That value is filled from `~/.hydi/thin-client.env` when it is not already exported (`hydi.py` lines 28–44). The phone prefers `qwen2.5` once the URL is a remote host (`REMOTE_PREFERRED_MODELS` in the same file).
+
+```bash
+# 1. On Frank, elevated PowerShell
+powershell -ExecutionPolicy Bypass -File scripts\frank-ollama-lan.ps1
+# 2. On the phone, put Frank's printed LAN address in the environment
+export FRANK_IP=192.168.1.10
+# 3. On the phone, from the repo
+sh termux/hydi-fix-all.sh
+```
+
+The Frank script sets the user env `OLLAMA_HOST=0.0.0.0:11434`, allows inbound TCP 11434 from the local subnet on Domain and Private profiles only, restarts Ollama, and pulls `qwen2.5:3b`. `hydi-fix-all.sh` checks `http://$FRANK_IP:11434/api/tags`. When that answers, it writes `OLLAMA_URL` and leaves the local `hydi` llama.cpp service down. It does not delete files. Cache cleans run only after an explicit `y`.
+
 ## Security notes
 
 - The server binds to all interfaces so you can reach it from other devices
