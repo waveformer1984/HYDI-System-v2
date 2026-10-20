@@ -3,14 +3,15 @@
 # From the repo root: chmod +x scripts/hydi-doctor.sh && ln -sf "$PWD/scripts/hydi-doctor.sh" "$PREFIX/bin/hydi-doctor"
 # Ports come from the environment, ~/.hydi/thin-client.env, termux/.env.hydi,
 # $PREFIX/var/service/*/run, termux/hydi-chat-server.js, and hydi.py.
-# The run scripts themselves are created on the phone, not in this repo.
+# Service definitions live in termux/services/. Install them with
+# termux/install-services.sh. The live copies are under $PREFIX/var/service/.
 
 set -u
 
 TAB=$(printf '\t')
 PORTLIST="${TMPDIR:-/tmp}/hydi-doctor-ports.$$"
 : > "$PORTLIST"
-trap 'rm -f "$PORTLIST"' EXIT INT TERM
+trap 'rm -f "$PORTLIST" "${TMPDIR:-/tmp}/hydi-doctor-probe-hydi.$$" "${TMPDIR:-/tmp}/hydi-doctor-probe-hydi-daemon.$$"' EXIT INT TERM
 
 say() { printf '%s\n' "$*"; }
 
@@ -82,6 +83,8 @@ ports_from_run() {
     -e 's/.*--port[=[:space:]]\{1,\}\([0-9][0-9]*\).*/\1/p' \
     -e 's/.*[[:space:]]-p[[:space:]]\{1,\}\([0-9][0-9]*\).*/\1/p' \
     -e 's/.*hydi\.py[[:space:]][[:space:]]*server[[:space:]][[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+    -e 's/.*LLAMA_PORT:-\([0-9][0-9]*\).*/\1/p' \
+    -e 's/.*HYDI_PY_PORT:-\([0-9][0-9]*\).*/\1/p' \
     "$file" | while IFS= read -r p; do
       add_port "$label" "$p"
     done
@@ -116,13 +119,28 @@ ports_from_run "$SVDIR/hydi-daemon/run" "hydi-daemon/run"
 say "== sv status"
 HYDI_STATUS=""
 DAEMON_STATUS=""
+HYDI_LOG_STATUS=""
+DAEMON_LOG_STATUS=""
 if command -v sv >/dev/null 2>&1; then
   HYDI_STATUS=$(sv status hydi 2>&1 || true)
+  HYDI_LOG_STATUS=$(sv status hydi/log 2>&1 || true)
   DAEMON_STATUS=$(sv status hydi-daemon 2>&1 || true)
-  say "$HYDI_STATUS"
-  say "$DAEMON_STATUS"
+  DAEMON_LOG_STATUS=$(sv status hydi-daemon/log 2>&1 || true)
+  say "hydi: $HYDI_STATUS"
+  say "hydi/log: $HYDI_LOG_STATUS"
+  say "hydi-daemon: $DAEMON_STATUS"
+  say "hydi-daemon/log: $DAEMON_LOG_STATUS"
 else
   say "sv: not on PATH (termux-services). Service dirs still checked under $SVDIR"
+fi
+backend="${HYDI_BACKEND-}"
+if [ -z "$backend" ] && [ -f "$HOME/.hydi/thin-client.env" ]; then
+  backend=$(sed -n 's/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}HYDI_BACKEND=//p' "$HOME/.hydi/thin-client.env" | tail -n 1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+fi
+if [ -n "$backend" ]; then
+  say "HYDI_BACKEND: $backend"
+else
+  say "HYDI_BACKEND: unset"
 fi
 
 classify() {
@@ -186,30 +204,89 @@ fi
 
 say ""
 say "== logs (last 20 lines)"
-show_log() {
+LOGROOT="${PREFIX:-/data/data/com.termux/files/usr}/var/log/sv"
+log_path() {
   name=$1
-  shown=0
   for f in \
+    "$LOGROOT/$name/current" \
     "$SVDIR/$name/log/main/current" \
     "$SVDIR/$name/log/current"
   do
     if [ -f "$f" ]; then
-      say "--- $name ($f) ---"
-      tail -n 20 "$f" 2>/dev/null || true
-      shown=1
-      break
+      printf '%s\n' "$f"
+      return 0
     fi
   done
-  if [ "$shown" = 0 ]; then
-    if [ -f "$SVDIR/$name/run" ]; then
-      say "--- $name: run script present, no log file ---"
-    else
-      say "--- $name: no run script at $SVDIR/$name/run (not created by this repo) ---"
-    fi
+  return 1
+}
+fast_crash() {
+  status=$1
+  case $status in
+    *': 0s'*) ;;
+    *) return 1 ;;
+  esac
+  case $status in
+    *'want up'*) return 0 ;;
+  esac
+  return 1
+}
+probe_run() {
+  name=$1
+  script="$SVDIR/$name/run"
+  out="${TMPDIR:-/tmp}/hydi-doctor-probe-$name.$$"
+  say "--- $name (no log; ran $script for 15s) ---"
+  if [ ! -f "$script" ]; then
+    say "(no run script)"
+    return 0
+  fi
+  sh "$script" > "$out" 2>&1 &
+  pid=$!
+  i=0
+  stopped=0
+  while [ "$i" -lt 15 ]; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 1
+    i=$((i + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    stopped=1
+  fi
+  ec=0
+  wait "$pid" 2>/dev/null || ec=$?
+  if [ -s "$out" ]; then
+    tail -n 30 "$out"
+  else
+    say "(no output)"
+  fi
+  if [ "$stopped" = 1 ]; then
+    say "foreground exit code: $ec (stopped after 15s)"
+  else
+    say "foreground exit code: $ec"
+  fi
+  rm -f "$out"
+}
+show_log() {
+  name=$1
+  status=$2
+  path=$(log_path "$name" || true)
+  if [ -n "$path" ]; then
+    say "--- $name ($path) ---"
+    tail -n 20 "$path" 2>/dev/null || true
+    return 0
+  fi
+  if fast_crash "$status" && [ -f "$SVDIR/$name/run" ]; then
+    probe_run "$name"
+    return 0
+  fi
+  if [ -f "$SVDIR/$name/run" ]; then
+    say "--- $name: run script present, no log file ---"
+  else
+    say "--- $name: no run script at $SVDIR/$name/run ---"
   fi
 }
-show_log hydi
-show_log hydi-daemon
+show_log hydi "$HYDI_STATUS"
+show_log hydi-daemon "$DAEMON_STATUS"
 if [ -n "$ROOT" ] && [ -f "$ROOT/termux/hydi-chat.log" ]; then
   say "--- termux/hydi-chat.log ---"
   tail -n 20 "$ROOT/termux/hydi-chat.log" 2>/dev/null || true
@@ -244,7 +321,67 @@ else
 fi
 
 say ""
-if [ "$HYDI_STATE" = "crash" ] || [ "$DAEMON_STATE" = "crash" ]; then
+say "== resources"
+OOM=0
+if command -v free >/dev/null 2>&1; then
+  free -m 2>/dev/null || free
+else
+  say "free: not on PATH"
+fi
+if command -v df >/dev/null 2>&1; then
+  df -h "$HOME" 2>/dev/null || df -h .
+else
+  say "df: not on PATH"
+fi
+oom_model=""
+if [ -n "${HYDI_MODEL:-}" ] && [ -f "${HYDI_MODEL:-}" ]; then
+  oom_model=$HYDI_MODEL
+elif [ -f "$HOME/.hydi/thin-client.env" ]; then
+  oom_model=$(sed -n 's/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}HYDI_MODEL=//p' "$HOME/.hydi/thin-client.env" | tail -n 1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+fi
+if [ -z "$oom_model" ] || [ ! -f "$oom_model" ]; then
+  if [ -f "$HOME/models/mistral-7b.Q4_0.gguf" ]; then
+    oom_model="$HOME/models/mistral-7b.Q4_0.gguf"
+  else
+    oom_model=""
+    oom_best=""
+    oom_size=""
+    for f in "$HOME/models"/*.gguf; do
+      [ -f "$f" ] || continue
+      sz=$(ls -ln "$f" 2>/dev/null | awk '{print $5}')
+      [ -n "$sz" ] || continue
+      if [ -z "$oom_best" ] || [ "$sz" -lt "$oom_size" ]; then
+        oom_best=$f
+        oom_size=$sz
+      fi
+    done
+    oom_model=$oom_best
+  fi
+fi
+if [ -n "$oom_model" ] && [ -f "$oom_model" ] && command -v free >/dev/null 2>&1; then
+  model_bytes=$(ls -ln "$oom_model" 2>/dev/null | awk '{print $5}')
+  mem_total=$(free -m 2>/dev/null | awk '/Mem:/ { print $2; exit }')
+  mem_avail=$(free -m 2>/dev/null | awk '/Mem:/ { if (NF>=7) print $7; else print $4; exit }')
+  if [ -z "$mem_total" ]; then
+    mem_total=$(free 2>/dev/null | awk '/Mem:/ { print $2; exit }')
+    mem_avail=$(free 2>/dev/null | awk '/Mem:/ { if (NF>=7) print $7; else print $4; exit }')
+    if [ -n "$mem_total" ] && [ "$mem_total" -gt 200000 ]; then
+      mem_avail=$((mem_avail / 1024))
+    fi
+  fi
+  if [ -n "$model_bytes" ] && [ -n "$mem_avail" ]; then
+    model_mib=$((model_bytes / 1048576))
+    if [ "$mem_avail" -lt "$model_mib" ]; then
+      OOM=1
+      say "possible OOM: $oom_model is ${model_mib} MiB and available RAM is ${mem_avail} MiB"
+    fi
+  fi
+fi
+
+say ""
+if [ "$OOM" = 1 ] && [ "$HYDI_STATE" = "crash" ]; then
+  say "NEXT STEP: possible OOM — free RAM is smaller than the model file; see log above"
+elif [ "$HYDI_STATE" = "crash" ] || [ "$DAEMON_STATE" = "crash" ]; then
   say "NEXT STEP: service crash-looping, see log above"
 elif [ -n "$OPEN_PORT" ]; then
   say "NEXT STEP: open http://127.0.0.1:${OPEN_PORT} in Chrome"

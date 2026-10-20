@@ -1,0 +1,129 @@
+#!/bin/sh
+# Phone runit service "hydi": local llama.cpp. This is not the chat UI
+# (termux/hydi-chat-server.js, port 8787) and not hydi.py (hydi-daemon, port 3006).
+# Settings that are already exported win. Otherwise read ~/.hydi/thin-client.env.
+# HYDI_LLAMA_BIN, HYDI_MODEL, HYDI_LLAMA_PORT (default 8080), HYDI_THREADS, HYDI_CTX.
+exec 2>&1
+
+env_file="$HOME/.hydi/thin-client.env"
+
+env_val() {
+  key=$1
+  [ -f "$env_file" ] || return 0
+  sed -n "s/^[[:space:]]*\\(export[[:space:]][[:space:]]*\\)\\{0,1\\}${key}=//p" "$env_file" |
+    tail -n 1 |
+    tr -d '\r' |
+    sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//;s/^'"'"'//;s/'"'"'$//'
+}
+
+fill() {
+  key=$1
+  eval "cur=\${$key-}"
+  [ -n "$cur" ] && return 0
+  val=$(env_val "$key")
+  [ -n "$val" ] || return 0
+  case $key in
+    HYDI_LLAMA_BIN) HYDI_LLAMA_BIN=$val; export HYDI_LLAMA_BIN ;;
+    LLAMA_SERVER) LLAMA_SERVER=$val; export LLAMA_SERVER ;;
+    HYDI_MODEL) HYDI_MODEL=$val; export HYDI_MODEL ;;
+    HYDI_LLAMA_PORT) HYDI_LLAMA_PORT=$val; export HYDI_LLAMA_PORT ;;
+    LLAMA_PORT) LLAMA_PORT=$val; export LLAMA_PORT ;;
+    HYDI_THREADS) HYDI_THREADS=$val; export HYDI_THREADS ;;
+    HYDI_LLAMA_THREADS) HYDI_LLAMA_THREADS=$val; export HYDI_LLAMA_THREADS ;;
+    HYDI_CTX) HYDI_CTX=$val; export HYDI_CTX ;;
+    HYDI_LLAMA_CTX) HYDI_LLAMA_CTX=$val; export HYDI_LLAMA_CTX ;;
+  esac
+}
+
+fill HYDI_LLAMA_BIN
+fill LLAMA_SERVER
+fill HYDI_MODEL
+fill HYDI_LLAMA_PORT
+fill LLAMA_PORT
+fill HYDI_THREADS
+fill HYDI_LLAMA_THREADS
+fill HYDI_CTX
+fill HYDI_LLAMA_CTX
+
+prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+models="$HOME/models"
+default_model="$models/mistral-7b.Q4_0.gguf"
+port="${HYDI_LLAMA_PORT:-${LLAMA_PORT:-8080}}"
+threads="${HYDI_THREADS:-${HYDI_LLAMA_THREADS:-4}}"
+ctx="${HYDI_CTX:-${HYDI_LLAMA_CTX:-2048}}"
+
+if [ -n "${HYDI_LLAMA_BIN:-}" ]; then
+  bin=$HYDI_LLAMA_BIN
+elif [ -n "${LLAMA_SERVER:-}" ]; then
+  bin=$LLAMA_SERVER
+elif [ -x "$prefix/bin/llama-server" ]; then
+  bin="$prefix/bin/llama-server"
+elif command -v llama-server >/dev/null 2>&1; then
+  bin=$(command -v llama-server)
+else
+  bin="$prefix/bin/llama-server"
+fi
+
+missing=0
+model=""
+if [ -n "${HYDI_MODEL:-}" ]; then
+  model=$HYDI_MODEL
+  if [ ! -f "$model" ]; then
+    printf 'MISSING: %s\n' "$model"
+    printf 'HYDI_MODEL is set; not searching %s\n' "$models"
+    missing=1
+  fi
+elif [ -f "$default_model" ]; then
+  model=$default_model
+else
+  printf 'MISSING: %s\n' "$default_model"
+  printf 'looked for a smaller GGUF in %s:\n' "$models"
+  found=0
+  best=""
+  best_size=""
+  for f in "$models"/*.gguf; do
+    [ -f "$f" ] || continue
+    found=1
+    size=$(ls -ln "$f" 2>/dev/null | awk '{print $5}')
+    [ -n "$size" ] || continue
+    printf '  %s (%s bytes)\n' "$f" "$size"
+    if [ -z "$best" ] || [ "$size" -lt "$best_size" ]; then
+      best=$f
+      best_size=$size
+    fi
+  done
+  if [ "$found" = 0 ]; then
+    printf '  (none)\n'
+    missing=1
+  else
+    model=$best
+    printf 'using smaller GGUF: %s\n' "$model"
+  fi
+fi
+
+if [ ! -f "$bin" ] && [ ! -x "$bin" ]; then
+  printf 'MISSING: %s\n' "$bin"
+  missing=1
+fi
+
+case $port in
+  ''|*[!0-9]*) printf 'MISSING: HYDI_LLAMA_PORT=%s\n' "$port"; missing=1 ;;
+esac
+case $threads in
+  ''|*[!0-9]*) printf 'MISSING: HYDI_THREADS=%s\n' "$threads"; missing=1 ;;
+esac
+case $ctx in
+  ''|*[!0-9]*) printf 'MISSING: HYDI_CTX=%s\n' "$ctx"; missing=1 ;;
+esac
+
+if [ "$missing" = 1 ]; then
+  sleep 30
+  exit 1
+fi
+
+printf 'starting %s -m %s --host 127.0.0.1 --port %s -t %s -c %s\n' \
+  "$bin" "$model" "$port" "$threads" "$ctx"
+exec "$bin" -m "$model" --host 127.0.0.1 --port "$port" -t "$threads" -c "$ctx"
+printf 'exec failed: %s\n' "$bin"
+sleep 30
+exit 1
