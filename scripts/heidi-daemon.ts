@@ -547,6 +547,15 @@ async function main(): Promise<void> {
   }
   console.log(`[daemon] Lock acquired: ${LOCK_FILE}`);
 
+  try {
+    const { startBoardListener } = require('../lib/forge-board/listener') as {
+      startBoardListener: (opts: { sender: string }) => { started: boolean };
+    };
+    startBoardListener({ sender: 'hydi-daemon' });
+  } catch (error) {
+    console.error(`[daemon] board listener skipped: ${error instanceof Error ? error.message : 'unknown'}`);
+  }
+
   // 1b. Shared Supabase client — wires the memory bridge (episodic
   //     experience storage with real row ids) and ActionExecutor in the
   //     cognitive core, and is reused below for delegated-operator

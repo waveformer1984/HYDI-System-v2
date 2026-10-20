@@ -424,6 +424,9 @@ export default function HeidiChat() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/board" className="text-[11px] text-gray-500 hover:text-gray-300 border border-white/[0.08] rounded-md px-2 py-1">
+            Board
+          </Link>
           {connectionOk !== null && (
             <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
               <span

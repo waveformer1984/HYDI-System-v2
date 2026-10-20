@@ -237,3 +237,7 @@ The corollary matters more: because `/api/chat` is ungated, tunnelling port
 this as a warning locally and as a **failure** when `--public-url` is given.
 Gate the path, block it at the tunnel, or keep the funnel down until it is
 resolved.
+
+## Forge Board
+
+On the phone, `python hydi.py` serves the shared board at `http://127.0.0.1:3006/board` (sqlite, no Node sqlite module). To use the PC's room, set `HYDI_BOARD_UPSTREAM=http://<heidi-pc>:3000` in `~/.hydi/thin-client.env`. When the PC is unreachable the phone keeps an offline copy. Posting still needs `HYDI_BOARD_HUMAN_TOKEN` in the environment and the same token typed into the page. See the Forge Board section in `README.md` for the agent tokens.
