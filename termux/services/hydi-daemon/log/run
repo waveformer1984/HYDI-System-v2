@@ -1,0 +1,4 @@
+#!/bin/sh
+prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+mkdir -p "$prefix/var/log/sv/hydi-daemon"
+exec svlogd -tt "$prefix/var/log/sv/hydi-daemon"

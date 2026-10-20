@@ -1,0 +1,83 @@
+#!/bin/sh
+# Phone runit service "hydi-daemon": hydi.py on port 3006.
+# llama.cpp is the "hydi" service, not this one. The doctor saw hydi.py
+# answer HTTP 200 while hydi was crash-looping on llama-server.
+exec 2>&1
+
+env_file="$HOME/.hydi/thin-client.env"
+
+env_val() {
+  key=$1
+  [ -f "$env_file" ] || return 0
+  sed -n "s/^[[:space:]]*\\(export[[:space:]][[:space:]]*\\)\\{0,1\\}${key}=//p" "$env_file" |
+    tail -n 1 |
+    tr -d '\r' |
+    sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//;s/^'"'"'//;s/'"'"'$//'
+}
+
+fill() {
+  key=$1
+  eval "cur=\${$key-}"
+  [ -n "$cur" ] && return 0
+  val=$(env_val "$key")
+  [ -n "$val" ] || return 0
+  case $key in
+    HYDI_PYTHON) HYDI_PYTHON=$val; export HYDI_PYTHON ;;
+    HYDI_PY) HYDI_PY=$val; export HYDI_PY ;;
+    HYDI_PY_PORT) HYDI_PY_PORT=$val; export HYDI_PY_PORT ;;
+  esac
+}
+
+fill HYDI_PYTHON
+fill HYDI_PY
+fill HYDI_PY_PORT
+
+port="${HYDI_PY_PORT:-3006}"
+missing=0
+
+if [ -n "${HYDI_PYTHON:-}" ]; then
+  py=$HYDI_PYTHON
+elif command -v python3 >/dev/null 2>&1; then
+  py=$(command -v python3)
+elif command -v python >/dev/null 2>&1; then
+  py=$(command -v python)
+else
+  py=""
+fi
+
+if [ -z "$py" ] || [ ! -x "$py" ]; then
+  printf 'MISSING: %s\n' "${HYDI_PYTHON:-python3}"
+  missing=1
+fi
+
+if [ -n "${HYDI_PY:-}" ]; then
+  script=$HYDI_PY
+  if [ ! -f "$script" ]; then
+    printf 'MISSING: %s\n' "$script"
+    missing=1
+  fi
+elif [ -f "$HOME/HYDI-System-v2/hydi.py" ]; then
+  script="$HOME/HYDI-System-v2/hydi.py"
+elif [ -f "$HOME/hydi/hydi.py" ]; then
+  script="$HOME/hydi/hydi.py"
+else
+  printf 'MISSING: %s\n' "$HOME/HYDI-System-v2/hydi.py"
+  printf 'MISSING: %s\n' "$HOME/hydi/hydi.py"
+  missing=1
+  script=""
+fi
+
+case $port in
+  ''|*[!0-9]*) printf 'MISSING: HYDI_PY_PORT=%s\n' "$port"; missing=1 ;;
+esac
+
+if [ "$missing" = 1 ]; then
+  sleep 30
+  exit 1
+fi
+
+printf 'starting %s %s server %s\n' "$py" "$script" "$port"
+exec "$py" "$script" server "$port"
+printf 'exec failed: %s\n' "$py"
+sleep 30
+exit 1

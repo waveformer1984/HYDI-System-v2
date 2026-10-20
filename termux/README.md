@@ -109,6 +109,24 @@ install the Termux:Boot app to start it automatically after reboot.
 
 From the repo root: `chmod +x scripts/hydi-doctor.sh && ln -sf "$PWD/scripts/hydi-doctor.sh" "$PREFIX/bin/hydi-doctor"`
 
+## Phone services (runit)
+
+`hydi` is local llama.cpp (`llama-server`, port 8080, model `~/models/mistral-7b.Q4_0.gguf`). `hydi-daemon` is `hydi.py` on port 3006. The chat UI stays on port 8787. Definitions are in `termux/services/`. If the binary or the model is missing, the run script prints `MISSING: <path>` and sleeps 30 seconds instead of exiting immediately.
+
+Optional lines in `~/.hydi/thin-client.env` (no secrets): `HYDI_LLAMA_BIN`, `HYDI_MODEL`, `HYDI_LLAMA_PORT`, `HYDI_THREADS`, `HYDI_CTX`. When `HYDI_MODEL` is unset and the 7B file is missing, `hydi` uses the smallest `.gguf` in `~/models` and prints every file it looked at.
+
+`setup-thin-client.sh --disable-local-llm` still stops `hydi`, because that run script launches `llama-server`.
+
+From a `clean-main` checkout:
+
+```bash
+cd ~/HYDI-System-v2
+sh termux/install-services.sh
+sh scripts/hydi-doctor.sh
+```
+
+`install-services.sh` copies any existing `run` to `run.bak-<date>` before replacing it. Restore with `cp -p` of that backup back to `run`, then `sv restart hydi hydi-daemon`.
+
 ## Security notes
 
 - The server binds to all interfaces so you can reach it from other devices
