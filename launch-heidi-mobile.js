@@ -68,7 +68,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
@@ -77,6 +77,14 @@ app.use((req, res, next) => {
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
     res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html'));
 });
+
+const { handleBoardRequest } = require('./lib/forge-board/http');
+app.get('/board', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'lib/forge-board/ui.html'));
+});
+app.get('/api/board', (req, res) => handleBoardRequest(req, res));
+app.post('/api/board', (req, res) => handleBoardRequest(req, res));
 
 // Available models from local providers
 app.get('/api/models', async (req, res) => {
@@ -348,6 +356,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log('║  Open the Phone URL on your mobile device    ║');
     console.log('║  (must be on the same WiFi / LAN network)    ║');
     console.log('╚══════════════════════════════════════════════╝\n');
+    console.log(`Board: ${ipLine}/board`);
 
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });

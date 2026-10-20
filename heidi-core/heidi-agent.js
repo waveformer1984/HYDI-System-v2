@@ -676,6 +676,12 @@ class HeidiAgent {
 
     console.log('[HEIDI-AGENT] Event loops active');
 
+    try {
+      require('../lib/forge-board/listener').startBoardListener({ sender: 'Heidi' });
+    } catch (error) {
+      console.error('[HEIDI-AGENT] board listener skipped:', error.message);
+    }
+
     // Start HTTP server for advisory mode
     if (this.advisoryMode) {
       this.startAdvisoryServer();

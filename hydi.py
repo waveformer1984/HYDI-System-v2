@@ -17,7 +17,7 @@ Usage:
 
 import sys, os, time, json, threading, subprocess, socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
@@ -568,6 +568,10 @@ class HydiHandler(BaseHTTPRequestHandler):
                 "ollama_online": OLLAMA_MODEL is not None,
                 "mode":          "ai" if (GROQ_MODEL or OLLAMA_MODEL) else "scripted",
             })
+        elif p == "/board":
+            self._serve_board()
+        elif p == "/api/board":
+            self._board("GET")
         elif p == "/manifest.json":
             self._raw(MANIFEST_JSON.encode(), "application/manifest+json")
         elif p == "/sw.js":
@@ -577,8 +581,15 @@ class HydiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length  = int(self.headers.get("Content-Length", 0))
-        body    = json.loads(self.rfile.read(length) or b"{}")
-        p       = urlparse(self.path).path
+        raw     = self.rfile.read(length) if length else b""
+        p       = urlparse(self.path).path.rstrip("/") or "/"
+        if p == "/api/board":
+            if length > 8192:
+                self._board_json(413, {"ok": False, "error": "body too large"})
+                return
+            self._board("POST", raw or b"{}")
+            return
+        body    = json.loads(raw or b"{}")
         session = self.headers.get("X-Session-Id", "default")
 
         if p == "/api/chat":
@@ -659,6 +670,55 @@ class HydiHandler(BaseHTTPRequestHandler):
         else:
             data = FALLBACK_HTML.encode()
         self._raw(data, "text/html; charset=utf-8")
+
+    def _board_dir(self):
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
+
+    def _serve_board(self):
+        html_path = os.path.join(self._board_dir(), "ui.html")
+        with open(html_path, "rb") as fh:
+            data = fh.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _board_json(self, status, payload):
+        data = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _board(self, method, raw=b""):
+        board_dir = self._board_dir()
+        if board_dir not in sys.path:
+            sys.path.insert(0, board_dir)
+        import store
+        if method == "POST":
+            try:
+                incoming = json.loads(raw.decode() or "{}")
+            except json.JSONDecodeError:
+                self._board_json(400, {"ok": False, "error": "invalid json"})
+                return
+        else:
+            incoming = {}
+        query = {key: values[0] for key, values in parse_qs(urlparse(self.path).query).items()}
+        result = store.handle_http({
+            "method": method,
+            "query": query,
+            "body": incoming,
+            "authorization": self.headers.get("Authorization", ""),
+            "client_ip": self.client_address[0],
+        })
+        status = int(result.pop("status", 200))
+        self._board_json(status, result)
 
 
 # ── Payload builders ──────────────────────────────────────
@@ -889,6 +949,7 @@ def start_server(port=3006, host="0.0.0.0"):
     print(f"  Agents                : ALL 15 RUNNING")
     print()
     print(f"  Open on your phone : http://{ip}:{port}/")
+    print(f"  Forge Board        : http://{ip}:{port}/board")
     print(f"  Local              : http://localhost:{port}/")
     print(f"  Revenue API        : http://localhost:{port}/api/protoforge/revenue")
     print(f"  Models             : http://localhost:{port}/api/models")
@@ -907,6 +968,18 @@ def start_server(port=3006, host="0.0.0.0"):
         })
         log_event("Approval pending: Initial Capital Allocation", "warn")
     threading.Thread(target=_demo, daemon=True).start()
+
+    def _board_online():
+        try:
+            board_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
+            if board_dir not in sys.path:
+                sys.path.insert(0, board_dir)
+            os.environ.setdefault("HYDI_BOARD_SENDER", "hydi-daemon")
+            import sdk as board
+            board.post("general", "hydi-daemon online")
+        except Exception:
+            pass
+    threading.Thread(target=_board_online, daemon=True).start()
 
     try:
         server.serve_forever()
