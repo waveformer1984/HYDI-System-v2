@@ -111,7 +111,7 @@ From the repo root: `chmod +x scripts/hydi-doctor.sh && ln -sf "$PWD/scripts/hyd
 
 ## Phone services (runit)
 
-`hydi` is local llama.cpp (`llama-server`, port 8080, model `~/models/mistral-7b.Q4_0.gguf`). `hydi-daemon` is `hydi.py` on port 3006. The chat UI stays on port 8787. Definitions are in `termux/services/`. If the binary or the model is missing, the run script prints `MISSING: <path>` and sleeps 30 seconds instead of exiting immediately.
+`hydi` is local llama.cpp (`llama-server`, port 8080, model `~/models/mistral-7b.Q4_0.gguf`). `hydi-daemon` is `hydi.py` on port 3006. `hydi.py` chat uses Groq, then Ollama (`OLLAMA_URL`, default `http://127.0.0.1:11434`), then this llama.cpp server (`HYDI_LLAMA_URL`, default `http://127.0.0.1:8080`). If none answer, replies are scripted. The `hydi` service does not run `ollama serve`. Definitions are in `termux/services/`. If the binary or the model is missing, the run script prints `MISSING: <path>` and sleeps 30 seconds instead of exiting immediately.
 
 Optional lines in `~/.hydi/thin-client.env` (no secrets): `HYDI_LLAMA_BIN`, `HYDI_MODEL`, `HYDI_LLAMA_PORT`, `HYDI_THREADS`, `HYDI_CTX`. When `HYDI_MODEL` is unset and the 7B file is missing, `hydi` uses the smallest `.gguf` in `~/models` and prints every file it looked at.
 

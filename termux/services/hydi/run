@@ -1,6 +1,7 @@
 #!/bin/sh
-# Phone runit service "hydi": local llama.cpp. This is not the chat UI
-# (termux/hydi-chat-server.js, port 8787) and not hydi.py (hydi-daemon, port 3006).
+# Phone runit service "hydi": local llama.cpp. hydi.py (port 3006) calls
+# this server at HYDI_LLAMA_URL (default http://127.0.0.1:8080) when Groq
+# and Ollama are both down. This process is not the chat UI.
 # Settings that are already exported win. Otherwise read ~/.hydi/thin-client.env.
 # HYDI_LLAMA_BIN, HYDI_MODEL, HYDI_LLAMA_PORT (default 8080), HYDI_THREADS, HYDI_CTX.
 exec 2>&1
