@@ -6,7 +6,8 @@ Pure Python 3 stdlib. No external packages required.
 AI priority order:
   1. Groq API  (fastest, free, phone-friendly) — set GROQ_API_KEY
   2. Ollama    (local, no internet needed)      — set OLLAMA_URL or run locally
-  3. Scripted  (always works, zero deps)
+  3. llama.cpp (the hydi runit service)         — HYDI_LLAMA_URL, default :8080
+  4. Scripted  (always works, zero deps)
 
 Usage:
     python hydi.py              # HTTP server (mobile PWA) on :3006
@@ -209,6 +210,85 @@ def ollama_chat(messages):
     except Exception:
         return None
 
+# ── llama.cpp server (termux service "hydi", port 8080) ──
+# The dashboard does not start this process. The runit service does.
+# Chat uses it only when Groq and Ollama are both unavailable.
+LLAMA_URL   = os.environ.get("HYDI_LLAMA_URL", "http://127.0.0.1:8080").rstrip("/")
+LLAMA_MODEL = None
+
+def detect_llama():
+    """Return the model id from llama-server /v1/models, or None."""
+    global LLAMA_MODEL
+    LLAMA_MODEL = None
+    try:
+        with urlopen(f"{LLAMA_URL}/v1/models", timeout=3) as r:
+            data = json.loads(r.read())
+        models = data.get("data") or []
+        if not models:
+            return None
+        name = models[0].get("id") or "llama.cpp"
+        LLAMA_MODEL = name
+        return name
+    except Exception:
+        return None
+
+def llama_chat(messages):
+    """Call llama-server's OpenAI-compatible chat endpoint."""
+    if not LLAMA_MODEL:
+        return None
+    payload = json.dumps({
+        "model": LLAMA_MODEL,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 512,
+    }).encode()
+    req = Request(
+        f"{LLAMA_URL}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(req, timeout=90) as r:
+            result = json.loads(r.read())
+        content = result["choices"][0]["message"]["content"]
+        return content.strip() if isinstance(content, str) else None
+    except Exception:
+        return None
+
+def refresh_backends():
+    """Groq, else Ollama, else the local llama.cpp server."""
+    global OLLAMA_MODEL, LLAMA_MODEL
+    detect_groq()
+    if GROQ_MODEL:
+        OLLAMA_MODEL = None
+        LLAMA_MODEL = None
+        return
+    OLLAMA_MODEL = None
+    detect_ollama()
+    if OLLAMA_MODEL:
+        LLAMA_MODEL = None
+        return
+    LLAMA_MODEL = None
+    detect_llama()
+
+def ai_ready():
+    return bool(GROQ_MODEL or OLLAMA_MODEL or LLAMA_MODEL)
+
+def models_payload():
+    active = GROQ_MODEL or OLLAMA_MODEL or LLAMA_MODEL
+    return {
+        "groq_model": GROQ_MODEL,
+        "ollama_model": OLLAMA_MODEL,
+        "llama_model": LLAMA_MODEL,
+        "llama_url": LLAMA_URL,
+        "active_model": active,
+        "active_label": active_ai_label(),
+        "groq_online": GROQ_MODEL is not None,
+        "ollama_online": OLLAMA_MODEL is not None,
+        "llama_online": LLAMA_MODEL is not None,
+        "mode": "ai" if ai_ready() else "scripted",
+    }
+
 # ── Shared chat history ───────────────────────────────────
 CHAT_HISTORY = {}   # session_id -> [{role, content}]
 MAX_HISTORY  = 20
@@ -219,14 +299,19 @@ def active_ai_label():
         return f"groq/{GROQ_MODEL.split('-')[0]}"
     if OLLAMA_MODEL:
         return f"ollama/{OLLAMA_MODEL.split(':')[0]}"
+    if LLAMA_MODEL:
+        return f"llama/{LLAMA_MODEL.split('/')[-1]}"
     return "scripted"
 
 def ai_chat(messages):
-    """Call the best available AI backend. Groq → Ollama → None."""
+    """Call the best available AI backend. Groq → Ollama → llama.cpp → None."""
     reply = groq_chat(messages)
     if reply:
         return reply
-    return ollama_chat(messages)
+    reply = ollama_chat(messages)
+    if reply:
+        return reply
+    return llama_chat(messages)
 
 def build_system_prompt():
     running = sum(1 for s in PF["agents"].values() if s == "running")
@@ -263,8 +348,8 @@ def build_system_prompt():
     )
 
 def hydi_reply_ai(msg, session_id="default"):
-    """Route message through Groq → Ollama → scripted, in that order."""
-    ai_available = bool(GROQ_MODEL or OLLAMA_MODEL)
+    """Route message through Groq → Ollama → llama.cpp → scripted."""
+    ai_available = ai_ready()
     scripted = _handle_command(msg)
 
     if scripted is not None:
@@ -559,15 +644,7 @@ class HydiHandler(BaseHTTPRequestHandler):
                 "stream_count": len(REVENUE_STREAMS),
             })
         elif p == "/api/models":
-            self._json({
-                "groq_model":    GROQ_MODEL,
-                "ollama_model":  OLLAMA_MODEL,
-                "active_model":  GROQ_MODEL or OLLAMA_MODEL,
-                "active_label":  active_ai_label(),
-                "groq_online":   GROQ_MODEL is not None,
-                "ollama_online": OLLAMA_MODEL is not None,
-                "mode":          "ai" if (GROQ_MODEL or OLLAMA_MODEL) else "scripted",
-            })
+            self._json(models_payload())
         elif p == "/board":
             self._serve_board()
         elif p == "/api/board":
@@ -597,7 +674,7 @@ class HydiHandler(BaseHTTPRequestHandler):
             reply = hydi_reply_ai(msg, session)
             log_event(f"Chat: {msg[:50]}", "info")
             self._json({"response": reply, "system": "hydi",
-                        "model": OLLAMA_MODEL or "scripted"})
+                        "model": active_ai_label()})
 
         elif p == "/api/protoforge/autonomy":
             lvl = int(body.get("level", PF["autonomy_level"]))
@@ -632,13 +709,8 @@ class HydiHandler(BaseHTTPRequestHandler):
             self._json({"approvalId": aid, "decision": decision})
 
         elif p == "/api/ollama/reload":
-            detect_groq()
-            detect_ollama()
-            self._json({
-                "groq_model": GROQ_MODEL, "ollama_model": OLLAMA_MODEL,
-                "active_label": active_ai_label(),
-                "mode": "ai" if (GROQ_MODEL or OLLAMA_MODEL) else "scripted",
-            })
+            refresh_backends()
+            self._json(models_payload())
 
         else:
             self.send_response(404); self.end_headers()
@@ -742,7 +814,7 @@ def stats_payload():
         "agents_total":      len(PF["agents"]),
         "approvals_pending": len(PF["approvals"]),
         "uptime":            uptime_str(),
-        "ollama_model":      OLLAMA_MODEL or "scripted",
+        "ollama_model":      active_ai_label(),
     }
 
 
@@ -856,11 +928,11 @@ function kd(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();snd()}}
 // Load model info
 fetch('/api/models').then(r=>r.json()).then(d=>{
   const mb=document.getElementById('mb');
-  if(d.ollama_online){mb.textContent='🤖 '+d.active_model.split(':')[0];mb.style.color='var(--accent)';}
+  if(d.mode==='ai'&&d.active_model){mb.textContent='🤖 '+d.active_model.split(':')[0].split('/').pop();mb.style.color='var(--accent)';}
   else{mb.textContent='📝 Scripted';mb.style.color='var(--txt2)';}
-  add('s',d.ollama_online
+  add('s',d.mode==='ai'
     ?'Connected to '+d.active_model+'. Ask me anything about ProtoForge!'
-    :'Ollama not detected — running in scripted mode. Install Ollama for AI replies.');
+    :'No model server. Start Ollama, or the hydi llama.cpp service on port 8080.');
 }).catch(()=>{document.getElementById('mb').textContent='Offline'});
 </script>
 </body>
@@ -902,6 +974,8 @@ def cli_loop():
         print(f"  🤖 Groq AI : {GROQ_MODEL}")
     elif OLLAMA_MODEL:
         print(f"  🤖 Ollama  : {OLLAMA_MODEL}")
+    elif LLAMA_MODEL:
+        print(f"  🤖 llama.cpp : {LLAMA_MODEL}  ({LLAMA_URL})")
     else:
         print("  📝 Scripted mode — no AI backend detected")
         print("     Groq (free, phone-friendly): console.groq.com → get API key")
@@ -938,6 +1012,8 @@ def start_server(port=3006, host="0.0.0.0"):
     elif OLLAMA_MODEL:
         where = ("remote: " + OLLAMA_URL) if ollama_is_remote() else "local"
         print(f"  🤖 Ollama  : {OLLAMA_MODEL}  ({where})")
+    elif LLAMA_MODEL:
+        print(f"  🤖 llama.cpp : {LLAMA_MODEL}  ({LLAMA_URL})")
     else:
         print("  📝 Scripted mode — no AI backend detected")
         print("     → Get a free Groq API key at console.groq.com")
@@ -1002,7 +1078,12 @@ def main():
         if detect_ollama():
             print(f"✅ {OLLAMA_MODEL}")
         else:
-            print("not found → scripted mode")
+            print("not found")
+            print("Checking llama.cpp...", end=" ", flush=True)
+            if detect_llama():
+                print(f"✅ {LLAMA_MODEL}")
+            else:
+                print("not found → scripted mode")
 
     args = sys.argv[1:]
     if not args:

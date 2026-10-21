@@ -1483,8 +1483,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const badge = document.getElementById('modelBadge');
     const text  = document.getElementById('modelText');
     badge.style.display = 'flex';
-    if (d.ollama_online) {
-      text.textContent = '🤖 ' + d.active_model.split(':')[0];
+    if (d.mode === 'ai' && d.active_model) {
+      text.textContent = '🤖 ' + d.active_model.split(':')[0].split('/').pop();
       badge.className = 'conn-badge';
       addChatMsg('hydi',
         `AI model online: ${d.active_model}. I'm thinking, not scripted — ask me anything about ProtoForge.`);
@@ -1492,7 +1492,7 @@ window.addEventListener('DOMContentLoaded', () => {
       text.textContent = '📝 Scripted';
       badge.className = 'conn-badge off';
       addChatMsg('hydi',
-        'Running in scripted mode. Install Ollama (ollama.com) then run:\n  ollama pull llama3.2\nRestart Hydi to enable AI replies.');
+        'Running in scripted mode. Start Ollama (`ollama serve`) or the hydi llama.cpp service on port 8080, then restart hydi-daemon.');
     }
   }).catch(() => {});
 });
