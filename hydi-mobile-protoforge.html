@@ -1171,13 +1171,13 @@
     <div class="panel" id="panel-grow">
 
       <div class="card">
-        <div class="card-title">Autonomy Level</div>
+        <div class="card-title">Autonomy Level (display only — no executor connected)</div>
         <div class="level-display" style="padding:0 0 8px">
           <div class="level-orb">
             <div class="level-orb-inner" id="levelOrbInner">⚡</div>
           </div>
           <div class="level-name" id="levelName">EXECUTE WITH APPROVAL</div>
-          <div class="level-desc" id="levelDesc">Agents act after your confirmation</div>
+          <div class="level-desc" id="levelDesc">Agents act after your confirmation (display only — no executor connected)</div>
         </div>
 
         <div class="autonomy-steps">
@@ -1814,7 +1814,7 @@ function openAgentSheet(id) {
         <div class="detail-metric-value">${cap(a.status)}</div></div>
       <div class="detail-metric"><div class="detail-metric-label">Detail</div>
         <div class="detail-metric-value" style="font-size:13px">${escHtml(a.detail || '—')}</div></div>
-      <div class="detail-metric"><div class="detail-metric-label">Autonomy</div>
+      <div class="detail-metric"><div class="detail-metric-label">Autonomy (display only — no executor connected)</div>
         <div class="detail-metric-value">L${STATE.autonomyLevel}</div></div>
     </div>
   `);
@@ -1878,17 +1878,9 @@ function renderApprovals() {
 function resolveApproval(idx, decision) {
   const item = STATE.approvals[idx];
   if (!item) return;
-
-  wsSend({ type: 'approval_response', approvalId: item.id, decision, timestamp: new Date().toISOString() });
-
-  STATE.approvals.splice(idx, 1);
-  STATE.pendingApprovals = Math.max(0, STATE.pendingApprovals - 1);
-  updateApproveBadge();
-  renderApprovals();
-
-  const emoji = { approve:'✅', reject:'🚫', defer:'⏸' }[decision];
-  toast(`${emoji} ${cap(decision)}d: ${item.title || 'request'}`, decision === 'approve' ? 'ok' : 'warn');
-  addEventEntry(`${cap(decision)}d: ${item.title || 'action request'}`, decision === 'approve' ? 'ok' : 'warn');
+  const note = 'Recorded on phone only — nothing executes from here.';
+  toast(note, 'warn');
+  addEventEntry(note, 'warn');
 }
 
 // ── AUTONOMY / GROW ──────────────────────────────────────
@@ -1899,7 +1891,7 @@ function setAutonomy(level) {
   // Update orb
   document.getElementById('levelOrbInner').textContent = def.icon;
   document.getElementById('levelName').textContent = def.name;
-  document.getElementById('levelDesc').textContent = def.desc;
+  document.getElementById('levelDesc').textContent = def.desc + ' (display only — no executor connected)';
 
   // Update ring progress
   const pct = (level / 4) * 100;
@@ -1910,18 +1902,8 @@ function setAutonomy(level) {
     s.classList.toggle('active', parseInt(s.dataset.lvl) === level);
   });
 
-  // Send to server
-  wsSend({ type: 'set_autonomy', level, timestamp: new Date().toISOString() });
-  toast(`Autonomy → Level ${level}: ${def.name}`, level >= 3 ? 'warn' : 'ok');
-  addEventEntry(`Autonomy set to Level ${level} — ${def.name}`, level >= 3 ? 'warn' : 'ok');
-
-  // Confirm high-autonomy via chat
-  if (level >= 3) {
-    switchTab('chat');
-    setTimeout(() => addChatMsg('hydi',
-      `⚠️ Autonomy raised to Level ${level} (${def.name}). ${def.desc}. I'll operate with minimal confirmation — you can lower this any time from the Grow tab.`
-    ), 400);
-  }
+  toast('Autonomy display only — no executor connected', 'warn');
+  addEventEntry('Autonomy display only — no executor connected', 'info');
 }
 
 function growAction(action) {

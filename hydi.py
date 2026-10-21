@@ -16,7 +16,7 @@ Usage:
     python hydi.py status       # single command, then exit
 """
 
-import sys, os, time, json, threading, subprocess, socket
+import sys, os, re, time, json, threading, subprocess, socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen, Request
@@ -541,61 +541,206 @@ def ai_chat(messages):
         return reply
     return llama_chat(messages)
 
+AUTONOMY_LABEL = "(display only — no executor connected)"
+NO_ACTION_NOTE = "Note: no action was taken — Hydi can't execute from this chat."
+PHONE_ONLY = "Recorded on phone only — nothing executes from here."
+# Board posts filed by this process. Phone memory, not an approval queue.
+SESSION_REQUESTS = []
+_ACTION_CLAIM = re.compile(
+    r"("
+    r"\bi['’]ve\s+(?:done|identified|scaled|updated|optimized|executed|queued|started)\b"
+    r"|has been updated"
+    r"|\bproof\b"
+    r")",
+    re.IGNORECASE,
+)
+
 def build_system_prompt():
     fleet = fleet_status()
-    fleet_summary = ", ".join(f"{i['name']}={i['status']}" for i in fleet)
+    fleet_summary = ", ".join(f"{i['name']}={i['status']}" for i in fleet) or "none"
     active_streams = ", ".join(REVENUE_STREAMS)
     total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
     return (
-        "You are Hydi, the AI revenue engine and central intelligence of ProtoForge.\n\n"
-        "PRIMARY DIRECTIVE: REVENUE GENERATION\n"
-        "Every decision, recommendation, and action must optimize for revenue across "
-        "the six active streams: galactic_bytes, detailer_bot, lipi_v2, "
-        "protogrance_aromatics, rezonate, waveformer_studio.\n\n"
-        "Your operating principles:\n"
-        "  1. Revenue first — every agent action must map to a monetization outcome\n"
-        "  2. Identify highest-ROI opportunities and surface them immediately\n"
-        "  3. Flag any system state that is blocking revenue\n"
-        "  4. Pipeline: lead → quote → proposal → Stripe checkout → ledger entry\n"
-        "  5. Autonomy Level 3 — act conditionally, notify J of high-value decisions\n\n"
-        "Your personality: sharp, revenue-focused, moves fast. "
-        "Concise responses (3-8 lines) optimized for mobile execution.\n\n"
-        f"Current system state:\n"
-        f"  PRIMARY DIRECTIVE: {PF['primary_directive']}\n"
-        f"  Autonomy level: {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
-        f"  Live fleet (probed): {fleet_summary}\n"
-        f"  Revenue streams: {len(REVENUE_STREAMS)} active — {active_streams}\n"
-        f"  MRR tracked: ${total_mrr:,}\n"
-        f"  Capital deployed: ${PF['capital']:,}\n"
-        f"  Approvals pending: {len(PF['approvals'])}\n"
-        f"  Success rate: {int(PF['success_rate']*100)}%\n"
-        f"  Uptime: {uptime_str()}\n\n"
-        "When asked for a recommendation, always lead with the revenue impact. "
-        "When taking actions, confirm and state the expected revenue effect. "
-        "Always stay in character as Hydi. Never break character."
+        "You are Hydi on a phone. You can talk, and you can read the live fleet and stats below. "
+        "You have no tools and you cannot execute.\n"
+        "Never say you did, scaled, reviewed, updated, queued, or started anything "
+        "unless a command result in this turn proves it.\n"
+        "When asked to act, say you cannot do that from this chat. "
+        "The real path is a REQUEST on Forge Board #ops for @Heidi. "
+        "Nothing executes from this phone.\n"
+        "A few short lines. The numbers below are readings, not work you did.\n\n"
+        f"Live fleet: {fleet_summary}\n"
+        f"Streams: {active_streams}\n"
+        f"MRR tracked: ${total_mrr:,}. Capital figure: ${PF['capital']:,}. "
+        f"Approvals pending: {len(PF['approvals'])}. Uptime: {uptime_str()}."
     )
+
+def reply_claims_action(text):
+    return bool(text and _ACTION_CLAIM.search(text))
+
+def guard_unproven_reply(text, command_ran):
+    """Append the honesty note when the model claims work this turn did not do."""
+    if command_ran or not text or NO_ACTION_NOTE in text:
+        return text
+    if reply_claims_action(text):
+        return text.rstrip() + "\n" + NO_ACTION_NOTE
+    return text
+
+def _one_line_note(text):
+    if not text:
+        return ""
+    line = text.strip().splitlines()[0].strip()
+    if not line or line.lower() in ("ok", "okay", "none"):
+        return ""
+    if reply_claims_action(line):
+        return ""
+    return line[:180].rstrip()
+
+def _is_action_ask(msg):
+    """User asked Hydi to act. Proof asks are a separate read."""
+    return bool(re.match(r"(?i)^do\b", (msg or "").strip()))
+
+def _is_proof_ask(msg):
+    return bool(re.search(r"(?i)give proof|proof of actions", msg or ""))
+
+def _load_board_sdk():
+    board_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
+    if board_dir not in sys.path:
+        sys.path.insert(0, board_dir)
+    import sdk as board
+    return board
+
+def _ops_body(msg):
+    return "REQUEST @Heidi: " + (msg or "").strip()
+
+def _post_ops_request(msg):
+    """Data-only REQUEST on Forge Board #ops. Does not execute the ask."""
+    try:
+        frank_resolve()
+    except Exception:
+        pass
+    try:
+        os.environ.setdefault("HYDI_BOARD_SENDER", "hydi-daemon")
+        return _load_board_sdk().post("ops", _ops_body(msg))
+    except Exception:
+        return {"ok": False, "error": "board unavailable"}
+
+def _board_fail_reason(posted):
+    if not isinstance(posted, dict):
+        return "board unavailable"
+    err = str(posted.get("error") or "").strip()
+    lowered = err.lower()
+    if any(word in lowered for word in ("token", "bearer", "secret", "key")):
+        return "board unavailable"
+    if err:
+        return err[:120]
+    if posted.get("ok") and not (isinstance(posted.get("message"), dict) and posted["message"].get("id")):
+        return "board returned no id"
+    return "board unavailable"
+
+def _remember_request(posted, body):
+    """Keep this process's filed board ids so proof can list them."""
+    if not isinstance(posted, dict) or not posted.get("ok"):
+        return None
+    message = posted.get("message")
+    board_id = message.get("id") if isinstance(message, dict) else None
+    if not board_id:
+        return None
+    item = {"id": board_id, "body": body, "channel": "ops"}
+    SESSION_REQUESTS.append(item)
+    return item
+
+def _filed_line(item, posted):
+    line = f"Request filed on #ops: {item['id']}. Not executed — needs a human on Frank."
+    if isinstance(posted, dict) and posted.get("offline"):
+        return line + "\nSaved on the phone copy until #ops syncs."
+    return line
+
+def _file_action_request(msg):
+    """Post one #ops REQUEST. The board id is the only record."""
+    posted = _post_ops_request(msg)
+    item = _remember_request(posted, _ops_body(msg))
+    if item:
+        return _filed_line(item, posted)
+    return f"Request was NOT filed on #ops. Nothing was executed. {_board_fail_reason(posted)}"
+
+def _board_replies(messages, request_id):
+    if not isinstance(messages, list):
+        return None
+    replies = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("id") == request_id:
+            continue
+        sender = str(message.get("sender") or "")
+        sender_type = str(message.get("sender_type") or "")
+        body = str(message.get("body") or "")
+        from_actor = sender.lower() == "heidi" or sender_type == "human"
+        if message.get("reply_to") == request_id or (from_actor and request_id in body):
+            replies.append(message)
+    return replies
+
+def _proof_of_actions():
+    """List this session's filed requests and any Heidi or human reply. Does not post."""
+    if not SESSION_REQUESTS:
+        return "No requests filed this session."
+    try:
+        messages = _load_board_sdk().read(channel="ops")
+    except Exception:
+        messages = None
+    lines = []
+    for item in SESSION_REQUESTS:
+        lines.append(f"{item['id']} — {item.get('body') or 'REQUEST'}")
+        replies = None if messages is None else _board_replies(messages, item["id"])
+        if replies is None:
+            lines.append("  state: board state could not be read")
+        elif not replies:
+            lines.append("  state: no reply on #ops")
+        else:
+            for reply in replies:
+                who = reply.get("sender") or reply.get("sender_type") or "board"
+                body = " ".join(str(reply.get("body") or "").split())
+                lines.append(f"  {who}: {body}")
+    return "\n".join(lines)
+
+def file_grow(action):
+    """File a grow ask on #ops, or say why it was not filed. Does not bump counters."""
+    name = (action or "").strip()
+    if not name:
+        return {"queued": False, "reason": "no action"}
+    posted = _post_ops_request("grow " + name)
+    item = _remember_request(posted, _ops_body("grow " + name))
+    if item:
+        result = {"queued": True, "board_id": item["id"], "channel": "ops"}
+        if posted.get("offline"):
+            result["offline"] = True
+        return result
+    return {"queued": False, "reason": _board_fail_reason(posted)}
 
 def hydi_reply_ai(msg, session_id="default"):
     """Route message through Groq → Ollama → llama.cpp → scripted."""
     ai_available = ai_ready()
-    scripted = _handle_command(msg)
+    command = _handle_command(msg)
 
-    if scripted is not None:
+    if command is not None:
+        if command == PHONE_ONLY:
+            _remember(session_id, msg, command)
+            return command
+        note = ""
         if ai_available:
-            history = CHAT_HISTORY.setdefault(session_id, [])
-            history.append({"role": "user", "content": msg})
-            messages = (
-                [{"role": "system", "content": build_system_prompt()}]
-                + history[-MAX_HISTORY:]
-                + [{"role": "system",
-                    "content": f"[Command executed. Result: {scripted}. "
-                               f"Acknowledge naturally in 1-2 sentences.]"}]
-            )
-            ai = ai_chat(messages)
-            if ai:
-                history.append({"role": "assistant", "content": ai})
-                return ai
-        return scripted
+            note = _one_line_note(_ai_aside(msg, session_id))
+        reply = command if not note else command + "\n" + note
+        _remember(session_id, msg, reply)
+        return reply
+
+    if _is_proof_ask(msg):
+        reply = _proof_of_actions()
+        _remember(session_id, msg, reply)
+        return reply
+
+    if _is_action_ask(msg):
+        reply = _file_action_request(msg)
+        _remember(session_id, msg, reply)
+        return reply
 
     if ai_available:
         history = CHAT_HISTORY.setdefault(session_id, [])
@@ -603,12 +748,32 @@ def hydi_reply_ai(msg, session_id="default"):
         messages = [{"role": "system", "content": build_system_prompt()}] + history[-MAX_HISTORY:]
         ai = ai_chat(messages)
         if ai:
+            ai = guard_unproven_reply(ai, False)
             history.append({"role": "assistant", "content": ai})
             if len(history) > MAX_HISTORY * 2:
                 CHAT_HISTORY[session_id] = history[-MAX_HISTORY:]
             return ai
 
     return _scripted_fallback(msg)
+
+def _ai_aside(msg, session_id):
+    """One optional line under a verbatim command result. The result is not sent to paraphrase."""
+    messages = [
+        {"role": "system", "content": build_system_prompt()},
+        {"role": "user", "content": msg},
+        {"role": "system", "content":
+            "A command result is already shown to the user verbatim. "
+            "Reply with one short line that does not repeat it and does not claim any other action. "
+            "If you have nothing to add, reply OK."},
+    ]
+    return ai_chat(messages)
+
+def _remember(session_id, msg, reply):
+    history = CHAT_HISTORY.setdefault(session_id, [])
+    history.append({"role": "user", "content": msg})
+    history.append({"role": "assistant", "content": reply})
+    if len(history) > MAX_HISTORY * 2:
+        CHAT_HISTORY[session_id] = history[-MAX_HISTORY:]
 
 
 def _handle_command(msg):
@@ -668,23 +833,20 @@ def _handle_command(msg):
     if "grow autonomy" in t or (
         "autonomy" in t and any(w in t for w in ("raise", "increase", "up", "higher"))
     ):
-        if PF["autonomy_level"] < 4:
-            PF["autonomy_level"] += 1
-        name = AUTONOMY_NAMES[PF["autonomy_level"]]
-        return f"Autonomy raised to Level {PF['autonomy_level']}: {name}."
+        return (
+            f"Autonomy level {PF['autonomy_level']} {AUTONOMY_LABEL}. "
+            "Nothing was changed."
+        )
 
     if "grow evolution" in t or "evolution cycle" in t:
         PF["actions"] += 20
         return "CASCADE evolution protocol running. Agent policies optimising across the registry."
 
     if t.startswith("set autonomy "):
-        try:
-            lvl = int(t.split()[-1])
-            assert 0 <= lvl <= 4
-            PF["autonomy_level"] = lvl
-            return f"Autonomy set to Level {lvl}: {AUTONOMY_NAMES[lvl]}."
-        except Exception:
-            return "Usage: set autonomy <0-4>"
+        return (
+            f"Autonomy level {PF['autonomy_level']} {AUTONOMY_LABEL}. "
+            "Nothing was changed."
+        )
 
     if t.startswith("start ") and not t.startswith("start all"):
         name = t[6:].strip()
@@ -699,14 +861,7 @@ def _handle_command(msg):
             return f"Agent '{name}' paused."
 
     if t.startswith("approve ") or t.startswith("reject ") or t.startswith("defer "):
-        parts = t.split()
-        decision, raw = parts[0], parts[1] if len(parts) > 1 else ""
-        if raw.isdigit():
-            idx = int(raw)
-            if 0 <= idx < len(PF["approvals"]):
-                item = PF["approvals"].pop(idx)
-                return f"{decision.capitalize()}d: {item.get('title', 'request')}."
-        return "Invalid index. Type 'approvals' to list pending items."
+        return PHONE_ONLY
 
     return None  # not a command
 
@@ -722,7 +877,7 @@ def _scripted_fallback(msg):
         return (
             f"System: {'OPERATIONAL' if up else 'DEGRADED'}\n"
             f"Fleet ({up}/{len(fleet)} running):\n{lines}\n"
-            f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
+            f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]} {AUTONOMY_LABEL}\n"
             f"Capital: ${PF['capital']:,}\n"
             f"Approvals pending: {len(PF['approvals'])}\n"
             f"Uptime: {uptime_str()}"
@@ -733,7 +888,7 @@ def _scripted_fallback(msg):
             "Growth options:\n"
             "  start all agents  — activate idle agents\n"
             "  grow finance      — capital allocation round\n"
-            "  grow autonomy     — raise autonomy level\n"
+            "  grow autonomy     — display only, nothing changes\n"
             "  grow evolution    — CASCADE evolution cycle"
         )
 
@@ -757,13 +912,16 @@ def _scripted_fallback(msg):
             f"  [{i}] {a.get('title','Action')} — {a.get('agent','')}"
             for i, a in enumerate(PF["approvals"])
         )
-        return f"{len(PF['approvals'])} pending:\n{lines}\nType 'approve 0' to act."
+        return (
+            f"{len(PF['approvals'])} pending:\n{lines}\n"
+            "Approving here records it on the phone only."
+        )
 
     if any(w in t for w in ("autonomy", "level")):
         return (
-            f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
+            f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]} {AUTONOMY_LABEL}\n"
             "Levels: 0 Observe · 1 Assist · 2 Approve · 3 Conditional · 4 Full Auto\n"
-            "Type 'set autonomy 3' to change."
+            "This number is not wired to an executor."
         )
 
     if any(w in t for w in ("help", "commands", "what can")):
@@ -791,13 +949,14 @@ start all agents     activate all idle agents
 grow                 growth options menu
 grow agents          start all idle agents
 grow finance         capital allocation round
-grow autonomy        raise autonomy level by 1
+grow autonomy        display only — no executor connected
 grow evolution       CASCADE evolution cycle
-set autonomy <0-4>   set autonomy level
-autonomy             show current level
-approvals            list pending approvals
-approve <n>          approve item n
-reject <n>           reject item n
+set autonomy <0-4>   display only — does not change the level
+autonomy             display only — no executor connected
+approvals            list phone-only items
+approve <n>          phone record only — nothing executes
+reject <n>           phone record only — nothing executes
+defer <n>            phone record only — nothing executes
 finance / capital    financial engine status
 help                 this list
 exit / quit          stop Hydi"""
@@ -910,11 +1069,11 @@ class HydiHandler(BaseHTTPRequestHandler):
                         "model": active_ai_label()})
 
         elif p == "/api/protoforge/autonomy":
-            lvl = int(body.get("level", PF["autonomy_level"]))
-            if 0 <= lvl <= 4:
-                PF["autonomy_level"] = lvl
-                log_event(f"Autonomy → Level {lvl}", "warn" if lvl >= 3 else "ok")
-            self._json({"autonomy_level": PF["autonomy_level"]})
+            self._json({
+                "autonomy_level": PF["autonomy_level"],
+                "display_only": True,
+                "note": AUTONOMY_LABEL,
+            })
 
         elif p.startswith("/api/protoforge/agents/"):
             parts     = p.split("/")
@@ -929,17 +1088,20 @@ class HydiHandler(BaseHTTPRequestHandler):
                         "status": PF["agents"].get(agent_id, "unknown")})
 
         elif p == "/api/protoforge/grow":
-            action = body.get("action", "")
-            PF["actions"] += 10
-            log_event(f"Grow: {action}", "ok")
-            self._json({"queued": action})
+            result = file_grow(body.get("action", ""))
+            if result.get("queued"):
+                log_event(f"Grow filed on #ops: {result.get('board_id')}", "ok")
+            else:
+                log_event(f"Grow not filed: {result.get('reason')}", "warn")
+            self._json(result)
 
         elif p == "/api/protoforge/approval":
-            aid      = body.get("approvalId", "")
-            decision = body.get("decision", "")
-            PF["approvals"] = [a for a in PF["approvals"] if a.get("id") != aid]
-            log_event(f"Approval {decision}: {aid}", "ok" if decision == "approve" else "warn")
-            self._json({"approvalId": aid, "decision": decision})
+            self._json({
+                "approvalId": body.get("approvalId", ""),
+                "decision": body.get("decision", ""),
+                "executed": False,
+                "response": PHONE_ONLY,
+            })
 
         elif p == "/api/ollama/reload":
             refresh_backends()
@@ -1258,7 +1420,7 @@ def start_server(port=3006, host="0.0.0.0"):
         print("     → export GROQ_API_KEY=gsk_xxx  then restart hydi")
     print()
     print(f"  PRIMARY DIRECTIVE     : REVENUE GENERATION")
-    print(f"  Autonomy              : Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}")
+    print(f"  Autonomy              : Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]} {AUTONOMY_LABEL}")
     print(f"  Revenue streams       : {len(REVENUE_STREAMS)} active")
     print(f"  Agents                : ALL 15 RUNNING")
     print()
