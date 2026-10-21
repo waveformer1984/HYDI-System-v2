@@ -76,8 +76,14 @@ describe('parseRequest / triage', () => {
     expect(triage('show git log')).toEqual({ kind: 'read', tool: 'git' });
     expect(triage('run the assessment crew')).toEqual({ kind: 'read', tool: 'assessment' });
     expect(triage('revenue summary')).toEqual({ kind: 'read', tool: 'revenue' });
+    expect(triage('delegate revenue to agents')).toEqual({ kind: 'delegation', domains: ['revenue'] });
+    expect(triage('assign infrastructure and revenue analysis')).toEqual({
+      kind: 'delegation',
+      domains: ['revenue', 'infrastructure'],
+    });
     for (const ask of ['restart heidi-web', 'deploy clean-main', 'scale up workers', 'spend $50 on ads',
-      'email the customer', 'fix the bug in api/chat', 'check health then restart pm2', 'refund the revenue', 'grow outreach']) {
+      'email the customer', 'fix the bug in api/chat', 'check health then restart pm2', 'refund the revenue',
+      'grow outreach', 'delegate an infrastructure restart']) {
       expect(triage(ask)).toEqual({ kind: 'approval' });
     }
     expect(triage('look into it')).toEqual({ kind: 'unclear' });
@@ -152,6 +158,22 @@ describe('ops responder', () => {
     expect(h.execCalls).toEqual([]);
     expect(h.posts[0].body).toBe(`Approval filed: ${'a'.repeat(24)} (execution-fabric, needs fabric:control). Not run — waiting for Jordan.`);
     expect(h.responder.state().handled.a1).toMatchObject({ kind: 'approval', task_id: 'a'.repeat(24), outcome_posted: false });
+  });
+
+  it('delegates evidence and proposals without filing an approval', async () => {
+    const delegate = jest.fn(async () =>
+      'Delegated revenue + infrastructure evidence and proposal review. Board thread thread-1. No approval or execution occurred; waiting for Jordan to request any action.');
+    const h = harness({ deps: { tools: { delegate } } });
+    await h.responder.tick([req('del1', 'delegate revenue and infrastructure to agents')]);
+    expect(delegate).toHaveBeenCalledWith(['revenue', 'infrastructure']);
+    expect(h.deps.fabric.file).not.toHaveBeenCalled();
+    expect(h.posts[0]).toMatchObject({ channel: 'ops', replyTo: 'del1' });
+    expect(h.posts[0].body).toContain('Board thread thread-1');
+    expect(h.posts[0].body).toContain('No approval or execution occurred');
+    expect(h.responder.state().handled.del1).toMatchObject({
+      kind: 'delegation',
+      domains: ['revenue', 'infrastructure'],
+    });
   });
 
   it('says so when the approval cannot be filed', async () => {

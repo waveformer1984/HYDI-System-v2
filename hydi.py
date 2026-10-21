@@ -949,6 +949,18 @@ def _handle_command(msg):
     """Execute state-mutating commands. Returns result string or None if not a command."""
     t = msg.lower().strip()
 
+    if t.startswith(("delegate ", "assign ", "hand off ")):
+        domains = []
+        if any(word in t for word in ("revenue", "billing", "sales", "income")):
+            domains.append("revenue")
+        if any(word in t for word in ("infrastructure", "infra", "fleet", "pm2", "reliability")):
+            domains.append("infrastructure")
+        if domains:
+            return _file_action_request(
+                "delegate " + " and ".join(domains) +
+                " evidence and proposal-only review"
+            )
+
     if "top opportunity" in t or "best opportunity" in t or "top opp" in t:
         return (
             "Top Revenue Opportunities (Priority Order):\n"
