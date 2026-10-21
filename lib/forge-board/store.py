@@ -17,6 +17,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -82,6 +83,16 @@ def connect():
     conn.execute(
         "CREATE INDEX IF NOT EXISTS board_messages_channel_ts ON board_messages (channel, ts)"
     )
+    # pushed: 1 = already upstream / local-only board, 0 = waiting in the
+    # outbox, 2 = no token for the sender so it can never be replayed.
+    # Default 1 keeps rows written before this column existed out of the
+    # outbox so they are not suddenly replayed upstream.
+    try:
+        conn.execute(
+            "ALTER TABLE board_messages ADD COLUMN pushed INTEGER NOT NULL DEFAULT 1"
+        )
+    except sqlite3.OperationalError:
+        pass  # column already present
     return conn
 
 
@@ -197,18 +208,19 @@ def _row_to_message(row):
         "body": row["body"],
         "reply_to": row["reply_to"],
         "mentions": mentions or [],
+        "pushed": row["pushed"],
     }
 
 
-def _insert_local(message):
+def _insert_local(message, pushed=1):
     with _LOCK:
         conn = connect()
         try:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO board_messages
-                  (id, ts, sender, sender_type, channel, body, reply_to, mentions)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  (id, ts, sender, sender_type, channel, body, reply_to, mentions, pushed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     message["id"],
@@ -219,6 +231,7 @@ def _insert_local(message):
                     message["body"],
                     message["reply_to"],
                     json.dumps(message["mentions"]),
+                    pushed,
                 ),
             )
             conn.commit()
@@ -383,6 +396,121 @@ def _normalize_channel(channel):
     return value
 
 
+def _token_for_sender(sender):
+    """Return the configured token whose identity is `sender`, or None.
+
+    Replay uses the sender's own token, so a queued note can never be
+    re-submitted as a different sender.
+    """
+    for token, ident in load_identities().items():
+        if ident["sender"] == sender:
+            return token
+    return None
+
+
+def _mark_pushed(message_id, pushed):
+    with _LOCK:
+        conn = connect()
+        try:
+            conn.execute(
+                "UPDATE board_messages SET pushed = ? WHERE id = ?",
+                (pushed, message_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def pending_outbox_count():
+    """Local notes still waiting to be replayed to the upstream board."""
+    with _LOCK:
+        conn = connect()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM board_messages WHERE pushed = 0"
+            ).fetchone()
+            return int(row["n"])
+        finally:
+            conn.close()
+
+
+def _unsynced_rows():
+    with _LOCK:
+        conn = connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT * FROM board_messages
+                WHERE pushed = 0
+                ORDER BY ts ASC
+                LIMIT 200
+                """
+            ).fetchall()
+            return [_row_to_message(row) for row in rows]
+        finally:
+            conn.close()
+
+
+def sync_outbox_once():
+    """Replay queued local posts to HYDI_BOARD_UPSTREAM, at most once each.
+
+    Each row is pushed with the token that maps to its own sender. Rows the
+    upstream accepts are marked pushed=1 (never replayed again); senders with
+    no matching token are marked pushed=2 so they do not spin forever.
+    """
+    stats = {"attempted": 0, "posted": 0, "unroutable": 0, "failed": 0}
+    if not _upstream():
+        return stats
+    for row in _unsynced_rows():
+        token = _token_for_sender(row["sender"])
+        if not token:
+            _mark_pushed(row["id"], 2)
+            stats["unroutable"] += 1
+            continue
+        stats["attempted"] += 1
+        resp = _upstream_request(
+            "POST",
+            None,
+            {
+                "sender": row["sender"],
+                "channel": row["channel"],
+                "body": row["body"],
+                "reply_to": row["reply_to"],
+            },
+            "Bearer " + token,
+        )
+        if resp is None:
+            stats["failed"] += 1
+            break  # upstream still down; leave the rest for the next pass
+        if isinstance(resp, dict) and resp.get("ok") and resp.get("message"):
+            _insert_local(resp["message"])
+            _mark_pushed(row["id"], 1)
+            stats["posted"] += 1
+        elif isinstance(resp, dict) and resp.get("status") in (401, 403):
+            _mark_pushed(row["id"], 2)
+            stats["unroutable"] += 1
+        else:
+            stats["failed"] += 1  # 400/429/etc: retry on the next pass
+    return stats
+
+
+def _outbox_loop(interval):
+    while True:
+        time.sleep(interval)
+        try:
+            stats = sync_outbox_once()
+            if stats["posted"]:
+                print(f"forge-board: replayed {stats['posted']} queued note(s) upstream")
+        except Exception:
+            pass
+
+
+def start_outbox_sync(interval=15.0):
+    thread = threading.Thread(target=_outbox_loop, args=(interval,), daemon=True)
+    thread.start()
+    return thread
+
+
 def post_message(authorization, sender_claim, channel, body, reply_to, client_ip):
     if not is_internal_ip(client_ip):
         raise BoardError(404, "not found")
@@ -428,7 +556,9 @@ def post_message(authorization, sender_claim, channel, body, reply_to, client_ip
         "reply_to": parent_id,
         "mentions": _mentions(text),
     }
-    _insert_local(message)
+    # When an upstream board is configured this row is an outbox entry: it is
+    # replayed by sync_outbox_once() once the upstream is reachable again.
+    _insert_local(message, pushed=0 if _upstream() else 1)
     remote_ok = True
     if _supabase_config():
         remote_ok = _supabase_insert(message)
@@ -456,7 +586,9 @@ def read_messages(channel, since, client_ip):
     for row in remote:
         if row.get("id"):
             _insert_local(row)
-    extra = [row for row in local if row["id"] not in seen]
+    # pushed=1 rows that are absent upstream were replayed outbox entries;
+    # the upstream copy is already in `remote`, so do not show them twice.
+    extra = [row for row in local if row["id"] not in seen and row["pushed"] != 1]
     merged = list(remote) + extra
     merged.sort(key=lambda row: row.get("ts") or "")
     return merged, False
@@ -470,7 +602,8 @@ def handle_http(payload):
         query = payload.get("query") or {}
         if method == "GET":
             messages, offline = read_messages(query.get("channel"), query.get("since"), client_ip)
-            body = {"ok": True, "messages": messages, "status": 200}
+            body = {"ok": True, "messages": messages, "status": 200,
+                    "pending": pending_outbox_count()}
             if offline:
                 body["offline"] = True
             return body
@@ -484,10 +617,13 @@ def handle_http(payload):
                 incoming.get("reply_to") or None,
                 client_ip,
             )
-            body = {"ok": True, "message": message, "status": 200}
+            body = {"ok": True, "message": message, "status": 200,
+                    "pending": pending_outbox_count()}
             if offline:
                 body["offline"] = True
             return body
+        if method == "SYNC":
+            return {"ok": True, "status": 200, "sync": sync_outbox_once()}
         return {"ok": False, "status": 405, "error": "method not allowed"}
     except BoardError as exc:
         return {"ok": False, "status": exc.status, "error": exc.error}

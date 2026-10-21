@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const safety = require('../../lib/forge-board/safety');
 
 function pythonBin() {
@@ -197,5 +197,136 @@ describeStore('forge board sqlite store', () => {
       }));
     }
     expect(last.status).toBe(429);
+  });
+});
+
+describeStore('forge board offline outbox', () => {
+  let db;
+  let upstream;
+  let upstreamPort;
+  let receivedLog;
+
+  // The fake upstream must be a separate process: callBoard uses spawnSync,
+  // which blocks the jest event loop and would deadlock an in-process server.
+  beforeAll((done) => {
+    receivedLog = path.join(os.tmpdir(), `forge-board-received-${process.pid}.jsonl`);
+    try { fs.unlinkSync(receivedLog); } catch { /* fresh */ }
+    upstream = spawn(
+      pythonBin(),
+      [path.join(__dirname, '../board_fake_upstream.py'), '0', receivedLog],
+      { encoding: 'utf8' },
+    );
+    upstream.stdout.on('data', (chunk) => {
+      const match = String(chunk).match(/READY (\d+)/);
+      if (match) {
+        upstreamPort = Number(match[1]);
+        done();
+      }
+    });
+  });
+
+  afterAll(() => {
+    upstream.kill();
+    try { fs.unlinkSync(receivedLog); } catch { /* already gone */ }
+  });
+
+  beforeEach(() => {
+    db = path.join(os.tmpdir(), `forge-board-outbox-${process.pid}-${Date.now()}.sqlite`);
+    try { fs.unlinkSync(receivedLog); } catch { /* fresh */ }
+  });
+
+  afterEach(() => {
+    for (const suffix of ['', '-wal', '-shm']) {
+      try { fs.unlinkSync(db + suffix); } catch { /* already gone */ }
+    }
+  });
+
+  function receivedPosts() {
+    try {
+      return fs.readFileSync(receivedLog, 'utf8').trim().split('\n')
+        .filter(Boolean).map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  }
+
+  const upstreamUrl = () => `http://127.0.0.1:${upstreamPort}`;
+  const deadUrl = 'http://127.0.0.1:9';
+
+  function post(dbFile, body, extraEnv) {
+    return parse(callBoard(dbFile, {
+      method: 'POST',
+      client_ip: '127.0.0.1',
+      authorization: 'Bearer human-test-token',
+      body: { sender: 'Jordan', channel: 'general', body },
+    }, extraEnv));
+  }
+
+  function get(dbFile, extraEnv) {
+    return parse(callBoard(dbFile, {
+      method: 'GET',
+      client_ip: '127.0.0.1',
+      query: { channel: 'general' },
+    }, extraEnv));
+  }
+
+  function sync(dbFile, extraEnv) {
+    return parse(callBoard(dbFile, { method: 'SYNC', client_ip: '127.0.0.1' }, extraEnv));
+  }
+
+  it('queues an offline post and replays it once with the original sender token', () => {
+    // Upstream dead: the post is stored locally and marked pending.
+    const offline = post(db, 'written while Frank was away', { HYDI_BOARD_UPSTREAM: deadUrl });
+    expect(offline.ok).toBe(true);
+    expect(offline.offline).toBe(true);
+    expect(offline.pending).toBe(1);
+    expect(get(db, { HYDI_BOARD_UPSTREAM: deadUrl }).pending).toBe(1);
+
+    // Upstream returns: SYNC replays the queued row as Jordan, with Jordan's token.
+    const first = sync(db, { HYDI_BOARD_UPSTREAM: upstreamUrl() });
+    expect(first.ok).toBe(true);
+    expect(first.sync).toMatchObject({ attempted: 1, posted: 1, unroutable: 0 });
+    const posts = receivedPosts();
+    expect(posts).toHaveLength(1);
+    expect(posts[0].authorization).toBe('Bearer human-test-token');
+    expect(posts[0].body.sender).toBe('Jordan');
+    expect(posts[0].body.body).toBe('written while Frank was away');
+
+    // At-most-once: a second sync sends nothing.
+    const again = sync(db, { HYDI_BOARD_UPSTREAM: upstreamUrl() });
+    expect(again.sync).toMatchObject({ attempted: 0, posted: 0 });
+    expect(receivedPosts()).toHaveLength(1);
+
+    // Reads show the upstream copy once — the pushed local row is deduped.
+    const merged = get(db, { HYDI_BOARD_UPSTREAM: upstreamUrl() });
+    expect(merged.pending).toBe(0);
+    const copies = (merged.messages || []).filter((m) => m.body === 'written while Frank was away');
+    expect(copies).toHaveLength(1);
+    expect(copies[0].id).toBe('srv-1');
+  });
+
+  it('never replays a message as a different sender and leaves unroutable rows', () => {
+    post(db, 'note needing a token', { HYDI_BOARD_UPSTREAM: deadUrl });
+    // Sync with no token configured for Jordan: row is marked unroutable,
+    // not pushed, and stays visible in the offline read.
+    const result = sync(db, {
+      HYDI_BOARD_UPSTREAM: upstreamUrl(),
+      HYDI_BOARD_HUMAN_TOKEN: '',
+    });
+    expect(result.sync).toMatchObject({ attempted: 0, posted: 0, unroutable: 1 });
+    expect(receivedPosts()).toHaveLength(0);
+    const listed = get(db, { HYDI_BOARD_UPSTREAM: deadUrl });
+    expect(listed.pending).toBe(0);
+    expect(listed.messages.map((m) => m.body)).toContain('note needing a token');
+  });
+
+  it('does not outbox messages when no upstream is configured', () => {
+    const local = post(db, 'pure local board note', { HYDI_BOARD_UPSTREAM: '' });
+    expect(local.ok).toBe(true);
+    expect(local.offline).toBeUndefined();
+    // Configuring an upstream later must not resurrect old local-only rows.
+    const result = sync(db, { HYDI_BOARD_UPSTREAM: upstreamUrl() });
+    expect(result.sync).toMatchObject({ attempted: 0, posted: 0 });
+    expect(receivedPosts()).toHaveLength(0);
   });
 });
