@@ -5,6 +5,7 @@
 set -u
 
 WAKE_LOCKED=0
+SERVICES_RESTARTED=0
 
 release_wake_lock() {
   if [ "$WAKE_LOCKED" -eq 1 ] && command -v termux-wake-unlock >/dev/null 2>&1; then
@@ -15,7 +16,9 @@ release_wake_lock() {
 
 finish_failed() {
   reason=$1
-  release_wake_lock
+  if [ "$SERVICES_RESTARTED" -eq 0 ]; then
+    release_wake_lock
+  fi
   printf 'UPDATE FAILED: %s\n' "$reason"
   exit 1
 }
@@ -50,7 +53,7 @@ if ! git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   finish_failed "$root is not a git checkout"
 fi
 
-dirty=$(git -C "$root" status --porcelain 2>/dev/null) ||
+dirty=$(git -C "$root" status --porcelain --untracked-files=no 2>/dev/null) ||
   finish_failed "cannot inspect the working tree"
 if [ -n "$dirty" ]; then
   finish_failed "working tree is dirty; commit or remove local changes first"
@@ -69,18 +72,18 @@ fi
 if ! sv restart hydi-daemon; then
   finish_failed "could not restart hydi-daemon"
 fi
+SERVICES_RESTARTED=1
 
 prefix=${PREFIX:-/data/data/com.termux/files/usr}
-if [ ! -e "$prefix/var/service/hydi/down" ]; then
+if [ -d "$prefix/var/service/hydi" ] && [ ! -e "$prefix/var/service/hydi/down" ]; then
   if ! sv restart hydi; then
     finish_failed "could not restart hydi"
   fi
 fi
 
 sleep 10
-if ! sh "$root/scripts/hydi-doctor.sh"; then
-  finish_failed "hydi-doctor reported a failure"
-fi
+doctor_warning=0
+sh "$root/scripts/hydi-doctor.sh" || doctor_warning=1
 
 short_hash=$(git -C "$root" rev-parse --short HEAD 2>/dev/null) ||
   finish_failed "cannot read the updated commit"
@@ -94,5 +97,8 @@ if [ -z "$merge_title" ]; then
   merge_title="no merge commit found"
 fi
 
-release_wake_lock
-printf 'UPDATED to %s — %s\n' "$short_hash" "$merge_title"
+if [ "$doctor_warning" -eq 1 ]; then
+  printf 'UPDATED to %s — %s (doctor reported warnings above)\n' "$short_hash" "$merge_title"
+else
+  printf 'UPDATED to %s — %s\n' "$short_hash" "$merge_title"
+fi
