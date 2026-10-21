@@ -124,6 +124,21 @@ def main():
     assert refused == {"queued": False, "reason": "board unavailable"}
     assert hydi.file_grow("  ") == {"queued": False, "reason": "no action"}
     assert "actions" not in hydi.PF
+
+    sdk.post = fake_post
+    calls.clear()
+    delegated = hydi.hydi_reply_ai(
+        "delegate revenue and infrastructure to agents",
+        session_id="delegate",
+    )
+    assert calls == [(
+        "ops",
+        "REQUEST @Heidi: delegate revenue and infrastructure evidence and proposal-only review",
+        None,
+    )], calls
+    assert delegated == "Request filed on #ops: m1. Not executed — needs a human on Frank."
+    assert "done" not in delegated.lower()
+
     grow_src = open(hydi.__file__, encoding="utf-8").read().split('elif p == "/api/protoforge/grow":', 1)[1].split("elif p ==", 1)[0]
     assert 'PF["actions"]' not in grow_src
     assert "file_grow" in grow_src

@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 const {
   createOpsResponder, parseRequest, triage, outcomeText, CLARIFY, REPLY_LIMIT,
-  REFUSAL, SECRET_ALERT, ASSESSMENT_COOLDOWN_MS, allowedSenders,
+  REFUSAL, SECRET_ALERT, ASSESSMENT_COOLDOWN_MS, DELEGATION_COOLDOWN_MS, allowedSenders,
 } = require('../../lib/heidi/ops-responder');
 const { ExecutionGateway } = require('../../lib/execution-fabric/gateway');
 const { TaskStore } = require('../../lib/execution-fabric/task-store');
@@ -76,8 +76,14 @@ describe('parseRequest / triage', () => {
     expect(triage('show git log')).toEqual({ kind: 'read', tool: 'git' });
     expect(triage('run the assessment crew')).toEqual({ kind: 'read', tool: 'assessment' });
     expect(triage('revenue summary')).toEqual({ kind: 'read', tool: 'revenue' });
+    expect(triage('delegate revenue to agents')).toEqual({ kind: 'delegation', domains: ['revenue'] });
+    expect(triage('assign infrastructure and revenue analysis')).toEqual({
+      kind: 'delegation',
+      domains: ['revenue', 'infrastructure'],
+    });
     for (const ask of ['restart heidi-web', 'deploy clean-main', 'scale up workers', 'spend $50 on ads',
-      'email the customer', 'fix the bug in api/chat', 'check health then restart pm2', 'refund the revenue', 'grow outreach']) {
+      'email the customer', 'fix the bug in api/chat', 'check health then restart pm2', 'refund the revenue',
+      'grow outreach', 'delegate an infrastructure restart']) {
       expect(triage(ask)).toEqual({ kind: 'approval' });
     }
     expect(triage('look into it')).toEqual({ kind: 'unclear' });
@@ -152,6 +158,22 @@ describe('ops responder', () => {
     expect(h.execCalls).toEqual([]);
     expect(h.posts[0].body).toBe(`Approval filed: ${'a'.repeat(24)} (execution-fabric, needs fabric:control). Not run — waiting for Jordan.`);
     expect(h.responder.state().handled.a1).toMatchObject({ kind: 'approval', task_id: 'a'.repeat(24), outcome_posted: false });
+  });
+
+  it('delegates evidence and proposals without filing an approval', async () => {
+    const delegate = jest.fn(async () =>
+      'Delegated revenue + infrastructure evidence and proposal review. Board thread thread-1. No approval or execution occurred; waiting for Jordan to request any action.');
+    const h = harness({ deps: { tools: { delegate } } });
+    await h.responder.tick([req('del1', 'delegate revenue and infrastructure to agents')]);
+    expect(delegate).toHaveBeenCalledWith(['revenue', 'infrastructure']);
+    expect(h.deps.fabric.file).not.toHaveBeenCalled();
+    expect(h.posts[0]).toMatchObject({ channel: 'ops', replyTo: 'del1' });
+    expect(h.posts[0].body).toContain('Board thread thread-1');
+    expect(h.posts[0].body).toContain('No approval or execution occurred');
+    expect(h.responder.state().handled.del1).toMatchObject({
+      kind: 'delegation',
+      domains: ['revenue', 'infrastructure'],
+    });
   });
 
   it('says so when the approval cannot be filed', async () => {
@@ -330,6 +352,38 @@ describe('ops responder hardening', () => {
     b.advance(31 * 60 * 1000);
     await b.responder.tick([req('c3', 'run the crew', 1)]);
     expect(crewRuns(b)).toHaveLength(1);
+  });
+
+  it('runs each delegation domain at most once per 30 minutes, persisted across restarts', async () => {
+    const stateFile = tmpState();
+    const firstDelegate = jest.fn(async () => ({ text: 'Delegated revenue.', thread_id: 'revenue-thread-1' }));
+    const a = harness({ stateFile, deps: { tools: { delegate: firstDelegate } } });
+    await a.responder.tick([req('dr1', 'delegate revenue review', 1)]);
+    expect(firstDelegate).toHaveBeenCalledWith(['revenue']);
+    expect(a.responder.state().delegations.revenue).toEqual({
+      last_run_at: new Date(T0).toISOString(),
+      thread_id: 'revenue-thread-1',
+    });
+
+    const secondDelegate = jest.fn(async () => ({ text: 'Delegated revenue again.', thread_id: 'revenue-thread-2' }));
+    const b = harness({
+      stateFile,
+      start: T0 + 15 * 60 * 1000,
+      deps: { tools: { delegate: secondDelegate } },
+    });
+    await b.responder.tick([req('dr2', 'delegate revenue review', 1)]);
+    expect(secondDelegate).not.toHaveBeenCalled();
+    expect(b.posts[0].body).toBe(
+      `Revenue review ran at ${new Date(T0).toISOString()}; ` +
+      `next allowed after ${new Date(T0 + DELEGATION_COOLDOWN_MS).toISOString()}. ` +
+      'Latest thread: revenue-thread-1.',
+    );
+
+    b.advance(16 * 60 * 1000);
+    await b.responder.tick([req('dr3', 'delegate revenue review', 1)]);
+    expect(secondDelegate).toHaveBeenCalledTimes(1);
+    expect(secondDelegate).toHaveBeenCalledWith(['revenue']);
+    expect(b.responder.state().delegations.revenue.thread_id).toBe('revenue-thread-2');
   });
 
   it('warns once and posts once to #alerts when HYDI_SERVICE_SECRET is missing', async () => {
