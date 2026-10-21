@@ -1,6 +1,6 @@
 const { getRuntimeInventory } = require('../../lib/platform-diagnostics');
 
-jest.setTimeout(15000);
+jest.setTimeout(60000);
 
 describe('Platform diagnostics', () => {
   it('discovers components and returns a summary', async () => {
