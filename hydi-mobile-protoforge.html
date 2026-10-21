@@ -1204,7 +1204,7 @@
         </div>
       </div>
 
-      <div class="card-title" style="margin:4px 0 -4px;padding:0 2px">Growth Actions</div>
+      <div class="card-title" style="margin:4px 0 -4px;padding:0 2px">Growth Requests (filed on #ops — nothing runs from the phone)</div>
       <div class="grow-actions">
         <div class="grow-action-card" onclick="growAction('scale_agents')">
           <div class="grow-action-icon">🚀</div>
@@ -1906,28 +1906,32 @@ function setAutonomy(level) {
   addEventEntry('Autonomy display only — no executor connected', 'info');
 }
 
-function growAction(action) {
-  const labels = {
-    scale_agents:    '🚀 Scaling agent pool...',
-    financial_round: '💰 Initiating financial allocation round...',
-    prime_directive: '🎯 Re-aligning agents to Prime Directive...',
-    evolution_cycle: '🧬 Running CASCADE evolution protocol...',
-    infrastructure:  '🏗️ Provisioning infrastructure expansion...',
-    trust_audit:     '🔐 Running agent trust audit...',
-  };
+function growReplyText(result) {
+  if (result && result.queued && result.board_id) {
+    return 'Request filed on #ops: ' + result.board_id + '. Not executed — needs a human on Frank.';
+  }
+  const reason = (result && result.reason) || 'no reply from hydi';
+  return 'Request was NOT filed on #ops. Nothing was executed. ' + reason;
+}
 
-  wsSend({ type: 'grow_action', action, timestamp: new Date().toISOString() });
-  toast(labels[action] || 'Action queued', 'ok');
-  addEventEntry(labels[action] || action, 'ok');
-
+async function growAction(action) {
+  let result = null;
+  try {
+    const r = await fetch(CFG.apiBase + '/api/protoforge/grow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    result = await r.json();
+  } catch (_) {
+    result = { queued: false, reason: 'offline — request not sent' };
+  }
+  const text = growReplyText(result);
+  const ok = !!(result && result.queued);
+  toast(ok ? 'Filed on #ops — not executed' : 'Not filed', ok ? 'ok' : 'warn');
+  addEventEntry(text, ok ? 'info' : 'warn');
   switchTab('chat');
-  setTimeout(() => {
-    showTyping();
-    setTimeout(() => {
-      hideTyping();
-      addChatMsg('hydi', `${labels[action] || 'Growth action initiated.'} Monitoring for confirmation from the agent mesh. I'll notify you of any approvals needed.`);
-    }, 1800);
-  }, 300);
+  addChatMsg('hydi', text);
 }
 
 // ── STATS ────────────────────────────────────────────────
@@ -1944,23 +1948,24 @@ function refreshStats() {
     });
 }
 
+function statText(value, format) {
+  return typeof value === 'number' && isFinite(value) ? format(value) : 'unknown';
+}
+
 function applyStats(d) {
-  document.getElementById('statCapital').textContent    = '$' + (d.capital_deployed || 0).toLocaleString(undefined,{maximumFractionDigits:0});
-  document.getElementById('statCapitalTrend').textContent = '▲ growing';
-  document.getElementById('statActions').textContent    = (d.agent_actions || 0).toLocaleString();
-  document.getElementById('statSuccess').textContent    = Math.round((d.success_rate || 0) * 100) + '%';
-  document.getElementById('statSuccessTrend').textContent = '▲ strong';
-  document.getElementById('statSuccessTrend').className = 'stat-trend trend-up';
-  document.getElementById('statTrust').textContent      = ((d.trust_score || 0) * 100).toFixed(0) + '%';
+  document.getElementById('statCapital').textContent    = statText(d.capital_deployed, v => '$' + v.toLocaleString(undefined,{maximumFractionDigits:0}));
+  document.getElementById('statCapitalTrend').textContent = typeof d.capital_deployed === 'number' ? '' : 'no live source';
+  document.getElementById('statActions').textContent    = statText(d.agent_actions, v => v.toLocaleString());
+  document.getElementById('statSuccess').textContent    = statText(d.success_rate, v => Math.round(v * 100) + '%');
+  document.getElementById('statSuccessTrend').textContent = '';
+  document.getElementById('statSuccessTrend').className = 'stat-trend';
+  document.getElementById('statTrust').textContent      = statText(d.trust_score, v => (v * 100).toFixed(0) + '%');
 }
 
 function renderSparkbars() {
   ['sparkCapital','sparkActions'].forEach(id => {
     const bar = document.getElementById(id);
-    const heights = Array.from({length:7}, () => 20 + Math.random() * 80);
-    bar.innerHTML = heights.map((h,i) =>
-      `<span style="height:${h}%;animation-delay:${i*0.05}s"></span>`
-    ).join('');
+    if (bar) bar.innerHTML = '';
   });
 }
 

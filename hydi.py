@@ -54,25 +54,28 @@ REVENUE_STREAMS = [
 PF = {
     "autonomy_level": 3,  # CONDITIONAL AUTONOMY — revenue directive
     "primary_directive": "REVENUE_GENERATION",
-    "agents": {
-        "architect": "running", "engineer":  "running",
-        "finance":   "running", "legal":     "running",
-        "marketing": "running", "ops":       "running",
-        "analytics": "running", "cascade":   "running",
-        "heidi":     "running", "ursula":    "running",
-        "security":  "running", "realtime":  "running",
-        "outreach":  "running", "memory":    "running",
-        "executive": "running",
-    },
     "approvals": [],
-    "actions": 0,
-    "success_rate": 0.94,
-    "trust_score": 0.82,
-    "capital": 248500,
-    "revenue_streams": {s: {"status": "active", "mrr": 0} for s in REVENUE_STREAMS},
+    # No live finance source reaches this phone. None renders as "unknown".
+    "capital": None,
+    "revenue_streams": {s: {"status": "configured", "mrr": None} for s in REVENUE_STREAMS},
     "events": [],
     "start_time": time.time(),
 }
+
+AGENT_NAMES = (
+    "architect", "engineer", "finance", "legal", "marketing", "ops",
+    "analytics", "cascade", "heidi", "ursula", "security", "realtime",
+    "outreach", "memory", "executive",
+)
+
+def _money(value):
+    return "unknown" if value is None else f"${value:,}"
+
+def total_mrr():
+    values = [s.get("mrr") for s in PF["revenue_streams"].values()]
+    if not values or any(v is None for v in values):
+        return None
+    return sum(values)
 
 AUTONOMY_NAMES = {
     0: "OBSERVE",
@@ -544,6 +547,7 @@ def ai_chat(messages):
 AUTONOMY_LABEL = "(display only — no executor connected)"
 NO_ACTION_NOTE = "Note: no action was taken — Hydi can't execute from this chat."
 PHONE_ONLY = "Recorded on phone only — nothing executes from here."
+FILING_PREFIXES = ("Request filed on #ops:", "Request was NOT filed on #ops.")
 # Board posts filed by this process. Phone memory, not an approval queue.
 SESSION_REQUESTS = []
 _ACTION_CLAIM = re.compile(
@@ -559,7 +563,6 @@ def build_system_prompt():
     fleet = fleet_status()
     fleet_summary = ", ".join(f"{i['name']}={i['status']}" for i in fleet) or "none"
     active_streams = ", ".join(REVENUE_STREAMS)
-    total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
     return (
         "You are Hydi on a phone. You can talk, and you can read the live fleet and stats below. "
         "You have no tools and you cannot execute.\n"
@@ -571,7 +574,7 @@ def build_system_prompt():
         "A few short lines. The numbers below are readings, not work you did.\n\n"
         f"Live fleet: {fleet_summary}\n"
         f"Streams: {active_streams}\n"
-        f"MRR tracked: ${total_mrr:,}. Capital figure: ${PF['capital']:,}. "
+        f"MRR: {_money(total_mrr())}. Capital: {_money(PF['capital'])}. "
         f"Approvals pending: {len(PF['approvals'])}. Uptime: {uptime_str()}."
     )
 
@@ -707,8 +710,12 @@ def file_grow(action):
     name = (action or "").strip()
     if not name:
         return {"queued": False, "reason": "no action"}
-    posted = _post_ops_request("grow " + name)
-    item = _remember_request(posted, _ops_body("grow " + name))
+    return file_request("grow " + name)
+
+def file_request(text):
+    """API form of _file_action_request: {queued, board_id} or {queued: False, reason}."""
+    posted = _post_ops_request(text)
+    item = _remember_request(posted, _ops_body(text))
     if item:
         result = {"queued": True, "board_id": item["id"], "channel": "ops"}
         if posted.get("offline"):
@@ -722,7 +729,7 @@ def hydi_reply_ai(msg, session_id="default"):
     command = _handle_command(msg)
 
     if command is not None:
-        if command == PHONE_ONLY:
+        if command == PHONE_ONLY or command.startswith(FILING_PREFIXES):
             _remember(session_id, msg, command)
             return command
         note = ""
@@ -782,14 +789,13 @@ def _handle_command(msg):
 
     if "revenue status" in t or "revenue" in t and "status" in t:
         lines = "\n".join(
-            f"  {s}: active  MRR ${PF['revenue_streams'][s]['mrr']:,}"
+            f"  {s}: MRR {_money(PF['revenue_streams'][s]['mrr'])}"
             for s in REVENUE_STREAMS
         )
-        total = sum(s["mrr"] for s in PF["revenue_streams"].values())
         return (
-            f"REVENUE ENGINE — PRIMARY DIRECTIVE ACTIVE\n"
-            f"Streams ({len(REVENUE_STREAMS)} active):\n{lines}\n"
-            f"Total MRR: ${total:,}  |  Capital: ${PF['capital']:,}"
+            f"Revenue streams ({len(REVENUE_STREAMS)} configured):\n{lines}\n"
+            f"Total MRR: {_money(total_mrr())}  |  Capital: {_money(PF['capital'])}\n"
+            "No live revenue source is connected to this phone."
         )
 
     if "top opportunity" in t or "best opportunity" in t or "top opp" in t:
@@ -800,35 +806,17 @@ def _handle_command(msg):
             "  3. rezonate        — music license sales → deploy marketing agent\n"
             "  4. lipi_v2         — text-to-design → launch beta waitlist\n"
             "  5. waveformer_studio — label mgmt → onboard first artist\n"
-            "Type 'grow outreach' to activate outreach sweep."
+            "These are ideas, not results. Type 'grow outreach' to file it on #ops."
         )
 
     if "grow outreach" in t:
-        PF["agents"]["outreach"] = "running"
-        PF["agents"]["marketing"] = "running"
-        PF["actions"] += 8
-        PF["approvals"].append({
-            "id": f"rev-{int(time.time())}", "agent": "OutreachAI",
-            "title": "Revenue Outreach Sweep — All 6 Streams",
-            "description": "Deploy targeted outreach across galactic_bytes, detailer_bot, rezonate. Estimated 15 new leads.",
-            "priority": "high", "meta": ["revenue", "outreach", "15-leads"],
-        })
-        return "Outreach + Marketing agents activated. Revenue sweep queued across all 6 streams. Approve in queue to execute."
+        return _file_action_request("grow outreach — revenue outreach sweep across all streams")
 
     if "grow agents" in t or "start all" in t or "start agents" in t:
-        started = [k for k, v in PF["agents"].items() if v == "idle"]
-        for k in started:
-            PF["agents"][k] = "running"
-        PF["actions"] += len(started)
-        return (f"Started {len(started)} agent slots: {', '.join(started)}. "
-                f"{len(PF['agents'])} slots active. Note: the Agents tab shows real "
-                "services; these are ProtoForge registry slots."
-                if started else "All agent slots were already active.")
+        return _file_action_request("grow agents — start all idle agents")
 
     if "grow finance" in t or "finance round" in t:
-        PF["capital"] += 10000
-        PF["actions"] += 5
-        return f"Capital allocation round complete. Deployed: ${PF['capital']:,}."
+        return _file_action_request("grow finance — capital allocation round")
 
     if "grow autonomy" in t or (
         "autonomy" in t and any(w in t for w in ("raise", "increase", "up", "higher"))
@@ -839,8 +827,7 @@ def _handle_command(msg):
         )
 
     if "grow evolution" in t or "evolution cycle" in t:
-        PF["actions"] += 20
-        return "CASCADE evolution protocol running. Agent policies optimising across the registry."
+        return _file_action_request("grow evolution — CASCADE evolution cycle")
 
     if t.startswith("set autonomy "):
         return (
@@ -850,15 +837,14 @@ def _handle_command(msg):
 
     if t.startswith("start ") and not t.startswith("start all"):
         name = t[6:].strip()
-        if name in PF["agents"]:
-            PF["agents"][name] = "running"
-            return f"Agent '{name}' started."
+        if name in AGENT_NAMES:
+            return _file_action_request(f"start agent {name}")
 
     if t.startswith(("stop ", "pause ")):
-        name = t.split(" ", 1)[1].strip()
-        if name in PF["agents"]:
-            PF["agents"][name] = "paused"
-            return f"Agent '{name}' paused."
+        verb, name = t.split(" ", 1)
+        name = name.strip()
+        if name in AGENT_NAMES:
+            return _file_action_request(f"{verb} agent {name}")
 
     if t.startswith("approve ") or t.startswith("reject ") or t.startswith("defer "):
         return PHONE_ONLY
@@ -878,18 +864,19 @@ def _scripted_fallback(msg):
             f"System: {'OPERATIONAL' if up else 'DEGRADED'}\n"
             f"Fleet ({up}/{len(fleet)} running):\n{lines}\n"
             f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]} {AUTONOMY_LABEL}\n"
-            f"Capital: ${PF['capital']:,}\n"
+            f"Capital: {_money(PF['capital'])}\n"
             f"Approvals pending: {len(PF['approvals'])}\n"
             f"Uptime: {uptime_str()}"
         )
 
     if any(w in t for w in ("grow", "scale", "expand")):
         return (
-            "Growth options:\n"
-            "  start all agents  — activate idle agents\n"
+            "Growth requests (each files one #ops REQUEST; nothing runs from the phone):\n"
+            "  grow outreach     — outreach sweep\n"
+            "  grow agents       — start idle agents\n"
             "  grow finance      — capital allocation round\n"
-            "  grow autonomy     — display only, nothing changes\n"
-            "  grow evolution    — CASCADE evolution cycle"
+            "  grow evolution    — CASCADE evolution cycle\n"
+            "  grow autonomy     — display only, nothing changes"
         )
 
     if "agent" in t or "fleet" in t:
@@ -900,14 +887,13 @@ def _scripted_fallback(msg):
 
     if any(w in t for w in ("financ", "capital", "revenue", "money")):
         return (
-            f"Financial Engine:\n"
-            f"Capital deployed: ${PF['capital']:,}\n"
-            f"Actions: {PF['actions']}  Success: {int(PF['success_rate']*100)}%"
+            f"Capital: {_money(PF['capital'])}  |  MRR: {_money(total_mrr())}\n"
+            "No live finance source is connected to this phone."
         )
 
     if any(w in t for w in ("approval", "queue", "pending")):
         if not PF["approvals"]:
-            return "No pending approvals. All agents within authorised parameters."
+            return "No phone approvals. Requests live on Forge Board #ops."
         lines = "\n".join(
             f"  [{i}] {a.get('title','Action')} — {a.get('agent','')}"
             for i, a in enumerate(PF["approvals"])
@@ -943,21 +929,22 @@ Hydi Commands:
 ──────────────────────────
 status / health      system overview
 agents               agent mesh status
-start <name>         start a specific agent
-stop <name>          pause a specific agent
-start all agents     activate all idle agents
+start <name>         file an #ops request to start an agent
+stop <name>          file an #ops request to pause an agent
+start all agents     file an #ops request to start idle agents
 grow                 growth options menu
-grow agents          start all idle agents
-grow finance         capital allocation round
+grow outreach        file an #ops request for an outreach sweep
+grow agents          file an #ops request to start idle agents
+grow finance         file an #ops request for a capital round
 grow autonomy        display only — no executor connected
-grow evolution       CASCADE evolution cycle
+grow evolution       file an #ops request for a CASCADE cycle
 set autonomy <0-4>   display only — does not change the level
 autonomy             display only — no executor connected
 approvals            list phone-only items
 approve <n>          phone record only — nothing executes
 reject <n>           phone record only — nothing executes
 defer <n>            phone record only — nothing executes
-finance / capital    financial engine status
+finance / capital    capital and MRR (unknown without a live source)
 help                 this list
 exit / quit          stop Hydi"""
 
@@ -1016,7 +1003,6 @@ class HydiHandler(BaseHTTPRequestHandler):
         elif p == "/api/health":
             self._json(health_payload())
         elif p == "/api/protoforge/stats":
-            PF["actions"] += 1
             self._json(stats_payload())
         elif p == "/api/protoforge/agents":
             self._json([{"id": i["id"], "status": i["status"]}
@@ -1027,12 +1013,12 @@ class HydiHandler(BaseHTTPRequestHandler):
         elif p == "/api/protoforge/events":
             self._json(PF["events"][:20])
         elif p == "/api/protoforge/revenue":
-            total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
             self._json({
                 "primary_directive": PF["primary_directive"],
                 "streams": PF["revenue_streams"],
-                "total_mrr": total_mrr,
+                "total_mrr": total_mrr(),
                 "capital": PF["capital"],
+                "source": None,
                 "stream_count": len(REVENUE_STREAMS),
             })
         elif p == "/api/models":
@@ -1079,13 +1065,12 @@ class HydiHandler(BaseHTTPRequestHandler):
             parts     = p.split("/")
             agent_id  = parts[4] if len(parts) > 4 else ""
             cmd       = parts[5] if len(parts) > 5 else ""
-            status_map = {"start": "running", "pause": "paused",
-                          "restart": "running", "stop": "idle"}
-            if agent_id in PF["agents"] and cmd in status_map:
-                PF["agents"][agent_id] = status_map[cmd]
-                log_event(f"Agent {agent_id} → {cmd}", "ok")
-            self._json({"agentId": agent_id,
-                        "status": PF["agents"].get(agent_id, "unknown")})
+            if agent_id in AGENT_NAMES and cmd in ("start", "pause", "restart", "stop"):
+                result = file_request(f"{cmd} agent {agent_id}")
+            else:
+                result = {"queued": False, "reason": "unknown agent or command"}
+            result["agentId"] = agent_id
+            self._json(result)
 
         elif p == "/api/protoforge/grow":
             result = file_grow(body.get("action", ""))
@@ -1196,9 +1181,10 @@ class HydiHandler(BaseHTTPRequestHandler):
 def health_payload():
     return {
         "current_status":  "OK",
-        "jobs_queued":     len(PF["approvals"]),
-        "trend_status":    "STABLE",
-        "auto_heals_24h":  3,
+        "jobs_queued":     None,
+        "trend_status":    "unknown",
+        "auto_heals_24h":  None,
+        "requests_filed":  len(SESSION_REQUESTS),
         "last_check":      time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
@@ -1206,9 +1192,11 @@ def stats_payload():
     fleet = fleet_status()
     return {
         "capital_deployed":  PF["capital"],
-        "agent_actions":     PF["actions"],
-        "success_rate":      PF["success_rate"],
-        "trust_score":       PF["trust_score"],
+        "total_mrr":         total_mrr(),
+        "agent_actions":     None,
+        "requests_filed":    len(SESSION_REQUESTS),
+        "success_rate":      None,
+        "trust_score":       None,
         "autonomy_level":    PF["autonomy_level"],
         "agents_running":    sum(1 for i in fleet if i["status"] == "running"),
         "agents_total":      len(fleet),
@@ -1421,8 +1409,8 @@ def start_server(port=3006, host="0.0.0.0"):
     print()
     print(f"  PRIMARY DIRECTIVE     : REVENUE GENERATION")
     print(f"  Autonomy              : Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]} {AUTONOMY_LABEL}")
-    print(f"  Revenue streams       : {len(REVENUE_STREAMS)} active")
-    print(f"  Agents                : ALL 15 RUNNING")
+    print(f"  Revenue streams       : {len(REVENUE_STREAMS)} configured, MRR unknown")
+    print(f"  Fleet                 : live status at /api/fleet")
     print()
     print(f"  Open on your phone : http://{ip}:{port}/")
     print(f"  Forge Board        : http://{ip}:{port}/board")
@@ -1432,18 +1420,6 @@ def start_server(port=3006, host="0.0.0.0"):
     print()
     print("  Share → Add to Home Screen to install as an app.")
     print("  Ctrl+C to stop.\n")
-
-    # Demo approval after 5s
-    def _demo():
-        time.sleep(5)
-        PF["approvals"].append({
-            "id": "demo-001", "agent": "FinanceAI",
-            "title": "Initial Capital Allocation",
-            "description": "Deploy $50,000 seed capital across ops, marketing, infrastructure.",
-            "priority": "high", "meta": ["$50,000", "seed-round"],
-        })
-        log_event("Approval pending: Initial Capital Allocation", "warn")
-    threading.Thread(target=_demo, daemon=True).start()
 
     def _board_online():
         try:
