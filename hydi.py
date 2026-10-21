@@ -376,6 +376,130 @@ def refresh_backends():
 def ai_ready():
     return bool(GROQ_MODEL or OLLAMA_MODEL or LLAMA_MODEL)
 
+# ── Real fleet status (dashboard) ────────────────────────
+# The dashboard's agent grid used to show a fabricated 15-agent mesh that was
+# always "running". fleet_status() reports what is actually true right now:
+# which link to Frank is live, which AI backend answered, whether the board is
+# upstream or a local copy, and what the phone's runit services are doing.
+def _sv_status(name):
+    try:
+        r = subprocess.run(
+            ["sv", "status", name],
+            capture_output=True, text=True, timeout=5,
+        )
+        line = (r.stdout + r.stderr).strip()
+        if not line:
+            return None
+        if line.startswith("run:"):
+            status = "running"
+        elif line.startswith("down:"):
+            status = "idle"
+        else:
+            status = "error"
+        return {"status": status, "detail": line[:80]}
+    except Exception:
+        return None
+
+def fleet_status():
+    """Real subsystem cards for the dashboard. Everything is probed."""
+    items = []
+
+    hosts = frank_candidates()
+    frank = frank_resolve() if hosts else None
+    items.append({
+        "id": "frank", "name": "Frank", "icon": "🖥️",
+        "role": "HYDI PC — Ollama + shared board",
+        "status": "running" if frank else ("error" if hosts else "idle"),
+        "detail": frank_link_label(frank) if frank else
+                  ("all hosts unreachable" if hosts else "not configured"),
+        "fleet": True,
+    })
+
+    if OLLAMA_MODEL:
+        where = "remote" if ollama_is_remote() else "local"
+        items.append({
+            "id": "ollama", "name": "Ollama", "icon": "🦙",
+            "role": "Chat AI backend",
+            "status": "running",
+            "detail": f"{OLLAMA_MODEL} ({where})",
+            "fleet": True,
+        })
+    else:
+        items.append({
+            "id": "ollama", "name": "Ollama", "icon": "🦙",
+            "role": "Chat AI backend",
+            "status": "error" if hosts else "idle",
+            "detail": "no model — host down?" if hosts else "not detected",
+            "fleet": True,
+        })
+
+    items.append({
+        "id": "groq", "name": "Groq", "icon": "☁️",
+        "role": "Cloud AI backend",
+        "status": "running" if GROQ_MODEL else ("error" if GROQ_API_KEY else "idle"),
+        "detail": GROQ_MODEL or ("key set but no model answered" if GROQ_API_KEY else "no API key"),
+        "fleet": True,
+    })
+
+    items.append({
+        "id": "llama", "name": "llama.cpp", "icon": "🔥",
+        "role": "Local fallback model (:8080)",
+        "status": "running" if LLAMA_MODEL else "idle",
+        "detail": LLAMA_MODEL or "service down or not started",
+        "fleet": True,
+    })
+
+    try:
+        board_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
+        if board_dir not in sys.path:
+            sys.path.insert(0, board_dir)
+        import store
+        upstream = store._upstream()
+        pending = store.pending_outbox_count()
+        if upstream:
+            live = store._upstream_request("GET", {"channel": "general"}, None, "")
+            ok = isinstance(live, dict) and live.get("ok")
+            detail = ("upstream reachable" if ok else "offline copy")
+            if pending:
+                detail += f" · {pending} pending"
+            items.append({
+                "id": "board", "name": "Forge Board", "icon": "📋",
+                "role": "Shared agent room",
+                "status": "running" if ok else "error",
+                "detail": detail, "fleet": True,
+            })
+        else:
+            items.append({
+                "id": "board", "name": "Forge Board", "icon": "📋",
+                "role": "Shared agent room",
+                "status": "idle", "detail": "local copy only (no upstream)",
+                "fleet": True,
+            })
+    except Exception:
+        items.append({
+            "id": "board", "name": "Forge Board", "icon": "📋",
+            "role": "Shared agent room",
+            "status": "error", "detail": "board store unavailable",
+            "fleet": True,
+        })
+
+    for svc in ("hydi", "hydi-daemon"):
+        sv = _sv_status(svc)
+        if sv:
+            items.append({
+                "id": svc, "name": svc, "icon": "📟",
+                "role": "Termux runit service",
+                "status": sv["status"], "detail": sv["detail"], "fleet": True,
+            })
+
+    items.append({
+        "id": "hydi-py", "name": "hydi.py", "icon": "📱",
+        "role": "This dashboard server (:3006)",
+        "status": "running", "detail": f"up {uptime_str()}",
+        "fleet": True,
+    })
+    return items
+
 def models_payload():
     active = GROQ_MODEL or OLLAMA_MODEL or LLAMA_MODEL
     return {
@@ -418,8 +542,8 @@ def ai_chat(messages):
     return llama_chat(messages)
 
 def build_system_prompt():
-    running = sum(1 for s in PF["agents"].values() if s == "running")
-    idle    = sum(1 for s in PF["agents"].values() if s == "idle")
+    fleet = fleet_status()
+    fleet_summary = ", ".join(f"{i['name']}={i['status']}" for i in fleet)
     active_streams = ", ".join(REVENUE_STREAMS)
     total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
     return (
@@ -439,7 +563,7 @@ def build_system_prompt():
         f"Current system state:\n"
         f"  PRIMARY DIRECTIVE: {PF['primary_directive']}\n"
         f"  Autonomy level: {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
-        f"  Agents: {running} running, {idle} idle (15 total — ALL HOT)\n"
+        f"  Live fleet (probed): {fleet_summary}\n"
         f"  Revenue streams: {len(REVENUE_STREAMS)} active — {active_streams}\n"
         f"  MRR tracked: ${total_mrr:,}\n"
         f"  Capital deployed: ${PF['capital']:,}\n"
@@ -531,8 +655,10 @@ def _handle_command(msg):
         for k in started:
             PF["agents"][k] = "running"
         PF["actions"] += len(started)
-        return (f"Started {len(started)} agents: {', '.join(started)}. All 15 now running."
-                if started else "All agents were already running.")
+        return (f"Started {len(started)} agent slots: {', '.join(started)}. "
+                f"{len(PF['agents'])} slots active. Note: the Agents tab shows real "
+                "services; these are ProtoForge registry slots."
+                if started else "All agent slots were already active.")
 
     if "grow finance" in t or "finance round" in t:
         PF["capital"] += 10000
@@ -549,7 +675,7 @@ def _handle_command(msg):
 
     if "grow evolution" in t or "evolution cycle" in t:
         PF["actions"] += 20
-        return "CASCADE evolution protocol running. Agent policies optimising across all 15 nodes."
+        return "CASCADE evolution protocol running. Agent policies optimising across the registry."
 
     if t.startswith("set autonomy "):
         try:
@@ -590,10 +716,12 @@ def _scripted_fallback(msg):
     t = msg.lower()
 
     if any(w in t for w in ("status", "health", "how are")):
-        running = sum(1 for s in PF["agents"].values() if s == "running")
+        fleet = fleet_status()
+        up = sum(1 for i in fleet if i["status"] == "running")
+        lines = "\n".join(f"  {i['name']}: {i['status']} — {i['detail']}" for i in fleet)
         return (
-            f"System: OPERATIONAL\n"
-            f"Agents: {running}/15 running\n"
+            f"System: {'OPERATIONAL' if up else 'DEGRADED'}\n"
+            f"Fleet ({up}/{len(fleet)} running):\n{lines}\n"
             f"Autonomy: Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
             f"Capital: ${PF['capital']:,}\n"
             f"Approvals pending: {len(PF['approvals'])}\n"
@@ -609,14 +737,11 @@ def _scripted_fallback(msg):
             "  grow evolution    — CASCADE evolution cycle"
         )
 
-    if "agent" in t:
-        running = [k for k, v in PF["agents"].items() if v == "running"]
-        idle    = [k for k, v in PF["agents"].items() if v == "idle"]
-        return (
-            f"Agent Mesh — 15 total\n"
-            f"Running ({len(running)}): {', '.join(running)}\n"
-            f"Idle ({len(idle)}): {', '.join(idle) or 'none'}"
-        )
+    if "agent" in t or "fleet" in t:
+        fleet = fleet_status()
+        lines = "\n".join(f"  {i['name']}: {i['status']} — {i['detail']}" for i in fleet)
+        up = sum(1 for i in fleet if i["status"] == "running")
+        return f"Live fleet ({up}/{len(fleet)} running):\n{lines}"
 
     if any(w in t for w in ("financ", "capital", "revenue", "money")):
         return (
@@ -647,10 +772,10 @@ def _scripted_fallback(msg):
     if t in ("hi", "hello", "hey", "yo"):
         return "Hydi online — ProtoForge Command ready. Type 'status' or 'help'."
 
-    running = sum(1 for s in PF["agents"].values() if s == "running")
+    up = sum(1 for i in fleet_status() if i["status"] == "running")
     return (
         f"Processing: \"{msg[:60]}{'...' if len(msg)>60 else ''}\"\n"
-        f"{running} agents ready. Type 'help' for commands.\n"
+        f"{up} fleet services running. Type 'help' for commands.\n"
         "(Tip: install Ollama for intelligent AI replies)"
     )
 
@@ -735,7 +860,11 @@ class HydiHandler(BaseHTTPRequestHandler):
             PF["actions"] += 1
             self._json(stats_payload())
         elif p == "/api/protoforge/agents":
-            self._json([{"id": k, "status": v} for k, v in PF["agents"].items()])
+            self._json([{"id": i["id"], "status": i["status"]}
+                        for i in fleet_status()])
+        elif p == "/api/fleet":
+            self._json({"items": fleet_status(), "link": frank_link(),
+                        "uptime": uptime_str()})
         elif p == "/api/protoforge/events":
             self._json(PF["events"][:20])
         elif p == "/api/protoforge/revenue":
@@ -912,14 +1041,15 @@ def health_payload():
     }
 
 def stats_payload():
+    fleet = fleet_status()
     return {
         "capital_deployed":  PF["capital"],
         "agent_actions":     PF["actions"],
         "success_rate":      PF["success_rate"],
         "trust_score":       PF["trust_score"],
         "autonomy_level":    PF["autonomy_level"],
-        "agents_running":    sum(1 for s in PF["agents"].values() if s == "running"),
-        "agents_total":      len(PF["agents"]),
+        "agents_running":    sum(1 for i in fleet if i["status"] == "running"),
+        "agents_total":      len(fleet),
         "approvals_pending": len(PF["approvals"]),
         "uptime":            uptime_str(),
         "ollama_model":      active_ai_label(),
