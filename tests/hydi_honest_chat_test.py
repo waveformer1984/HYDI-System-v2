@@ -113,18 +113,17 @@ def main():
     assert hydi.SESSION_REQUESTS == []
     assert hydi.PF["approvals"] == approvals_before
 
-    actions_before = hydi.PF["actions"]
     sdk.post = fake_post
     calls.clear()
     grown = hydi.file_grow("scale_agents")
     assert grown == {"queued": True, "board_id": "m1", "channel": "ops"}
     assert calls == [("ops", "REQUEST @Heidi: grow scale_agents", None)], calls
-    assert hydi.PF["actions"] == actions_before
+    assert "actions" not in hydi.PF
     sdk.post = lambda channel, body, reply_to=None: {"ok": False, "error": "board unavailable"}
     refused = hydi.file_grow("scale_agents")
     assert refused == {"queued": False, "reason": "board unavailable"}
     assert hydi.file_grow("  ") == {"queued": False, "reason": "no action"}
-    assert hydi.PF["actions"] == actions_before
+    assert "actions" not in hydi.PF
     grow_src = open(hydi.__file__, encoding="utf-8").read().split('elif p == "/api/protoforge/grow":', 1)[1].split("elif p ==", 1)[0]
     assert 'PF["actions"]' not in grow_src
     assert "file_grow" in grow_src
@@ -151,14 +150,14 @@ def main():
 
     hydi.ai_ready = lambda: True
     hydi.ai_chat = lambda messages: "I've scaled the whole fleet.\nParaphrase of the dollars."
-    verbatim = hydi.hydi_reply_ai("revenue status", session_id="rev")
-    assert verbatim.startswith("REVENUE ENGINE — PRIMARY DIRECTIVE ACTIVE")
+    verbatim = hydi.hydi_reply_ai("top opportunity", session_id="rev")
+    assert verbatim.startswith("Top Revenue Opportunities")
     assert "I've scaled" not in verbatim
     assert "Paraphrase" not in verbatim
 
     hydi.ai_chat = lambda messages: "Numbers above are a reading only.\nIgnore this second line."
-    noted = hydi.hydi_reply_ai("revenue status", session_id="rev2")
-    assert noted.startswith("REVENUE ENGINE — PRIMARY DIRECTIVE ACTIVE")
+    noted = hydi.hydi_reply_ai("top opportunity", session_id="rev2")
+    assert noted.startswith("Top Revenue Opportunities")
     assert noted.endswith("Numbers above are a reading only.")
     assert "Ignore this second line." not in noted
     assert hydi.NO_ACTION_NOTE not in noted
