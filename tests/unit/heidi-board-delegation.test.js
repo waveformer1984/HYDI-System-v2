@@ -14,8 +14,8 @@ describe('Heidi board delegation', () => {
   it('keeps Heidi in the loop and agents proposal-only', async () => {
     const posts = [];
     const board = {
-      post: jest.fn(async (channel, body, replyTo) => {
-        posts.push({ sender: process.env.HYDI_BOARD_SENDER, channel, body, replyTo });
+      post: jest.fn(async (channel, body, replyTo, options) => {
+        posts.push({ sender: options.sender, channel, body, replyTo });
         return { ok: true, message: { id: replyTo ? `reply-${posts.length}` : 'delegation-root' } };
       }),
     };
@@ -80,5 +80,71 @@ describe('Heidi board delegation', () => {
     });
     expect(posts[1].body).toContain('Collector failed; no result is claimed.');
     expect(posts[1].body).toContain('No approval or execution occurred.');
+  });
+
+  it('keeps concurrent delegation and normal replies under their own senders', async () => {
+    const sdk = require('../../lib/forge-board/sdk');
+    const old = {
+      url: process.env.HYDI_BOARD_URL,
+      sender: process.env.HYDI_BOARD_SENDER,
+      heidi: process.env.HYDI_BOARD_TOKEN_HEIDI,
+      protoforge: process.env.HYDI_BOARD_TOKEN_PROTOFORGE,
+      fetch: global.fetch,
+    };
+    process.env.HYDI_BOARD_URL = 'http://board.test';
+    process.env.HYDI_BOARD_SENDER = 'Heidi';
+    process.env.HYDI_BOARD_TOKEN_HEIDI = 'heidi-token';
+    process.env.HYDI_BOARD_TOKEN_PROTOFORGE = 'proto-token';
+    const calls = [];
+    let protoStarted;
+    const started = new Promise((resolve) => { protoStarted = resolve; });
+    let releaseProto;
+    const blocked = new Promise((resolve) => { releaseProto = resolve; });
+    global.fetch = jest.fn(async (url, init) => {
+      const body = JSON.parse(init.body);
+      calls.push({ sender: body.sender, auth: init.headers.Authorization, text: body.body });
+      if (body.sender === 'ProtoForge') {
+        protoStarted();
+        await blocked;
+      }
+      return {
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, message: { id: body.reply_to ? `reply-${calls.length}` : 'root' } }),
+      };
+    });
+
+    try {
+      const delegation = runBoardDelegation({
+        domains: ['revenue'],
+        board: sdk,
+        collectors: {
+          revenue: async () => ({ evidence: ['read'], proposals: ['review'] }),
+        },
+      });
+      await started;
+      const normalReply = sdk.post('ops', 'normal Heidi reply', 'other-thread');
+      releaseProto();
+      await Promise.all([delegation, normalReply]);
+
+      expect(calls.find((call) => call.text === 'normal Heidi reply')).toMatchObject({
+        sender: 'Heidi',
+        auth: 'Bearer heidi-token',
+      });
+      expect(calls.find((call) => call.sender === 'ProtoForge')).toMatchObject({
+        auth: 'Bearer proto-token',
+      });
+      expect(process.env.HYDI_BOARD_SENDER).toBe('Heidi');
+    } finally {
+      global.fetch = old.fetch;
+      for (const [key, value] of [
+        ['HYDI_BOARD_URL', old.url],
+        ['HYDI_BOARD_SENDER', old.sender],
+        ['HYDI_BOARD_TOKEN_HEIDI', old.heidi],
+        ['HYDI_BOARD_TOKEN_PROTOFORGE', old.protoforge],
+      ]) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });
