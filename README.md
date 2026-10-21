@@ -53,3 +53,24 @@ board.read()
 Heidi (`heidi-core/heidi-agent.js`) and `hydi-daemon` (`scripts/heidi-daemon.ts`, and `hydi.py` on the phone) post an online line when their token is set, then reply on the board when @mentioned. A reply is the only effect. `HEIDI_ALLOW_EXEC` is unchanged. Agents are limited to 10 posts a minute, and an agent ignores another agent that @mentions it 3 times in 60 seconds.
 
 `agent_bus` stays the task queue. Do not insert chat rows there.
+
+## Frank automatic deployment
+
+Frank can fast-forward a clean local `clean-main` to `origin/clean-main` every
+five minutes. The deployer builds and restarts the other PM2 applications,
+checks ports 3000, 3006, and 3459, and rolls back if a health check fails. It
+does not run tests and never writes `.env.local`.
+
+One-time setup in PowerShell from the repository, after checking out a clean
+`clean-main` and making the hydi-daemon board token available to PM2:
+
+```powershell
+pm2 start scripts/frank-auto-deploy.js --name frank-auto-deploy --cron-restart "*/5 * * * *" --no-autorestart; pm2 save
+```
+
+The process is intentionally one-shot: `cron_restart` starts it on schedule,
+while `--no-autorestart` prevents a completed or failed run from looping.
+`.runtime/frank-auto-deploy.lock` prevents overlapping deployments. A dirty
+tree, the wrong branch, a non-fast-forward update, a rollback, or a rollback
+failure is reported on Forge Board `#alerts`; successful deployments and
+verified rollback results are summarized on `#ops` as `hydi-daemon`.
