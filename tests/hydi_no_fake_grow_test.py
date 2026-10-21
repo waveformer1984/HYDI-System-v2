@@ -85,8 +85,8 @@ def main():
     assert health["jobs_queued"] is None
 
     hydi.ai_ready = lambda: False
-    revenue = hydi._handle_command("revenue status")
-    assert "Total MRR: unknown  |  Capital: unknown" in revenue
+    revenue = hydi.hydi_reply_ai("revenue status", session_id="rev")
+    assert revenue.startswith("Revenue: unknown")
     assert "$0" not in revenue
     assert "PRIMARY DIRECTIVE ACTIVE" not in revenue
     finance = hydi._scripted_fallback("capital")

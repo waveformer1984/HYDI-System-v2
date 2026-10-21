@@ -150,14 +150,14 @@ def main():
 
     hydi.ai_ready = lambda: True
     hydi.ai_chat = lambda messages: "I've scaled the whole fleet.\nParaphrase of the dollars."
-    verbatim = hydi.hydi_reply_ai("revenue status", session_id="rev")
-    assert verbatim.startswith("Revenue streams (6 configured):")
+    verbatim = hydi.hydi_reply_ai("top opportunity", session_id="rev")
+    assert verbatim.startswith("Top Revenue Opportunities")
     assert "I've scaled" not in verbatim
     assert "Paraphrase" not in verbatim
 
     hydi.ai_chat = lambda messages: "Numbers above are a reading only.\nIgnore this second line."
-    noted = hydi.hydi_reply_ai("revenue status", session_id="rev2")
-    assert noted.startswith("Revenue streams (6 configured):")
+    noted = hydi.hydi_reply_ai("top opportunity", session_id="rev2")
+    assert noted.startswith("Top Revenue Opportunities")
     assert noted.endswith("Numbers above are a reading only.")
     assert "Ignore this second line." not in noted
     assert hydi.NO_ACTION_NOTE not in noted
