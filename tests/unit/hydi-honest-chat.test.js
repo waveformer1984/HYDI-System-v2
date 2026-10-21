@@ -29,5 +29,7 @@ const html = fs.readFileSync(path.join(__dirname, '../../hydi-mobile-protoforge.
     expect(html).toContain('Autonomy ' + label);
     expect(html).not.toMatch(/set_autonomy/);
     expect(html).not.toMatch(/I'll operate/);
+    expect(html).toContain('Recorded on phone only — nothing executes from here.');
+    expect(html).not.toMatch(/\$\{cap\(decision\)\}d/);
   });
 });

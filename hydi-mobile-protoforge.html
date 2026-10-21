@@ -1878,17 +1878,9 @@ function renderApprovals() {
 function resolveApproval(idx, decision) {
   const item = STATE.approvals[idx];
   if (!item) return;
-
-  wsSend({ type: 'approval_response', approvalId: item.id, decision, timestamp: new Date().toISOString() });
-
-  STATE.approvals.splice(idx, 1);
-  STATE.pendingApprovals = Math.max(0, STATE.pendingApprovals - 1);
-  updateApproveBadge();
-  renderApprovals();
-
-  const emoji = { approve:'✅', reject:'🚫', defer:'⏸' }[decision];
-  toast(`${emoji} ${cap(decision)}d: ${item.title || 'request'}`, decision === 'approve' ? 'ok' : 'warn');
-  addEventEntry(`${cap(decision)}d: ${item.title || 'action request'}`, decision === 'approve' ? 'ok' : 'warn');
+  const note = 'Recorded on phone only — nothing executes from here.';
+  toast(note, 'warn');
+  addEventEntry(note, 'warn');
 }
 
 // ── AUTONOMY / GROW ──────────────────────────────────────

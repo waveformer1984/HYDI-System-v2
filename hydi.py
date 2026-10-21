@@ -543,6 +543,9 @@ def ai_chat(messages):
 
 AUTONOMY_LABEL = "(display only — no executor connected)"
 NO_ACTION_NOTE = "Note: no action was taken — Hydi can't execute from this chat."
+PHONE_ONLY = "Recorded on phone only — nothing executes from here."
+# Board posts filed by this process. Phone memory, not an approval queue.
+SESSION_REQUESTS = []
 _ACTION_CLAIM = re.compile(
     r"("
     r"\bi['’]ve\s+(?:done|identified|scaled|updated|optimized|executed|queued|started)\b"
@@ -563,7 +566,8 @@ def build_system_prompt():
         "Never say you did, scaled, reviewed, updated, queued, or started anything "
         "unless a command result in this turn proves it.\n"
         "When asked to act, say you cannot do that from this chat. "
-        "The real path is a REQUEST on Forge Board #ops for @Heidi, or an approval on Frank.\n"
+        "The real path is a REQUEST on Forge Board #ops for @Heidi. "
+        "Nothing executes from this phone.\n"
         "A few short lines. The numbers below are readings, not work you did.\n\n"
         f"Live fleet: {fleet_summary}\n"
         f"Streams: {active_streams}\n"
@@ -593,11 +597,11 @@ def _one_line_note(text):
     return line[:180].rstrip()
 
 def _is_action_ask(msg):
-    """User asked Hydi to act, or asked for proof of an action."""
-    text = (msg or "").strip()
-    if re.match(r"(?i)^do\b", text):
-        return True
-    return bool(re.search(r"(?i)give proof|proof of actions", text))
+    """User asked Hydi to act. Proof asks are a separate read."""
+    return bool(re.match(r"(?i)^do\b", (msg or "").strip()))
+
+def _is_proof_ask(msg):
+    return bool(re.search(r"(?i)give proof|proof of actions", msg or ""))
 
 def _load_board_sdk():
     board_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
@@ -606,52 +610,111 @@ def _load_board_sdk():
     import sdk as board
     return board
 
+def _ops_body(msg):
+    return "REQUEST @Heidi: " + (msg or "").strip()
+
 def _post_ops_request(msg):
     """Data-only REQUEST on Forge Board #ops. Does not execute the ask."""
-    body = "REQUEST @Heidi: " + (msg or "").strip()
     try:
         frank_resolve()
     except Exception:
         pass
     try:
         os.environ.setdefault("HYDI_BOARD_SENDER", "hydi-daemon")
-        return _load_board_sdk().post("ops", body)
+        return _load_board_sdk().post("ops", _ops_body(msg))
     except Exception:
         return {"ok": False, "error": "board unavailable"}
 
-def _queue_approval(msg, posted):
-    """A real pending approval the phone can list. Frank sees the board post."""
-    message = posted.get("message") if isinstance(posted, dict) else None
+def _board_fail_reason(posted):
+    if not isinstance(posted, dict):
+        return "board unavailable"
+    err = str(posted.get("error") or "").strip()
+    lowered = err.lower()
+    if any(word in lowered for word in ("token", "bearer", "secret", "key")):
+        return "board unavailable"
+    if err:
+        return err[:120]
+    if posted.get("ok") and not (isinstance(posted.get("message"), dict) and posted["message"].get("id")):
+        return "board returned no id"
+    return "board unavailable"
+
+def _remember_request(posted, body):
+    """Keep this process's filed board ids so proof can list them."""
+    if not isinstance(posted, dict) or not posted.get("ok"):
+        return None
+    message = posted.get("message")
     board_id = message.get("id") if isinstance(message, dict) else None
-    item = {
-        "id": f"req-{int(time.time() * 1000)}-{len(PF['approvals'])}",
-        "agent": "Heidi",
-        "title": ((msg or "").strip()[:160] or "phone request"),
-        "description": "Phone chat REQUEST for @Heidi on #ops. Not executed until Frank approves it.",
-        "priority": "high",
-        "meta": ["request", "ops"],
-        "board_message_id": board_id,
-    }
-    PF["approvals"].append(item)
+    if not board_id:
+        return None
+    item = {"id": board_id, "body": body, "channel": "ops"}
+    SESSION_REQUESTS.append(item)
     return item
 
-def _file_action_request(msg):
-    """Do the path the prompt names: post the request, queue the approval, cite both."""
-    posted = _post_ops_request(msg)
-    item = _queue_approval(msg, posted)
-    board_id = item.get("board_message_id") or "none"
-    return (
-        f"{_ops_request_line(posted)}\n"
-        f"Approval queued: {item['id']}.\n"
-        f"Proof: board={board_id} approval={item['id']}."
-    )
+def _filed_line(item, posted):
+    line = f"Request filed on #ops: {item['id']}. Not executed — needs a human on Frank."
+    if isinstance(posted, dict) and posted.get("offline"):
+        return line + "\nSaved on the phone copy until #ops syncs."
+    return line
 
-def _ops_request_line(result):
-    if isinstance(result, dict) and result.get("ok"):
-        if result.get("offline"):
-            return "Request saved on the phone copy of Forge Board #ops for @Heidi. Nothing was executed."
-        return "Request posted to Forge Board #ops for @Heidi. Nothing was executed."
-    return "Request was NOT posted to Forge Board #ops. Nothing was executed."
+def _file_action_request(msg):
+    """Post one #ops REQUEST. The board id is the only record."""
+    posted = _post_ops_request(msg)
+    item = _remember_request(posted, _ops_body(msg))
+    if item:
+        return _filed_line(item, posted)
+    return f"Request was NOT filed on #ops. Nothing was executed. {_board_fail_reason(posted)}"
+
+def _board_replies(messages, request_id):
+    if not isinstance(messages, list):
+        return None
+    replies = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("id") == request_id:
+            continue
+        sender = str(message.get("sender") or "")
+        sender_type = str(message.get("sender_type") or "")
+        body = str(message.get("body") or "")
+        from_actor = sender.lower() == "heidi" or sender_type == "human"
+        if message.get("reply_to") == request_id or (from_actor and request_id in body):
+            replies.append(message)
+    return replies
+
+def _proof_of_actions():
+    """List this session's filed requests and any Heidi or human reply. Does not post."""
+    if not SESSION_REQUESTS:
+        return "No requests filed this session."
+    try:
+        messages = _load_board_sdk().read(channel="ops")
+    except Exception:
+        messages = None
+    lines = []
+    for item in SESSION_REQUESTS:
+        lines.append(f"{item['id']} — {item.get('body') or 'REQUEST'}")
+        replies = None if messages is None else _board_replies(messages, item["id"])
+        if replies is None:
+            lines.append("  state: board state could not be read")
+        elif not replies:
+            lines.append("  state: no reply on #ops")
+        else:
+            for reply in replies:
+                who = reply.get("sender") or reply.get("sender_type") or "board"
+                body = " ".join(str(reply.get("body") or "").split())
+                lines.append(f"  {who}: {body}")
+    return "\n".join(lines)
+
+def file_grow(action):
+    """File a grow ask on #ops, or say why it was not filed. Does not bump counters."""
+    name = (action or "").strip()
+    if not name:
+        return {"queued": False, "reason": "no action"}
+    posted = _post_ops_request("grow " + name)
+    item = _remember_request(posted, _ops_body("grow " + name))
+    if item:
+        result = {"queued": True, "board_id": item["id"], "channel": "ops"}
+        if posted.get("offline"):
+            result["offline"] = True
+        return result
+    return {"queued": False, "reason": _board_fail_reason(posted)}
 
 def hydi_reply_ai(msg, session_id="default"):
     """Route message through Groq → Ollama → llama.cpp → scripted."""
@@ -659,10 +722,18 @@ def hydi_reply_ai(msg, session_id="default"):
     command = _handle_command(msg)
 
     if command is not None:
+        if command == PHONE_ONLY:
+            _remember(session_id, msg, command)
+            return command
         note = ""
         if ai_available:
             note = _one_line_note(_ai_aside(msg, session_id))
         reply = command if not note else command + "\n" + note
+        _remember(session_id, msg, reply)
+        return reply
+
+    if _is_proof_ask(msg):
+        reply = _proof_of_actions()
         _remember(session_id, msg, reply)
         return reply
 
@@ -790,14 +861,7 @@ def _handle_command(msg):
             return f"Agent '{name}' paused."
 
     if t.startswith("approve ") or t.startswith("reject ") or t.startswith("defer "):
-        parts = t.split()
-        decision, raw = parts[0], parts[1] if len(parts) > 1 else ""
-        if raw.isdigit():
-            idx = int(raw)
-            if 0 <= idx < len(PF["approvals"]):
-                item = PF["approvals"].pop(idx)
-                return f"{decision.capitalize()}d: {item.get('title', 'request')}."
-        return "Invalid index. Type 'approvals' to list pending items."
+        return PHONE_ONLY
 
     return None  # not a command
 
@@ -848,7 +912,10 @@ def _scripted_fallback(msg):
             f"  [{i}] {a.get('title','Action')} — {a.get('agent','')}"
             for i, a in enumerate(PF["approvals"])
         )
-        return f"{len(PF['approvals'])} pending:\n{lines}\nType 'approve 0' to act."
+        return (
+            f"{len(PF['approvals'])} pending:\n{lines}\n"
+            "Approving here records it on the phone only."
+        )
 
     if any(w in t for w in ("autonomy", "level")):
         return (
@@ -886,9 +953,10 @@ grow autonomy        display only — no executor connected
 grow evolution       CASCADE evolution cycle
 set autonomy <0-4>   display only — does not change the level
 autonomy             display only — no executor connected
-approvals            list pending approvals
-approve <n>          approve item n
-reject <n>           reject item n
+approvals            list phone-only items
+approve <n>          phone record only — nothing executes
+reject <n>           phone record only — nothing executes
+defer <n>            phone record only — nothing executes
 finance / capital    financial engine status
 help                 this list
 exit / quit          stop Hydi"""
@@ -1020,17 +1088,20 @@ class HydiHandler(BaseHTTPRequestHandler):
                         "status": PF["agents"].get(agent_id, "unknown")})
 
         elif p == "/api/protoforge/grow":
-            action = body.get("action", "")
-            PF["actions"] += 10
-            log_event(f"Grow: {action}", "ok")
-            self._json({"queued": action})
+            result = file_grow(body.get("action", ""))
+            if result.get("queued"):
+                log_event(f"Grow filed on #ops: {result.get('board_id')}", "ok")
+            else:
+                log_event(f"Grow not filed: {result.get('reason')}", "warn")
+            self._json(result)
 
         elif p == "/api/protoforge/approval":
-            aid      = body.get("approvalId", "")
-            decision = body.get("decision", "")
-            PF["approvals"] = [a for a in PF["approvals"] if a.get("id") != aid]
-            log_event(f"Approval {decision}: {aid}", "ok" if decision == "approve" else "warn")
-            self._json({"approvalId": aid, "decision": decision})
+            self._json({
+                "approvalId": body.get("approvalId", ""),
+                "decision": body.get("decision", ""),
+                "executed": False,
+                "response": PHONE_ONLY,
+            })
 
         elif p == "/api/ollama/reload":
             refresh_backends()
