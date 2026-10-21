@@ -20,12 +20,13 @@ import sys, os, re, time, json, threading, subprocess, socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen, Request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 # ── Thin-client config (termux/setup-thin-client.sh) ─────
 # KEY=VALUE lines from ~/.hydi/thin-client.env fill in env vars that are not
-# already set, so an explicit `export OLLAMA_URL=...` still wins. Holds only
-# non-secret settings (OLLAMA_URL, HYDI_UPSTREAM).
+# already set, so an explicit `export OLLAMA_URL=...` still wins. Holds
+# OLLAMA_URL, HYDI_UPSTREAM and, optionally, HYDI_PHONE_READ_TOKEN (read-only:
+# Frank accepts it only on GET /api/phone/revenue-summary). Keep it chmod 600.
 def _load_thin_client_env(path=os.path.expanduser("~/.hydi/thin-client.env")):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -610,9 +611,7 @@ def guard_unsupported_figures(text, source):
 
 # ── Read-only tools. They read; they never post, execute, or call Stripe. ──
 BOARD_TOOL_LIMIT = 5
-NO_REVENUE_SOURCE = (
-    "Frank has no livemode-only revenue summary the phone can read without a new token"
-)
+NO_REVENUE_SOURCE = "HYDI_PHONE_READ_TOKEN is not set in ~/.hydi/thin-client.env"
 NO_PR_SOURCE = "Frank has no read-only PR endpoint the phone can use"
 
 def tool_fleet():
@@ -646,10 +645,50 @@ def tool_board(channels=("ops", "general"), limit=BOARD_TOOL_LIMIT):
             out.append(f"  {ts} {m.get('sender') or '?'}: {body}".replace("   ", "  "))
     return "\n".join(out)
 
+def _frank_revenue(host, token):
+    """GET Frank's livemode-only summary. Returns (summary, None) or (None, reason)."""
+    req = Request(
+        f"http://{host}:3000/api/phone/revenue-summary",
+        headers={"Authorization": "Bearer " + token},
+    )
+    try:
+        with urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as err:
+        return None, f"Frank answered {err.code}"
+    except (URLError, OSError, ValueError):
+        return None, "Frank revenue summary unreachable"
+    summary = data.get("summary") if isinstance(data, dict) else None
+    if not isinstance(summary, dict) or summary.get("livemode_only") is not True:
+        return None, "Frank returned no livemode-only summary"
+    return summary, None
+
+def _format_revenue(summary):
+    totals = summary.get("totals") or {}
+    if not totals:
+        return f"Revenue (livemode only): no live payments recorded. Read {summary.get('generated_at')}."
+    lines = [f"Revenue (livemode only, {summary.get('events_counted', 0)} events):"]
+    for cur, t in sorted(totals.items()):
+        money = lambda c: f"{(c or 0) / 100:.2f}"  # noqa: E731
+        lines.append(
+            f"  {cur.upper()}: paid {money(t.get('paid_cents'))}, refunded {money(t.get('refunded_cents'))}, "
+            f"net {money(t.get('net_cents'))}"
+        )
+    lines.append(f"Last live event: {summary.get('last_live_event_at') or 'none'}. Read {summary.get('generated_at')}.")
+    return "\n".join(lines)
+
 def tool_revenue():
     hosts = frank_candidates()
     frank = frank_resolve() if hosts else None
-    reason = NO_REVENUE_SOURCE if frank else ("Frank not reachable" if hosts else "Frank not configured")
+    token = os.environ.get("HYDI_PHONE_READ_TOKEN", "").strip()
+    if frank and token:
+        summary, reason = _frank_revenue(frank, token)
+        if summary is not None:
+            return _format_revenue(summary) + "\nSource: Frank billing ledger. Nothing was read from Stripe."
+    elif frank:
+        reason = NO_REVENUE_SOURCE
+    else:
+        reason = "Frank not reachable" if hosts else "Frank not configured"
     return (
         f"Revenue: unknown ({reason}).\n"
         f"Streams configured: {', '.join(REVENUE_STREAMS)}\n"

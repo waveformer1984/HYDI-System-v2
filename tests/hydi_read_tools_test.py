@@ -9,6 +9,7 @@ sys.path.insert(0, ROOT)
 
 os.environ.setdefault("GROQ_API_KEY", "")
 os.environ.setdefault("OLLAMA_URL", "http://127.0.0.1:9")
+os.environ.pop("HYDI_PHONE_READ_TOKEN", None)
 
 import hydi  # noqa: E402
 
@@ -96,10 +97,42 @@ def main():
     hydi.frank_candidates = lambda: []
     assert hydi.tool_revenue().startswith("Revenue: unknown (Frank not configured).")
 
+    # with the read-only token, revenue comes from Frank's livemode-only summary
+    hydi.frank_candidates = lambda: ["192.168.86.178"]
+    hydi.frank_resolve = lambda force=False: "192.168.86.178"
+    os.environ["HYDI_PHONE_READ_TOKEN"] = "test-read-token"
+    seen = []
+    live = {"livemode_only": True, "events_counted": 2, "generated_at": "2026-10-21T18:00:00.000Z",
+            "last_live_event_at": "2026-10-21T17:00:00.000Z",
+            "totals": {"usd": {"paid_cents": 4900, "refunded_cents": 0, "net_cents": 4900, "events": 2}}}
+    hydi._frank_revenue = lambda host, token: seen.append(host) or (live, None)
+    read = hydi.tool_revenue()
+    assert seen == ["192.168.86.178"], seen
+    assert read.startswith("Revenue (livemode only, 2 events):"), read
+    assert "USD: paid 49.00, refunded 0.00, net 49.00" in read, read
+    assert "test-read-token" not in read
+    hydi._frank_revenue = lambda host, token: (None, "Frank answered 401")
+    assert hydi.tool_revenue().startswith("Revenue: unknown (Frank answered 401).")
+    del os.environ["HYDI_PHONE_READ_TOKEN"]
+
     # prs -> explicitly unavailable, model cannot invent titles
     reply_text["value"] = "PR #999 adds payments."
     prs = hydi.hydi_reply_ai("open PRs?", session_id="p")
     assert prs == "Open PRs: not available (" + hydi.NO_PR_SOURCE + ").", prs
+
+    # give proof shows the #ops responder's threaded replies on Frank
+    BOARD["ops"] = [
+        {"id": "r1", "ts": "", "sender": "hydi-daemon", "sender_type": "agent", "body": "REQUEST @Heidi: restart heidi-web", "reply_to": None},
+        {"id": "r2", "ts": "", "sender": "Heidi", "sender_type": "agent", "reply_to": "r1",
+         "body": "Approval filed: abc123 (execution-fabric, needs fabric:control). Not run — waiting for Jordan."},
+        {"id": "r3", "ts": "", "sender": "Heidi", "sender_type": "agent", "reply_to": "r1",
+         "body": "Approval abc123 was rejected. Nothing was run."},
+    ]
+    hydi.SESSION_REQUESTS[:] = [{"id": "r1", "body": "REQUEST @Heidi: restart heidi-web"}]
+    proof = hydi._proof_of_actions()
+    assert "Heidi: Approval filed: abc123" in proof and "waiting for Jordan" in proof, proof
+    assert "Heidi: Approval abc123 was rejected. Nothing was run." in proof, proof
+    hydi.SESSION_REQUESTS[:] = []
 
     # tools never write
     assert posts == [], posts

@@ -677,7 +677,12 @@ class HeidiAgent {
     console.log('[HEIDI-AGENT] Event loops active');
 
     try {
-      require('../lib/forge-board/listener').startBoardListener({ sender: 'Heidi' });
+      const opsResponder = require('../lib/heidi/ops-responder').createOpsResponder();
+      require('../lib/forge-board/listener').startBoardListener({
+        sender: 'Heidi',
+        skip: opsResponder.handles,
+        onMessages: (all) => opsResponder.tick(all),
+      });
     } catch (error) {
       console.error('[HEIDI-AGENT] board listener skipped:', error.message);
     }

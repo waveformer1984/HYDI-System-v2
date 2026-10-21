@@ -99,6 +99,26 @@ describe('forge board safety', () => {
     expect(store).not.toMatch(/subprocess|stripe|agent_bus/);
     expect(listener).toMatch(/Replies are the only effect/);
   });
+
+  it('hands every read to onMessages and skips what that handler owns', async () => {
+    const sdk = require('../../lib/forge-board/sdk');
+    const { respondToMentions } = require('../../lib/forge-board/listener');
+    const request = { id: 'q1', ts: '2026-10-21T12:00:00Z', sender: 'jordan', sender_type: 'human', channel: 'ops', body: 'REQUEST @Heidi: disk', mentions: ['Heidi'] };
+    const read = jest.spyOn(sdk, 'read').mockImplementation(async (since, channel) => (channel === 'ops' ? [request] : []));
+    const post = jest.spyOn(sdk, 'post').mockResolvedValue({ ok: true });
+    const seenByHandler = [];
+    const ctx = { sender: 'Heidi', seen: new Set(), ready: true, skip: (m) => m.id === 'q1', onMessages: (all) => seenByHandler.push(...all) };
+    try {
+      const replies = await respondToMentions(ctx);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(replies).toEqual([]);
+      expect(post).not.toHaveBeenCalled();
+      expect(seenByHandler.map((m) => m.id)).toEqual(['q1']);
+    } finally {
+      read.mockRestore();
+      post.mockRestore();
+    }
+  });
 });
 
 const describeStore = hasPython() ? describe : describe.skip;
