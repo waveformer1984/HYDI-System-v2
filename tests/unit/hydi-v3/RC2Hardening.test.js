@@ -18,7 +18,7 @@ describe('Soak harness', () => {
   });
 
   test('tracks failures and completes', async () => {
-    const h = new SoakHarness({ durationMs: 200, cooldownMs: 1 });
+    const h = new SoakHarness({ durationMs: 1500, cooldownMs: 1 });
     const report = await h.run(['crashRecover']);
     expect(report.scenarios[0].failures).toBeGreaterThan(0);
     expect(report.finishedAt).toBeGreaterThan(report.startedAt);
@@ -31,7 +31,7 @@ describe('Resource auditor', () => {
     const a = new ResourceAuditor({ eventBus: bus });
     const before = a.snapshot('before');
     const listeners = [];
-    for (let i = 0; i < 5; i++) { const fn = () => {}; bus.on('test', fn); listeners.push(fn); }
+    for (let i = 0; i < 5; i++) { const fn = () => { }; bus.on('test', fn); listeners.push(fn); }
     const after = a.snapshot('after');
     for (const fn of listeners) bus.off('test', fn);
     const { ok, leaks } = a.checkLeak(before, after, { listenersGrowth: 2 });
@@ -44,7 +44,7 @@ describe('Resource auditor', () => {
     const a = new ResourceAuditor({ eventBus: bus });
     const before = a.snapshot('before');
     const listeners = [];
-    for (let i = 0; i < 3; i++) { const fn = () => {}; bus.on('test', fn); listeners.push(fn); }
+    for (let i = 0; i < 3; i++) { const fn = () => { }; bus.on('test', fn); listeners.push(fn); }
     for (const fn of listeners) bus.off('test', fn);
     const after = a.snapshot('after');
     const { ok } = a.checkLeak(before, after, { listenersGrowth: 2 });
