@@ -203,6 +203,65 @@ elif [ -z "$OPEN_PORT" ]; then
 fi
 
 say ""
+say "== frank hosts"
+# FRANK_HOSTS (comma list) or FRANK_IP, from the environment first, then
+# ~/.hydi/thin-client.env — same source hydi.py reads.
+env_value() {
+  key=$1
+  file=$2
+  eval "v=\${$key:-}"
+  if [ -n "$v" ]; then
+    printf '%s\n' "$v"
+    return 0
+  fi
+  [ -f "$file" ] || return 0
+  sed -n "s/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}${key}=//p" "$file" |
+    tail -n 1 | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//'
+}
+THIN_ENV="$HOME/.hydi/thin-client.env"
+FRANK_LINE=$(env_value FRANK_HOSTS "$THIN_ENV")
+[ -z "$FRANK_LINE" ] && FRANK_LINE=$(env_value FRANK_IP "$THIN_ENV")
+FRANK_TRIED=0
+FRANK_ANY=0
+FRANK_PICK=""
+if [ -z "$FRANK_LINE" ]; then
+  say "no FRANK_HOSTS or FRANK_IP configured"
+elif ! command -v curl >/dev/null 2>&1; then
+  say "curl missing; hosts were not probed"
+else
+  FRANK_TRIED=1
+  for host in $(printf '%s' "$FRANK_LINE" | tr ',' ' '); do
+    host=$(printf '%s' "$host" | sed 's|^https\{0,1\}://||;s|/.*||;s|:[0-9]*$||')
+    [ -n "$host" ] || continue
+    ocode=$(curl -sS -o /dev/null -m 2 -w '%{http_code}' "http://$host:11434/api/tags" 2>/dev/null || true)
+    [ -n "$ocode" ] || ocode=000
+    bcode=$(curl -sS -o /dev/null -m 2 -w '%{http_code}' "http://$host:3000/api/ping" 2>/dev/null || true)
+    [ -n "$bcode" ] || bcode=000
+    if [ "$bcode" = "000" ]; then
+      bcode=$(curl -sS -o /dev/null -m 2 -w '%{http_code}' "http://$host:3000/api/board?channel=general" 2>/dev/null || true)
+      [ -n "$bcode" ] || bcode=000
+    fi
+    say "frank $host: ollama :11434 ${ocode} / board :3000 ${bcode}"
+    if [ "$ocode" != "000" ] || [ "$bcode" != "000" ]; then
+      FRANK_ANY=1
+      [ -z "$FRANK_PICK" ] && FRANK_PICK=$host
+    fi
+  done
+  if [ "$FRANK_ANY" = 1 ]; then
+    # hydi.py serves /api/models on its chat port; its frank_host field is the
+    # host it actually resolved. Fall back to first-reachable when it is down.
+    FRANK_USING=""
+    if [ -n "$OPEN_PORT" ]; then
+      FRANK_USING=$(curl -sS -m 3 "http://127.0.0.1:${OPEN_PORT}/api/models" 2>/dev/null |
+        sed -n 's/.*"frank_host": *"\([^"]*\)".*/\1/p')
+    fi
+    say "hydi.py using: ${FRANK_USING:-$FRANK_PICK}"
+  else
+    say "hydi.py using: none reachable (offline copy)"
+  fi
+fi
+
+say ""
 say "== logs (last 20 lines)"
 LOGROOT="${PREFIX:-/data/data/com.termux/files/usr}/var/log/sv"
 log_path() {
@@ -383,6 +442,8 @@ if [ "$OOM" = 1 ] && [ "$HYDI_STATE" = "crash" ]; then
   say "NEXT STEP: possible OOM — free RAM is smaller than the model file; see log above"
 elif [ "$HYDI_STATE" = "crash" ] || [ "$DAEMON_STATE" = "crash" ]; then
   say "NEXT STEP: service crash-looping, see log above"
+elif [ "$FRANK_TRIED" = 1 ] && [ "$FRANK_ANY" = 0 ]; then
+  say "NEXT STEP: join home Wi-Fi or turn on Tailscale"
 elif [ -n "$OPEN_PORT" ]; then
   say "NEXT STEP: open http://127.0.0.1:${OPEN_PORT} in Chrome"
 elif ! command -v curl >/dev/null 2>&1; then

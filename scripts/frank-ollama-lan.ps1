@@ -1,7 +1,12 @@
 # Run on Frank (Windows) in an elevated PowerShell.
 # Listens for Ollama on the LAN, only from the local subnet, and pulls qwen2.5:3b.
 # Idempotent. Does not open TCP 11434 on Public networks.
+# -Tailscale additionally allows TCP 11434 and 3000 inbound only from the
+# Tailscale CGNAT range (100.64.0.0/10), so the phone can reach Frank off-LAN.
 #Requires -RunAsAdministrator
+param(
+    [switch]$Tailscale
+)
 $ErrorActionPreference = 'Stop'
 
 $listen = '0.0.0.0:11434'
@@ -25,6 +30,29 @@ New-NetFirewallRule `
     -LocalPort 11434 `
     -RemoteAddress LocalSubnet | Out-Null
 Write-Output "Firewall rule $ruleName allows TCP 11434 from LocalSubnet on Domain and Private profiles only."
+
+if ($Tailscale) {
+    $tailscaleRules = @(
+        @{ Name = 'HYDI-Ollama-Tailscale-11434'; Port = 11434; Display = 'Ollama TCP 11434 (Tailscale 100.64.0.0/10 only)' },
+        @{ Name = 'HYDI-Board-Tailscale-3000'; Port = 3000; Display = 'HYDI board TCP 3000 (Tailscale 100.64.0.0/10 only)' }
+    )
+    foreach ($tsRule in $tailscaleRules) {
+        if (Get-NetFirewallRule -Name $tsRule.Name -ErrorAction SilentlyContinue) {
+            Remove-NetFirewallRule -Name $tsRule.Name
+        }
+        New-NetFirewallRule `
+            -Name $tsRule.Name `
+            -DisplayName $tsRule.Display `
+            -Direction Inbound `
+            -Action Allow `
+            -Enabled True `
+            -Profile Any `
+            -Protocol TCP `
+            -LocalPort $tsRule.Port `
+            -RemoteAddress '100.64.0.0/10' | Out-Null
+        Write-Output "Firewall rule $($tsRule.Name) allows TCP $($tsRule.Port) from 100.64.0.0/10 only."
+    }
+}
 
 $candidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),

@@ -163,8 +163,108 @@ PREFERRED_MODELS = [
 # that host is tuned for; small local models stay the fallback order.
 REMOTE_PREFERRED_MODELS = ["qwen2.5:3b-instruct", "qwen2.5"]
 
+# ── Frank host resolution (multi-link thin client) ───────
+# FRANK_HOSTS is a comma list like "192.168.86.178,100.118.182.126" so the
+# phone can follow Frank from home Wi-Fi to Tailscale on cellular. Each host
+# is probed for Ollama (:11434/api/tags) and the board (:3000, /api/ping or
+# GET /api/board) with a 2s timeout; the first winner is cached 60s and
+# re-probed on failure. FRANK_IP alone acts as a one-entry list. When neither
+# is set, OLLAMA_URL and HYDI_BOARD_UPSTREAM keep working exactly as before.
+FRANK_CACHE_TTL = 60.0      # positive cache
+FRANK_MISS_TTL = 10.0       # how long "no host" is cached before re-probing
+FRANK_PROBE_TIMEOUT = 2
+_FRANK = {"host": None, "ts": 0.0, "logged": "unset"}
+
+def frank_candidates():
+    """Ordered Frank hostnames/IPs from FRANK_HOSTS, falling back to FRANK_IP."""
+    raw = os.environ.get("FRANK_HOSTS", "") or os.environ.get("FRANK_IP", "")
+    hosts = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        host = urlparse("http://" + part).hostname
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
+
+def _probe(url):
+    try:
+        with urlopen(url, timeout=FRANK_PROBE_TIMEOUT) as r:
+            return r.status < 500
+    except Exception:
+        return False
+
+def _frank_probe(host):
+    """Reachability snapshot for one candidate."""
+    ollama = _probe(f"http://{host}:11434/api/tags")
+    board = _probe(f"http://{host}:3000/api/ping") or \
+        _probe(f"http://{host}:3000/api/board?channel=general")
+    return {"host": host, "ollama": ollama, "board": board}
+
+def frank_link_label(host):
+    """UI label for the active link."""
+    if not host:
+        return "Offline copy"
+    parts = host.split(".")
+    try:
+        octets = [int(p) for p in parts]
+    except ValueError:
+        octets = []
+    if len(octets) == 4:
+        if octets[0] == 100 and 64 <= octets[1] <= 127:
+            return "Frank via Tailscale"
+        if octets[0] == 10 or (octets[0] == 192 and octets[1] == 168) or \
+                (octets[0] == 172 and 16 <= octets[1] <= 31):
+            return "Frank via Wi-Fi"
+    if host.endswith(".ts.net"):
+        return "Frank via Tailscale"
+    return f"Frank via {host}"
+
+def frank_resolve(force=False):
+    """Pick the first reachable Frank host; cache the result and log changes."""
+    if not frank_candidates():
+        return None
+    now = time.time()
+    cached, age = _FRANK["host"], now - _FRANK["ts"]
+    if not force and age < (FRANK_CACHE_TTL if cached else FRANK_MISS_TTL):
+        return cached
+    winner, partial = None, None
+    for host in frank_candidates():
+        probe = _frank_probe(host)
+        if probe["ollama"] and probe["board"]:
+            winner = host
+            break
+        if (probe["ollama"] or probe["board"]) and partial is None:
+            partial = host
+    _FRANK["host"], _FRANK["ts"] = winner or partial, now
+    if _FRANK["host"] != _FRANK["logged"]:
+        _FRANK["logged"] = _FRANK["host"]
+        if _FRANK["host"]:
+            note = f"hydi: Frank host -> {_FRANK['host']} ({frank_link_label(_FRANK['host'])})"
+        else:
+            note = "hydi: no Frank host reachable — offline copy"
+        print(note)
+        log_event(note, "ok" if _FRANK["host"] else "warn")
+    if _FRANK["host"]:
+        os.environ["HYDI_BOARD_UPSTREAM"] = f"http://{_FRANK['host']}:3000"
+    return _FRANK["host"]
+
+def _frank_note_failure():
+    """Drop the cached host so the next call re-probes."""
+    _FRANK["ts"] = 0.0
+
+def frank_link():
+    return frank_link_label(frank_resolve())
+
+def ollama_base():
+    host = frank_resolve()
+    if host:
+        return f"http://{host}:11434"
+    return OLLAMA_URL
+
 def ollama_is_remote(url=None):
-    host = (urlparse(url or OLLAMA_URL).hostname or "").lower()
+    host = (urlparse(url or ollama_base()).hostname or "").lower()
     return host not in ("localhost", "127.0.0.1", "::1", "")
 
 def detect_ollama():
@@ -172,7 +272,7 @@ def detect_ollama():
     global OLLAMA_MODEL
     remote = ollama_is_remote()
     try:
-        with urlopen(f"{OLLAMA_URL}/api/tags", timeout=8 if remote else 3) as r:
+        with urlopen(f"{ollama_base()}/api/tags", timeout=8 if remote else 3) as r:
             data = json.loads(r.read())
         models = [m["name"] for m in data.get("models", [])]
         if not models:
@@ -186,6 +286,7 @@ def detect_ollama():
         OLLAMA_MODEL = models[0]
         return OLLAMA_MODEL
     except Exception:
+        _frank_note_failure()
         return None
 
 def ollama_chat(messages):
@@ -199,7 +300,7 @@ def ollama_chat(messages):
         "options": {"temperature": 0.7, "num_predict": 512},
     }).encode()
     req = Request(
-        f"{OLLAMA_URL}/api/chat",
+        f"{ollama_base()}/api/chat",
         data=payload,
         headers={"Content-Type": "application/json"},
     )
@@ -208,6 +309,7 @@ def ollama_chat(messages):
             result = json.loads(r.read())
         return result.get("message", {}).get("content", "").strip()
     except Exception:
+        _frank_note_failure()
         return None
 
 # ── llama.cpp server (termux service "hydi", port 8080) ──
@@ -286,6 +388,8 @@ def models_payload():
         "groq_online": GROQ_MODEL is not None,
         "ollama_online": OLLAMA_MODEL is not None,
         "llama_online": LLAMA_MODEL is not None,
+        "frank_host": frank_resolve(),
+        "frank_link": frank_link(),
         "mode": "ai" if ai_ready() else "scripted",
     }
 
@@ -772,6 +876,7 @@ class HydiHandler(BaseHTTPRequestHandler):
         board_dir = self._board_dir()
         if board_dir not in sys.path:
             sys.path.insert(0, board_dir)
+        frank_resolve()  # refresh HYDI_BOARD_UPSTREAM for the store
         import store
         if method == "POST":
             try:
@@ -789,6 +894,9 @@ class HydiHandler(BaseHTTPRequestHandler):
             "authorization": self.headers.get("Authorization", ""),
             "client_ip": self.client_address[0],
         })
+        if result.get("offline"):
+            _frank_note_failure()  # upstream may have moved links; re-probe next call
+        result["link"] = frank_link() if frank_candidates() else None
         status = int(result.pop("status", 200))
         self._board_json(status, result)
 
@@ -1010,7 +1118,7 @@ def start_server(port=3006, host="0.0.0.0"):
     if GROQ_MODEL:
         print(f"  🤖 Groq AI : {GROQ_MODEL}  (cloud, fast)")
     elif OLLAMA_MODEL:
-        where = ("remote: " + OLLAMA_URL) if ollama_is_remote() else "local"
+        where = ("remote: " + ollama_base()) if ollama_is_remote() else "local"
         print(f"  🤖 Ollama  : {OLLAMA_MODEL}  ({where})")
     elif LLAMA_MODEL:
         print(f"  🤖 llama.cpp : {LLAMA_MODEL}  ({LLAMA_URL})")
@@ -1053,6 +1161,8 @@ def start_server(port=3006, host="0.0.0.0"):
             os.environ.setdefault("HYDI_BOARD_SENDER", "hydi-daemon")
             import sdk as board
             board.post("general", "hydi-daemon online")
+            import store
+            store.start_outbox_sync()
         except Exception:
             pass
     threading.Thread(target=_board_online, daemon=True).start()

@@ -209,7 +209,16 @@
           showBanner(payload.error || 'Could not load the board.');
           return;
         }
-        showBanner(payload.offline ? 'Offline copy. New notes stay on this device until the shared board is back.' : '');
+        let status = payload.link || '';
+        if (payload.offline) {
+          status = status === 'Offline copy' || !status
+            ? 'Offline copy. New notes stay on this device until the shared board is back.'
+            : status + ' — offline copy';
+        }
+        if (payload.pending) {
+          status += (status ? ' · ' : '') + payload.pending + (payload.pending === 1 ? ' note' : ' notes') + ' waiting to sync';
+        }
+        showBanner(status);
         draw(payload.messages || []);
       } catch (error) {
         showBanner('Board unreachable.');
