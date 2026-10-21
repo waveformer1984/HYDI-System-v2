@@ -592,8 +592,12 @@ def _one_line_note(text):
         return ""
     return line[:180].rstrip()
 
-def _is_do_request(msg):
-    return bool(re.match(r"(?i)^do\b", (msg or "").strip()))
+def _is_action_ask(msg):
+    """User asked Hydi to act, or asked for proof of an action."""
+    text = (msg or "").strip()
+    if re.match(r"(?i)^do\b", text):
+        return True
+    return bool(re.search(r"(?i)give proof|proof of actions", text))
 
 def _load_board_sdk():
     board_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "forge-board")
@@ -606,10 +610,41 @@ def _post_ops_request(msg):
     """Data-only REQUEST on Forge Board #ops. Does not execute the ask."""
     body = "REQUEST @Heidi: " + (msg or "").strip()
     try:
+        frank_resolve()
+    except Exception:
+        pass
+    try:
         os.environ.setdefault("HYDI_BOARD_SENDER", "hydi-daemon")
         return _load_board_sdk().post("ops", body)
     except Exception:
         return {"ok": False, "error": "board unavailable"}
+
+def _queue_approval(msg, posted):
+    """A real pending approval the phone can list. Frank sees the board post."""
+    message = posted.get("message") if isinstance(posted, dict) else None
+    board_id = message.get("id") if isinstance(message, dict) else None
+    item = {
+        "id": f"req-{int(time.time() * 1000)}-{len(PF['approvals'])}",
+        "agent": "Heidi",
+        "title": ((msg or "").strip()[:160] or "phone request"),
+        "description": "Phone chat REQUEST for @Heidi on #ops. Not executed until Frank approves it.",
+        "priority": "high",
+        "meta": ["request", "ops"],
+        "board_message_id": board_id,
+    }
+    PF["approvals"].append(item)
+    return item
+
+def _file_action_request(msg):
+    """Do the path the prompt names: post the request, queue the approval, cite both."""
+    posted = _post_ops_request(msg)
+    item = _queue_approval(msg, posted)
+    board_id = item.get("board_message_id") or "none"
+    return (
+        f"{_ops_request_line(posted)}\n"
+        f"Approval queued: {item['id']}.\n"
+        f"Proof: board={board_id} approval={item['id']}."
+    )
 
 def _ops_request_line(result):
     if isinstance(result, dict) and result.get("ok"):
@@ -631,8 +666,8 @@ def hydi_reply_ai(msg, session_id="default"):
         _remember(session_id, msg, reply)
         return reply
 
-    if _is_do_request(msg):
-        reply = _ops_request_line(_post_ops_request(msg))
+    if _is_action_ask(msg):
+        reply = _file_action_request(msg)
         _remember(session_id, msg, reply)
         return reply
 

@@ -39,14 +39,6 @@ def main():
         assert guarded.endswith(hydi.NO_ACTION_NOTE), guarded
         assert hydi.guard_unproven_reply(invented, True) == invented
 
-    hydi.ai_ready = lambda: True
-    hydi.CHAT_HISTORY.clear()
-    hydi.ai_chat = lambda messages: TRANSCRIPT[-1][1]
-    proof = hydi.hydi_reply_ai("Give proof of actions", session_id="proof")
-    assert TRANSCRIPT[-1][1] in proof
-    assert proof.endswith(hydi.NO_ACTION_NOTE)
-    assert "I've " not in proof.split(hydi.NO_ACTION_NOTE)[0] or "proof" in proof
-
     calls = []
 
     def fake_post(channel, body, reply_to=None):
@@ -57,16 +49,39 @@ def main():
     sys.path.insert(0, board_dir)
     import sdk
     sdk.post = fake_post
+
+    hydi.ai_ready = lambda: True
+    hydi.ai_chat = lambda messages: TRANSCRIPT[-1][1]
     hydi.CHAT_HISTORY.clear()
+    hydi.PF["approvals"] = []
+    proof = hydi.hydi_reply_ai("Give proof of actions", session_id="proof")
+    assert calls == [("ops", "REQUEST @Heidi: Give proof of actions", None)], calls
+    assert "Request posted to Forge Board #ops for @Heidi." in proof
+    assert "Approval queued:" in proof
+    assert "Proof: board=m1 approval=" in proof
+    assert proof.split("approval=", 1)[1].strip().rstrip(".") == hydi.PF["approvals"][-1]["id"]
+    assert TRANSCRIPT[-1][1] not in proof
+    assert "I've " not in proof
+
+    calls.clear()
+    hydi.PF["approvals"] = []
     posted = hydi.hydi_reply_ai("Do it", session_id="do-it")
     assert calls == [("ops", "REQUEST @Heidi: Do it", None)], calls
-    assert posted == "Request posted to Forge Board #ops for @Heidi. Nothing was executed."
+    assert "Request posted to Forge Board #ops for @Heidi." in posted
+    assert "Approval queued:" in posted
+    assert "Proof: board=m1 approval=" in posted
+    assert hydi.PF["approvals"][-1]["title"] == "Do it"
+    assert hydi.PF["approvals"][-1]["agent"] == "Heidi"
     assert "I've done" not in posted
 
     sdk.post = lambda channel, body, reply_to=None: {"ok": False, "skipped": True}
+    hydi.PF["approvals"] = []
     missed = hydi.hydi_reply_ai("do check the fleet", session_id="do-miss")
     assert missed.startswith("Request was NOT posted")
     assert "Nothing was executed." in missed
+    assert "Approval queued:" in missed
+    assert "Proof: board=none approval=" in missed
+    assert hydi.PF["approvals"][-1]["title"] == "do check the fleet"
 
     before = hydi.PF["autonomy_level"]
     hydi.ai_ready = lambda: False
