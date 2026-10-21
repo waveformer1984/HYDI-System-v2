@@ -1138,10 +1138,9 @@
     <div class="panel" id="panel-agents">
       <div class="card" style="padding:12px 14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-          <span style="font-size:12px;color:var(--txt2);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">15 Agents</span>
+          <span id="fleetCount" style="font-size:12px;color:var(--txt2);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">Live fleet</span>
           <div style="display:flex;gap:6px">
-            <button class="agent-btn" style="padding:6px 12px;border-radius:8px;flex:none" onclick="agentBroadcast('start')">▶ All</button>
-            <button class="agent-btn" style="padding:6px 12px;border-radius:8px;flex:none" onclick="agentBroadcast('pause')">⏸ All</button>
+            <button class="agent-btn" style="padding:6px 12px;border-radius:8px;flex:none" onclick="refreshFleet()">⟳ Refresh</button>
           </div>
         </div>
       </div>
@@ -1440,25 +1439,6 @@ const STATE = {
   pendingApprovals: 0,
 };
 
-// ── AGENTS DATA ──────────────────────────────────────────
-const AGENT_DEFS = [
-  { id:'architect',   icon:'🏗️', name:'Architect',     role:'System design & planning',         color:'#64ffda', status:'running' },
-  { id:'engineer',    icon:'⚙️', name:'Engineer',      role:'Core build & implementation',      color:'#7c6aff', status:'running' },
-  { id:'finance',     icon:'💰', name:'FinanceAI',     role:'Capital & revenue management',     color:'#10b981', status:'running' },
-  { id:'legal',       icon:'⚖️', name:'LegalGuard',   role:'Compliance & risk boundaries',     color:'#f59e0b', status:'idle' },
-  { id:'marketing',   icon:'📣', name:'MarketForge',  role:'Outreach & growth campaigns',      color:'#ef4444', status:'idle' },
-  { id:'ops',         icon:'🔧', name:'OpsCore',       role:'Infrastructure & deployment',      color:'#3b82f6', status:'running' },
-  { id:'analytics',   icon:'📊', name:'DataMind',      role:'Metrics, KPIs, trend analysis',   color:'#a78bfa', status:'running' },
-  { id:'cascade',     icon:'⚡', name:'CASCADE',       role:'Event processing & routing',       color:'#f97316', status:'running' },
-  { id:'heidi',       icon:'🧠', name:'Heidi',         role:'Contextual conscience & decisions',color:'#06b6d4', status:'running' },
-  { id:'ursula',      icon:'🔮', name:'Ursula',        role:'Event stream intelligence',        color:'#8b5cf6', status:'idle' },
-  { id:'security',    icon:'🔐', name:'SecureOps',     role:'Auth, audit & threat detection',   color:'#ef4444', status:'running' },
-  { id:'realtime',    icon:'📡', name:'RealtimeIO',   role:'WebSocket & live data feeds',      color:'#10b981', status:'running' },
-  { id:'outreach',    icon:'🤝', name:'OutreachAI',   role:'Client acquisition & CRM',         color:'#ec4899', status:'idle' },
-  { id:'memory',      icon:'💾', name:'MemoryLayer',  role:'Long-term context & recall',       color:'#84cc16', status:'idle' },
-  { id:'executive',   icon:'👔', name:'Executive',    role:'High-level orchestration & KPIs',  color:'#fbbf24', status:'running' },
-];
-
 const AUTONOMY_DEFS = [
   { level:0, icon:'👁',  name:'OBSERVE',               desc:'Agents collect data only — no actions taken' },
   { level:1, icon:'💡',  name:'ASSIST',                desc:'Agents recommend actions for your review' },
@@ -1473,7 +1453,6 @@ window.addEventListener('DOMContentLoaded', () => {
   renderSparkbars();
   connectWS();
   pollHealth();
-  scheduleMockEvents();
   initOps();
 
   // PWA service worker
@@ -1779,11 +1758,22 @@ function buildOfflineReply(text) {
   return notSent + ' No message was delivered.';
 }
 
-// ── AGENTS ───────────────────────────────────────────────
-function renderAgents() {
-  STATE.agents = AGENT_DEFS.map(a => ({...a}));
-  const grid = document.getElementById('agentGrid');
-  grid.innerHTML = STATE.agents.map(renderAgentCard).join('');
+// ── AGENTS (live fleet from /api/fleet) ──────────────────
+async function renderAgents() { await refreshFleet(); }
+
+async function refreshFleet() {
+  try {
+    const res = await fetch(CFG.apiBase + '/api/fleet', { cache: 'no-store' });
+    const data = await res.json();
+    STATE.agents = (data.items || []).map(a => ({...a, color: 'var(--accent)'}));
+    const up = STATE.agents.filter(a => a.status === 'running').length;
+    const el = document.getElementById('fleetCount');
+    if (el) el.textContent = up + '/' + STATE.agents.length + ' running';
+  } catch {
+    STATE.agents = [{ id:'offline', icon:'📡', name:'hydi.py', role:'Dashboard server',
+      status:'error', detail:'unreachable — is the hydi service up?', fleet:true }];
+  }
+  document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
 }
 
 function renderAgentCard(a) {
@@ -1793,37 +1783,13 @@ function renderAgentCard(a) {
     <div class="agent-card ${a.status==='running'?'running':''}" data-agent="${a.id}"
          style="--agent-color:${a.color}" onclick="openAgentSheet('${a.id}')">
       <div class="agent-icon">${a.icon}</div>
-      <div class="agent-name">${a.name}</div>
-      <div class="agent-role">${a.role}</div>
+      <div class="agent-name">${escHtml(a.name)}</div>
+      <div class="agent-role">${escHtml(a.role)}</div>
       <div class="agent-status-row">
         <span class="agent-status-pill ${pill}">${label}</span>
       </div>
-      <div class="agent-actions-row">
-        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','start')">▶</button>
-        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','pause')">⏸</button>
-        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','restart')">↺</button>
-      </div>
+      <div class="agent-role" style="color:var(--txt2)">${escHtml(a.detail || '')}</div>
     </div>`;
-}
-
-function agentCmd(e, id, cmd) {
-  e.stopPropagation();
-  wsSend({ type: 'agent_command', agentId: id, command: cmd });
-  const idx = STATE.agents.findIndex(a => a.id === id);
-  if (idx >= 0) {
-    STATE.agents[idx].status = cmd === 'pause' ? 'paused' : 'running';
-    document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
-  }
-  toast(`${cap(cmd)} → ${id}`, cmd === 'pause' ? 'warn' : 'ok');
-}
-
-function agentBroadcast(cmd) {
-  STATE.agents.forEach(a => {
-    a.status = cmd === 'pause' ? 'paused' : 'running';
-    wsSend({ type: 'agent_command', agentId: a.id, command: cmd });
-  });
-  document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
-  toast(`${cap(cmd)} all agents`, cmd === 'pause' ? 'warn' : 'ok');
 }
 
 function updateAgentStatus(id, status) {
@@ -1835,28 +1801,22 @@ function updateAgentStatus(id, status) {
 }
 
 function refreshAgentStatus() {
-  wsSend({ type: 'request', resource: 'agent_status' });
+  refreshFleet();
 }
 
 function openAgentSheet(id) {
   const a = STATE.agents.find(x => x.id === id);
   if (!a) return;
-  openSheet(a.name + ' ' + a.icon, `
-    <div style="margin-bottom:10px;font-size:13px;color:var(--txt1)">${a.role}</div>
+  openSheet(escHtml(a.name) + ' ' + a.icon, `
+    <div style="margin-bottom:10px;font-size:13px;color:var(--txt1)">${escHtml(a.role)}</div>
     <div class="agent-detail-metrics">
       <div class="detail-metric"><div class="detail-metric-label">Status</div>
         <div class="detail-metric-value">${cap(a.status)}</div></div>
+      <div class="detail-metric"><div class="detail-metric-label">Detail</div>
+        <div class="detail-metric-value" style="font-size:13px">${escHtml(a.detail || '—')}</div></div>
       <div class="detail-metric"><div class="detail-metric-label">Autonomy</div>
         <div class="detail-metric-value">L${STATE.autonomyLevel}</div></div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="approve-btn btn-approve" style="flex:1"
-              onclick="agentCmd({stopPropagation:()=>{}},'${id}','start');closeOverlay()">▶ Start</button>
-      <button class="approve-btn btn-reject" style="flex:1"
-              onclick="agentCmd({stopPropagation:()=>{}},'${id}','pause');closeOverlay()">⏸ Pause</button>
-    </div>
-    <button class="approve-btn btn-defer" style="width:100%;margin-top:8px"
-            onclick="agentCmd({stopPropagation:()=>{}},'${id}','restart');closeOverlay()">↺ Restart</button>
   `);
 }
 
@@ -1993,16 +1953,13 @@ function refreshStats() {
   fetch(CFG.apiBase + '/api/protoforge/stats')
     .then(r => r.json())
     .then(applyStats)
-    .catch(() => applyStats(mockStats()));
-}
-
-function mockStats() {
-  return {
-    capital_deployed: 248500 + Math.random() * 5000,
-    agent_actions: 1247 + Math.floor(Math.random() * 50),
-    success_rate: 0.947,
-    trust_score: 0.82,
-  };
+    .catch(() => {
+      ['statCapital','statActions','statSuccess','statTrust'].forEach(id => {
+        document.getElementById(id).textContent = '—';
+      });
+      document.getElementById('statCapitalTrend').textContent = 'offline';
+      document.getElementById('statSuccessTrend').textContent = '';
+    });
 }
 
 function applyStats(d) {
@@ -2051,31 +2008,6 @@ function addEventEntry(text, severity = 'ok') {
     STATE.events.pop();
     tl.lastElementChild?.remove();
   }
-}
-
-// ── MOCK EVENTS (demo / offline) ─────────────────────────
-function scheduleMockEvents() {
-  const demo = [
-    { d:1500, fn: () => { addEventEntry('ProtoForge boot sequence complete', 'ok'); refreshStats(); } },
-    { d:3000, fn: () => addEventEntry('CASCADE event bus initialized — 15 agents registered', 'ok') },
-    { d:5000, fn: () => addMockApproval() },
-    { d:8000, fn: () => addEventEntry('Financial engine: capital baseline set', 'ok') },
-    { d:12000, fn: () => addEventEntry('Trust scores loaded for all agents', 'info') },
-  ];
-
-  demo.forEach(({d, fn}) => setTimeout(fn, d));
-}
-
-function addMockApproval() {
-  addApproval({
-    id: 'mock-001',
-    agent: 'FinanceAI',
-    title: 'Initial Capital Allocation',
-    description: 'Deploy $50,000 seed capital across infrastructure, marketing, and operations budgets.',
-    priority: 'high',
-    meta: ['$50,000', 'seed-round', 'level-2-required'],
-    timestamp: new Date().toISOString(),
-  });
 }
 
 // ── MENU SHEET ───────────────────────────────────────────
