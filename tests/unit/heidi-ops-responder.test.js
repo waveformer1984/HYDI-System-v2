@@ -7,6 +7,7 @@ const crypto = require('crypto');
 
 const {
   createOpsResponder, parseRequest, triage, outcomeText, CLARIFY, REPLY_LIMIT,
+  REFUSAL, SECRET_ALERT, ASSESSMENT_COOLDOWN_MS, allowedSenders,
 } = require('../../lib/heidi/ops-responder');
 const { ExecutionGateway } = require('../../lib/execution-fabric/gateway');
 const { TaskStore } = require('../../lib/execution-fabric/task-store');
@@ -18,9 +19,9 @@ function tmpState() {
   return path.join(dir, 'state.json');
 }
 
-function req(id, text, minutesAgo = 1) {
+function req(id, text, minutesAgo = 1, sender = 'hydi-daemon', senderType = 'agent') {
   return {
-    id, channel: 'ops', sender: 'hydi-daemon', sender_type: 'agent', reply_to: null,
+    id, channel: 'ops', sender, sender_type: senderType, reply_to: null,
     ts: new Date(T0 - minutesAgo * 60000).toISOString(), body: `REQUEST @Heidi: ${text}`,
   };
 }
@@ -38,12 +39,15 @@ function harness(overrides = {}) {
       if (file === 'pm2' || file === 'cmd.exe') return cb(null, JSON.stringify([{ name: 'heidi-web', pm2_env: { status: 'online', restart_time: 2, pm_uptime: clock - 3 * 3600000 } }]), '');
       if (file === 'git' && args[0] === 'status') return cb(null, '## clean-main...origin/clean-main\n', '');
       if (file === 'git' && args[0] === 'log') return cb(null, 'abc1234 Merge pull request #386\n', '');
+      if (String(args[0] || '').endsWith('heidi-assessment-crew.js')) return cb(null, `thread root: crew-${execCalls.length}\nAnna: 2 findings, 1 recs\n`, '');
       return cb(new Error('unexpected command'), '', '');
     },
     platform: 'linux',
     statfs: async () => ({ blocks: 1000, bsize: 1024 ** 2, bavail: 250 }),
     runHealthCheck: async () => ({ ok: true, probes: [{ name: 'heidi-web', ok: true, ms: 12, hint: 'ok' }] }),
     billingStore: () => ({ findMany: async () => [] }),
+    serviceSecret: () => 'test-secret',
+    warn: jest.fn(),
     fabric: overrides.fabric || {
       file: jest.fn(async () => ({ ok: true, task: { id: 'a'.repeat(24), state: 'AWAITING_APPROVAL' } })),
       get: jest.fn(async (id) => ({ ok: true, task: { id, state: 'AWAITING_APPROVAL' }, detail: {} })),
@@ -263,5 +267,91 @@ describe('board.request in the real execution-fabric queue', () => {
     await gw.cancel(filed.task.id, 'operator');
     const got = await gw.getTask(filed.task.id, 'operator');
     expect(outcomeText(got.task, got.detail)).toBe(`Approval ${filed.task.id} was rejected. Nothing was run.`);
+  });
+});
+
+describe('ops responder hardening', () => {
+  it('reads allowed senders from env, default Jordan and hydi-daemon', () => {
+    expect([...allowedSenders(undefined)]).toEqual(['jordan', 'hydi-daemon']);
+    expect([...allowedSenders(' Jordan , ops-bot ')]).toEqual(['jordan', 'ops-bot']);
+  });
+
+  it('refuses a non-allowed agent once, with no read and no approval', async () => {
+    const h = harness();
+    const msgs = [req('x1', 'disk space', 1, 'Rex', 'agent'), req('x2', 'restart heidi-web', 1, 'Rex', 'agent')];
+    await h.responder.tick(msgs);
+    await h.responder.tick(msgs);
+    expect(h.posts).toEqual([
+      { channel: 'ops', body: REFUSAL, replyTo: 'x1' },
+      { channel: 'ops', body: REFUSAL, replyTo: 'x2' },
+    ]);
+    expect(h.execCalls).toEqual([]);
+    expect(h.deps.fabric.file).not.toHaveBeenCalled();
+    expect(h.responder.state().handled.x1).toMatchObject({ kind: 'refused', sender: 'Rex' });
+  });
+
+  it('a human not on the list is refused too', async () => {
+    const h = harness();
+    await h.responder.tick([req('x3', 'disk', 1, 'Mallory', 'human')]);
+    expect(h.posts[0].body).toBe(REFUSAL);
+  });
+
+  it('Jordan (human) and hydi-daemon are still served', async () => {
+    const h = harness();
+    await h.responder.tick([req('j1', 'disk', 2, 'Jordan', 'human'), req('d1', 'restart heidi-web', 1)]);
+    expect(h.posts[0]).toMatchObject({ replyTo: 'j1' });
+    expect(h.posts[0].body).toContain('GB free');
+    expect(h.posts[1].body).toContain('waiting for Jordan');
+    expect(h.deps.fabric.file).toHaveBeenCalledTimes(1);
+  });
+
+  it('HEIDI_OPS_REQUEST_SENDERS can narrow the list', async () => {
+    const h = harness({ deps: { requestSenders: 'Jordan' } });
+    await h.responder.tick([req('d2', 'disk', 1)]);
+    expect(h.posts[0].body).toBe(REFUSAL);
+  });
+
+  it('runs the assessment crew at most once per hour, persisted across restarts', async () => {
+    const stateFile = tmpState();
+    const a = harness({ stateFile });
+    await a.responder.tick([req('c1', 'run the assessment crew', 3)]);
+    const crewRuns = (h) => h.execCalls.filter((c) => String(c[1] || '').endsWith('heidi-assessment-crew.js'));
+    expect(crewRuns(a)).toHaveLength(1);
+    expect(a.posts[0].body).toContain('Report thread crew-1 on #ops');
+
+    const b = harness({ stateFile });
+    b.advance(30 * 60 * 1000);
+    await b.responder.tick([req('c2', 'assessment please', 1)]);
+    expect(crewRuns(b)).toHaveLength(0);
+    const ran = new Date(T0).toISOString();
+    const next = new Date(T0 + ASSESSMENT_COOLDOWN_MS).toISOString();
+    expect(b.posts[0].body).toContain(`Assessment ran at ${ran}; next allowed after ${next}. Latest report: thread crew-1.`);
+
+    b.advance(31 * 60 * 1000);
+    await b.responder.tick([req('c3', 'run the crew', 1)]);
+    expect(crewRuns(b)).toHaveLength(1);
+  });
+
+  it('warns once and posts once to #alerts when HYDI_SERVICE_SECRET is missing', async () => {
+    const stateFile = tmpState();
+    const a = harness({ stateFile, deps: { serviceSecret: () => '' } });
+    await a.responder.tick([]);
+    await a.responder.tick([]);
+    expect(a.deps.warn).toHaveBeenCalledTimes(1);
+    expect(a.deps.warn.mock.calls[0][0]).toContain('HYDI_SERVICE_SECRET not set');
+    expect(a.posts).toEqual([{ channel: 'alerts', body: SECRET_ALERT, replyTo: undefined }]);
+
+    const b = harness({ stateFile, deps: { serviceSecret: () => '' } });
+    await b.responder.tick([]);
+    expect(b.deps.warn).toHaveBeenCalledTimes(1);
+    expect(b.posts).toEqual([]);
+  });
+
+  it('stays quiet when the secret is set and never puts its value in a message', async () => {
+    const h = harness({ deps: { serviceSecret: () => 'super-secret-value' } });
+    await h.responder.tick([req('s1', 'disk')]);
+    expect(h.deps.warn).not.toHaveBeenCalled();
+    expect(h.posts.every((p) => !p.body.includes('super-secret-value'))).toBe(true);
+    expect(h.posts.some((p) => p.channel === 'alerts')).toBe(false);
   });
 });
