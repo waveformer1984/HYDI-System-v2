@@ -1428,6 +1428,9 @@ const CFG = {
 const STATE = {
   ws: null,
   connected: false,
+  httpOnline: false,
+  wsFailures: 0,
+  wsGaveUp: false,
   autonomyLevel: 2,
   approvals: [],
   agents: [],
@@ -1498,14 +1501,27 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── WebSocket ────────────────────────────────────────────
+function wsReconnectPlan(failures, httpOnline) {
+  const gaveUp = failures >= 3;
+  return {
+    gaveUp: gaveUp,
+    retry: !gaveUp,
+    showOfflineBanner: !httpOnline,
+  };
+}
+
 function connectWS() {
-  if (STATE.ws?.readyState === WebSocket.OPEN) return;
+  if (STATE.wsGaveUp) return;
+  const rs = STATE.ws?.readyState;
+  if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) return;
 
   try {
     STATE.ws = new WebSocket(CFG.wsUrl);
 
     STATE.ws.onopen = () => {
       STATE.connected = true;
+      STATE.wsFailures = 0;
+      STATE.wsGaveUp = false;
       setBadge('ok', 'Online');
       document.getElementById('conn-banner').classList.remove('show');
     };
@@ -1516,20 +1532,43 @@ function connectWS() {
     };
 
     STATE.ws.onerror = () => {
-      setBadge('crit', 'Error');
+      if (!STATE.httpOnline) setBadge('crit', 'Error');
     };
 
     STATE.ws.onclose = () => {
       STATE.connected = false;
-      setBadge('off', 'Offline');
-      document.getElementById('conn-banner').classList.add('show');
-      setTimeout(() => { if (!STATE.connected) connectWS(); }, CFG.reconnectDelay);
+      STATE.wsFailures += 1;
+      const plan = wsReconnectPlan(STATE.wsFailures, STATE.httpOnline);
+      const banner = document.getElementById('conn-banner');
+      if (plan.showOfflineBanner) {
+        setBadge('off', 'Offline');
+        if (banner) banner.classList.add('show');
+      } else if (banner) {
+        banner.classList.remove('show');
+      }
+      if (plan.gaveUp) {
+        STATE.wsGaveUp = true;
+        return;
+      }
+      setTimeout(() => { if (!STATE.connected && !STATE.wsGaveUp) connectWS(); }, CFG.reconnectDelay);
     };
 
   } catch {
-    setBadge('crit', 'Error');
-    setTimeout(connectWS, CFG.reconnectDelay);
+    STATE.wsFailures += 1;
+    const plan = wsReconnectPlan(STATE.wsFailures, STATE.httpOnline);
+    if (!STATE.httpOnline) setBadge('crit', 'Error');
+    if (plan.gaveUp) {
+      STATE.wsGaveUp = true;
+      return;
+    }
+    setTimeout(() => { if (!STATE.wsGaveUp) connectWS(); }, CFG.reconnectDelay);
   }
+}
+
+function retryWebSocket() {
+  STATE.wsFailures = 0;
+  STATE.wsGaveUp = false;
+  connectWS();
 }
 
 function handleWsMsg(data) {
@@ -1567,7 +1606,17 @@ function wsSend(obj) {
 async function pollHealth() {
   try {
     const r = await fetch(CFG.apiBase + '/api/health');
-    if (r.ok) updateHealthUI(await r.json());
+    if (r.ok) {
+      STATE.httpOnline = true;
+      const banner = document.getElementById('conn-banner');
+      if (banner) banner.classList.remove('show');
+      let health = {};
+      try { health = await r.json(); } catch { health = {}; }
+      updateHealthUI(health);
+      if (health.current_status !== 'CRITICAL' && health.current_status !== 'WARNING') {
+        setBadge('ok', 'Online');
+      }
+    }
   } catch {}
   setTimeout(pollHealth, CFG.healthInterval);
 }
@@ -1599,14 +1648,18 @@ function switchTab(name) {
 }
 
 // ── CHAT ─────────────────────────────────────────────────
-function addChatMsg(sender, text, actions = null) {
+function addChatMsg(sender, text, actions = null, model = null) {
   const box  = document.getElementById('chatMessages');
   const div  = document.createElement('div');
   div.className = 'msg ' + sender;
 
   const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const modelNote = model
+    ? `<div class="msg-time">${escHtml(String(model))}</div>`
+    : '';
 
   let html = `<div class="bubble">${escHtml(text)}</div>
+              ${modelNote}
               <div class="msg-time">${sender==='user'?'You':cap(sender)} · ${time}</div>`;
 
   if (actions?.length) {
@@ -1656,10 +1709,7 @@ async function sendChat() {
   const sent = wsSend({ type: 'message', content: text, model: 'hydi', sessionId: CFG.sessionId, timestamp: new Date().toISOString() });
 
   if (!sent) {
-    // HTTP fallback — /ws/hydi has no live server, so this is the path that
-    // actually runs in practice. Matches pages/index.tsx's contract for
-    // /api/chat (pages/api/chat.ts): session_id + user_id in, an SSE stream
-    // of { type: 'content', content } deltas out (not a single JSON body).
+    // hydi.py returns one JSON body. The Next.js server returns SSE.
     try {
       const r = await fetch(CFG.apiBase + '/api/chat', {
         method: 'POST',
@@ -1667,35 +1717,44 @@ async function sendChat() {
         body: JSON.stringify({ message: text, session_id: CFG.sessionId, user_id: 'mobile-ops' })
       });
       hideTyping();
-      if (r.ok && r.body) {
-        const reader = r.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '', reply = '', streamErr = null;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const events = buf.split('\n\n');
-          buf = events.pop();
-          for (const ev of events) {
-            const line = ev.split('\n').find(l => l.startsWith('data: '));
-            if (!line || line === 'data: [DONE]') continue;
-            try {
-              const d = JSON.parse(line.slice(6));
-              if (d.type === 'content') reply += d.content;
-              if (d.type === 'error') streamErr = d.error;
-            } catch (_) { /* ignore malformed chunk */ }
-          }
-        }
-        addChatMsg('hydi', reply || (streamErr ? `Error: ${streamErr}` : buildOfflineReply(text)));
-      } else {
+      if (!r.ok) {
         addChatMsg('hydi', buildOfflineReply(text));
+        return;
       }
+      const parsed = chatReplyFromHttp(r.headers.get('content-type'), await r.text());
+      if (parsed.text) addChatMsg('hydi', parsed.text, null, parsed.model || null);
+      else if (parsed.error) addChatMsg('hydi', 'Error: ' + parsed.error);
+      else addChatMsg('hydi', buildOfflineReply(text));
     } catch {
       hideTyping();
       addChatMsg('hydi', buildOfflineReply(text));
     }
   }
+}
+
+function chatReplyFromHttp(contentType, rawBody) {
+  const ctype = String(contentType || '').toLowerCase();
+  if (ctype.includes('application/json')) {
+    let data = null;
+    try { data = JSON.parse(rawBody); } catch (_) { data = null; }
+    const text = data && typeof data.response === 'string' ? data.response.trim() : '';
+    const model = data && data.model != null && String(data.model) !== '' ? String(data.model) : '';
+    return { kind: 'json', text: text, model: model, empty: !text, error: null };
+  }
+  let text = '';
+  let streamErr = null;
+  const events = String(rawBody || '').split('\n\n');
+  for (const ev of events) {
+    const line = ev.split('\n').find(function (l) { return l.startsWith('data: '); });
+    if (!line || line === 'data: [DONE]') continue;
+    try {
+      const d = JSON.parse(line.slice(6));
+      if (d.type === 'content' && d.content) text += d.content;
+      if (d.type === 'error') streamErr = d.error;
+    } catch (_) { /* ignore malformed chunk */ }
+  }
+  const trimmed = text.trim();
+  return { kind: 'sse', text: trimmed, model: '', empty: !trimmed, error: streamErr };
 }
 
 function sendChip(text) {
@@ -1705,18 +1764,19 @@ function sendChip(text) {
 }
 
 function buildOfflineReply(text) {
-  const t = text.toLowerCase();
+  const t = String(text || '').toLowerCase();
+  const notSent = 'Offline — this command was NOT sent.';
   if (t.includes('status') || t.includes('health'))
-    return 'System is running in offline mode. Reconnecting to HYDI core... ProtoForge agents last reported nominal status.';
+    return notSent + ' No live status was fetched.';
   if (t.includes('grow') || t.includes('scale'))
-    return 'Growth command queued. Once reconnected to the WebSocket server, ProtoForge will execute the scaling directive.';
+    return notSent + ' Nothing was handed to ProtoForge.';
   if (t.includes('agent'))
-    return 'All 15 agents are registered. Detailed status requires a live connection to the HYDI backend.';
+    return notSent + ' No agent command left this phone.';
   if (t.includes('financ') || t.includes('capital') || t.includes('revenue'))
-    return 'Financial engine is running. Last capital deployment: initializing. Connect to backend for live figures.';
+    return notSent + ' No financial action left this phone.';
   if (t.includes('approval') || t.includes('queue'))
-    return 'Approval queue check requires live backend. Switching to Approve tab will show cached items.';
-  return 'Hydi is in offline mode. I can answer cached queries — connect to HYDI backend for live ProtoForge control.';
+    return notSent + ' The approval list was not changed.';
+  return notSent + ' No message was delivered.';
 }
 
 // ── AGENTS ───────────────────────────────────────────────
@@ -2021,7 +2081,7 @@ function addMockApproval() {
 // ── MENU SHEET ───────────────────────────────────────────
 function openMenu() {
   openSheet('ProtoForge Settings', `
-    <div class="sheet-action" onclick="toast('Reconnecting...','ok');connectWS();closeOverlay()">
+    <div class="sheet-action" onclick="toast('Reconnecting...','ok');retryWebSocket();closeOverlay()">
       <span class="sheet-action-icon">🔄</span>
       <div class="sheet-action-text">
         <div>Reconnect to HYDI</div>
@@ -2134,7 +2194,7 @@ function cap(s) {
 
 // Visibility — reconnect on return
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !STATE.connected) connectWS();
+  if (document.visibilityState === 'visible' && !STATE.connected && !STATE.wsGaveUp) connectWS();
 });
 
 /* ═══════════════════════════════════════════════════════
