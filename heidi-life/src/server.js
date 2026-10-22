@@ -63,12 +63,15 @@ export function summary(db, cfg) {
   };
 }
 
+// RFC 5545 TEXT escaping: backslash first, then ; , and newlines.
+const icsText = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+
 function ics(db) {
   const f = ts => new Date(ts).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const rows = db.prepare('SELECT * FROM focus_blocks ORDER BY start DESC LIMIT 200').all();
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ProtoForge//Heidi Life//EN', 'X-WR-CALNAME:Heidi focus blocks',
     ...rows.flatMap(r => ['BEGIN:VEVENT', `UID:heidi-focus-${r.id}@protoforge`, `DTSTAMP:${f(Date.now())}`,
-      `DTSTART:${f(r.start)}`, `DTEND:${f(r.end)}`, `SUMMARY:${r.title.replace(/,/g, '\\,')}`, 'END:VEVENT']),
+      `DTSTART:${f(r.start)}`, `DTEND:${f(r.end)}`, `SUMMARY:${icsText(r.title)}`, 'END:VEVENT']),
     'END:VCALENDAR'].join('\r\n');
 }
 

@@ -50,6 +50,9 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
+// Only the token is forwarded to the API; the rest of the query string is ignored.
+const TOKEN = new URLSearchParams(location.search).get('token');
+const authQs = () => TOKEN ? '?token=' + encodeURIComponent(TOKEN) : '';
 const h = m => (m/60).toFixed(1)+'h', usd = c => '$'+Math.round(c/100).toLocaleString();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const tz = () => window.__tz || undefined;
@@ -64,13 +67,13 @@ function bars(el, days, val, fmt, hiFn) {
 }
 
 async function act(id, what) {
-  const r = await fetch(`/api/actions/${id}/${what}` + location.search, {method:'POST'}).then(r=>r.json());
+  const r = await fetch(`/api/actions/${Number(id)}/${what === 'approve' ? 'approve' : 'reject'}` + authQs(), {method:'POST'}).then(r=>r.json());
   if (r.error) alert(r.error);
   load();
 }
 
 async function load() {
-  const s = await fetch('/api/summary' + location.search).then(r => r.json());
+  const s = await fetch('/api/summary' + authQs()).then(r => r.json());
   window.__tz = s.timezone;
   const age = s.status.lastPing ? Math.round((Date.now()-s.status.lastPing)/60000) : null;
   $('status').innerHTML = `<span class="pill ${age!=null&&age<30?'on':'off'}">${age==null?'no phone data yet':`phone ${age}m ago${s.status.battery!=null?` · ${s.status.battery}%`:''}`}</span>

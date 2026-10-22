@@ -1,6 +1,6 @@
 // Daily rollups + rule-based insights. Every insight carries a confidence; some propose an action
 // that then has to clear the triple gate (gate.js) before anything happens.
-import { haversineM, localDay, localHour, dayStart, addDays, overlapMs, MIN, HOUR, DAY, fmtH, fmtUsd } from './util.js';
+import { haversineM, localHour, dayStart, addDays, overlapMs, MIN, HOUR, DAY, fmtH, fmtUsd } from './util.js';
 import { unnamedHotspots } from './places.js';
 
 const home = cfg => (cfg.places || []).find(p => p.isHome);

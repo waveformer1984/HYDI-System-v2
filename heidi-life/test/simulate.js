@@ -143,8 +143,7 @@ console.log('focus ICS events:', (icsOut.match(/BEGIN:VEVENT/g) || []).length);
 
 const sum = await fetch(`${url}/api/summary`).then(r => r.json());
 console.log('summary: days', sum.days.length, 'insights', sum.insights.length, 'actions', sum.actions.length, 'digest source', sum.digest?.source);
-fs.writeFileSync(path.join(tmp, 'summary.json'), JSON.stringify(sum));
-console.log('\nDB + summary in', tmp);
+console.log('\nDB in', tmp);
 server.close();
 
 // 10) Tailscale address check used for remote approvals
@@ -152,3 +151,20 @@ const { isTailnet } = await import('../src/server.js');
 const cases = { '100.101.5.9': true, '::ffff:100.64.0.1': true, '100.128.0.1': false, '192.168.1.50': false, 'fd7a:115c:a1e0::12': true, '2001:db8::1': false };
 const fails = Object.entries(cases).filter(([a, want]) => isTailnet(a) !== want);
 console.log('tailnet address checks:', fails.length ? `FAIL ${JSON.stringify(fails)}` : `all ${Object.keys(cases).length} pass`);
+
+// 11) model URL must stay private (the digest prompt carries personal data)
+const { isPrivateModelUrl } = await import('../src/llm.js');
+const urls = { 'http://127.0.0.1:11434': true, 'http://localhost:11434': true, 'http://192.168.1.100:11434': true, 'http://frank:11434': true,
+  'http://heidi-pc.tailc50af2.ts.net:11434': true, 'http://100.88.1.2:11434': true, 'https://api.example.com': false, 'http://8.8.8.8:11434': false, 'file:///etc/passwd': false, 'nonsense': false };
+const ubad = Object.entries(urls).filter(([u, want]) => isPrivateModelUrl(u) !== want);
+console.log('model URL checks:', ubad.length ? `FAIL ${JSON.stringify(ubad)}` : `all ${Object.keys(urls).length} pass`);
+
+// 12) ICS text escaping
+const db2 = openDb(path.join(tmp, 'ics.db'));
+db2.prepare('INSERT INTO focus_blocks (start, end, title) VALUES (?,?,?)').run(Date.now(), Date.now() + HOUR, 'Focus: A\\B, C; D\nE');
+const srv2 = createServer(db2, cfg).listen(3473);
+await new Promise(r => srv2.on('listening', r));
+const icsBody = await fetch(`http://127.0.0.1:3473/calendar/heidi.ics?token=${cfg.token}`).then(r => r.text());
+const summaryLine = icsBody.split('\r\n').find(l => l.startsWith('SUMMARY:'));
+console.log('ICS escaping:', summaryLine === 'SUMMARY:Focus: A\\\\B\\, C\\; D\\nE' ? 'pass' : `FAIL ${summaryLine}`);
+srv2.close();
