@@ -122,6 +122,10 @@ function clearAlertState(alertStatePath) {
   try { fs.unlinkSync(alertStatePath); } catch { /* already absent */ }
 }
 
+function postSucceeded(result) {
+  return Boolean(result && result.ok !== false && result.status !== 429 && !result.error);
+}
+
 function parseMergedPrTitles(raw) {
   return String(raw || '').split('\x1e').map((record) => record.trim()).filter(Boolean)
     .map((record) => {
@@ -231,8 +235,8 @@ async function runAutoDeploy(overrides = {}) {
   const alertStatePath = overrides.alertStatePath || path.join(root, '.runtime', 'frank-auto-deploy-alert.json');
   const alert = async (reason, text) => {
     if (readAlertState(alertStatePath) === reason) return;
-    await post('alerts', text);
-    writeAlertState(alertStatePath, reason);
+    const sent = await post('alerts', text);
+    if (postSucceeded(sent)) writeAlertState(alertStatePath, reason);
   };
   const healthOptions = {
     probe: overrides.probe,
@@ -330,30 +334,40 @@ async function runAutoDeploy(overrides = {}) {
 
   // A successful pass clears any standing blocked/failed alert — post once.
   if ((result.status === 'noop' || result.status === 'deployed') && readAlertState(alertStatePath) !== null) {
-    clearAlertState(alertStatePath);
-    await post('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
+    const sent = await post('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
+    if (postSucceeded(sent)) clearAlertState(alertStatePath);
   }
   return result;
 }
 
-if (require.main === module) {
+function startDeployLoop({
+  deploy = runAutoDeploy,
+  intervalMs = INTERVAL_MS,
+  setIntervalFn = setInterval,
+  log = (message) => console.error(message),
+} = {}) {
   let inFlight = false;
   const tick = async () => {
     if (inFlight) return;
     inFlight = true;
     try {
-      const result = await runAutoDeploy();
+      const result = await deploy();
       if (result.status === 'failed' || result.status === 'rollback_failed') {
-        console.error(`[${APP_NAME}] ${result.status}: ${result.reason || ''}`);
+        log(`[${APP_NAME}] ${result.status}: ${result.reason || ''}`);
       }
     } catch (error) {
-      console.error(`[${APP_NAME}] unhandled error:`, error instanceof Error ? error.message : error);
+      log(`[${APP_NAME}] unhandled error: ${error instanceof Error ? error.message : error}`);
     } finally {
       inFlight = false;
     }
   };
   void tick();
-  setInterval(tick, INTERVAL_MS);
+  const timer = setIntervalFn(tick, intervalMs);
+  return { tick, timer };
+}
+
+if (require.main === module) {
+  startDeployLoop();
 }
 
 module.exports = {
@@ -368,7 +382,9 @@ module.exports = {
   readAlertState,
   writeAlertState,
   clearAlertState,
+  postSucceeded,
   parseMergedPrTitles,
   waitForHealth,
   runAutoDeploy,
+  startDeployLoop,
 };

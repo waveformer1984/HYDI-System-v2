@@ -12,6 +12,7 @@ const {
   parseMergedPrTitles,
   readAlertState,
   runAutoDeploy,
+  startDeployLoop,
 } = require('../../scripts/frank-auto-deploy');
 
 const OLD = '1111111111111111111111111111111111111111';
@@ -236,6 +237,57 @@ describe('Frank auto-deploy', () => {
     // No repeat unblocked message on later clean passes.
     await expect(deploy(noopRun)).resolves.toEqual({ status: 'noop' });
     expect(posts.filter((p) => p.channel === 'alerts')).toHaveLength(3);
+  });
+
+  it('retries blocked and unblocked alerts until the board accepts them', async () => {
+    const alertStatePath = path.join(tmpDir(), 'alert.json');
+    const dirtyRun = baseGitRun({
+      'git status --porcelain --untracked-files=no': ok(' M lib/file.js\n'),
+    });
+    const responses = [{ ok: false, error: 'offline' }, { ok: true }];
+    const post = jest.fn(async () => responses.shift() || { ok: true });
+    const options = {
+      root: '/repo',
+      post,
+      acquireLock: () => jest.fn(),
+      alertStatePath,
+    };
+
+    await runAutoDeploy({ ...options, run: dirtyRun });
+    expect(readAlertState(alertStatePath)).toBeNull();
+    await runAutoDeploy({ ...options, run: dirtyRun });
+    expect(readAlertState(alertStatePath)).toBe('working tree is dirty');
+    expect(post).toHaveBeenCalledTimes(2);
+
+    post.mockResolvedValueOnce({ ok: false, error: 'offline' });
+    const noopRun = baseGitRun({ 'git rev-parse origin/clean-main': ok(`${OLD}\n`) });
+    await runAutoDeploy({ ...options, run: noopRun });
+    expect(readAlertState(alertStatePath)).toBe('working tree is dirty');
+    await runAutoDeploy({ ...options, run: noopRun });
+    expect(readAlertState(alertStatePath)).toBeNull();
+  });
+
+  it('runs an immediate internal loop and never overlaps passes', async () => {
+    let release;
+    const first = new Promise((resolve) => { release = resolve; });
+    const deploy = jest.fn()
+      .mockImplementationOnce(() => first)
+      .mockResolvedValue({ status: 'noop' });
+    let scheduled;
+    const setIntervalFn = jest.fn((fn, ms) => {
+      scheduled = fn;
+      expect(ms).toBe(5 * 60 * 1000);
+      return { id: 'timer' };
+    });
+    const loop = startDeployLoop({ deploy, setIntervalFn, log: jest.fn() });
+    expect(loop.timer).toEqual({ id: 'timer' });
+    expect(deploy).toHaveBeenCalledTimes(1);
+    await scheduled();
+    expect(deploy).toHaveBeenCalledTimes(1);
+    release({ status: 'noop' });
+    await new Promise((resolve) => setImmediate(resolve));
+    await scheduled();
+    expect(deploy).toHaveBeenCalledTimes(2);
   });
 
   it('holds the filesystem lock until the owner releases it', () => {
