@@ -15,13 +15,18 @@ while [ -L "$src" ] && [ "$i" -lt 10 ]; do
   i=$((i + 1))
 done
 base=$(dirname "$src")
+base=$(CDPATH= cd -- "$base" 2>/dev/null && pwd) || {
+  printf 'cannot resolve installer directory\n' >&2
+  exit 1
+}
 services="$base/services"
+updater="$base/hydi-update.sh"
 prefix="${PREFIX:-/data/data/com.termux/files/usr}"
 svdir="$prefix/var/service"
 stamp=$(date +%Y%m%d-%H%M%S)
 
-if [ ! -f "$services/hydi/run" ] || [ ! -f "$services/hydi-daemon/run" ]; then
-  printf 'service definitions missing under %s\n' "$services" >&2
+if [ ! -f "$services/hydi/run" ] || [ ! -f "$services/hydi-daemon/run" ] || [ ! -f "$updater" ]; then
+  printf 'service definitions or hydi-update.sh missing under %s\n' "$base" >&2
   exit 1
 fi
 
@@ -58,6 +63,11 @@ install_one() {
 
 install_one hydi
 install_one hydi-daemon
+
+mkdir -p "$prefix/bin" || exit 1
+chmod +x "$updater" || exit 1
+ln -sf "$updater" "$prefix/bin/hydi-update" || exit 1
+printf 'installed %s\n' "$prefix/bin/hydi-update"
 
 if ! command -v sv >/dev/null 2>&1; then
   printf 'sv is not on PATH. Install termux-services, then: sv restart hydi hydi-daemon\n' >&2
