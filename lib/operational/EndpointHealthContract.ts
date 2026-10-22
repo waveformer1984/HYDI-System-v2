@@ -92,6 +92,7 @@ function isFiniteNumber(v: unknown): v is number {
  *   - protoforge-core    src/server.js            GET /health
  *   - heidi-web          api/health.js            GET /api/health
  *   - heidi-mobile-chat  launch-heidi-mobile.js   GET /api/health
+ *   - rezonate-app       protoforge-applications/rezonate/src/diagnostics.js  GET /health
  */
 export const ENDPOINT_HEALTH_CONTRACTS: Record<string, EndpointHealthContract> = {
   'protoforge-core': {
@@ -191,6 +192,41 @@ export const ENDPOINT_HEALTH_CONTRACTS: Record<string, EndpointHealthContract> =
       return {
         state: 'HEALTHY',
         reason: `server='ok' (ollama=${String(body.ollama)}, heidiCore=${String(body.heidiCore)})`,
+      };
+    },
+  },
+
+  'rezonate-app': {
+    name: 'rezonate-app',
+    contract:
+      "diagnostics.js GET /health returns {status:'ok', engine:{available,...}, store:{...counts}}. " +
+      "status:'ok' is hardcoded in the handler -- the real evidence is engine.available (the audio " +
+      'provider can actually generate) and the store counts (the repository loaded).',
+    predicate: (body) => {
+      const status = body.status;
+      if (status === undefined) {
+        return { state: 'UNKNOWN', reason: "body has no 'status' field -- cannot verify health" };
+      }
+      if (status !== 'ok') {
+        return { state: 'DEGRADED', reason: `status='${String(status)}' (not 'ok')` };
+      }
+      const engine = body.engine as Record<string, unknown> | undefined;
+      if (!engine || engine.available !== true) {
+        return {
+          state: 'DEGRADED',
+          reason: 'reachable but engine.available is not true -- the audio provider cannot generate',
+        };
+      }
+      const store = body.store as Record<string, unknown> | undefined;
+      if (!store || !isFiniteNumber(store.projects)) {
+        return {
+          state: 'DEGRADED',
+          reason: "status='ok' but store.projects is not a number -- the repository probe produced no evidence",
+        };
+      }
+      return {
+        state: 'HEALTHY',
+        reason: `status='ok', engine.available=true, projects=${store.projects}`,
       };
     },
   },
