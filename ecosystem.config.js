@@ -33,6 +33,8 @@
  * For production mode (requires `npm run build` first):
  *   pm2 start ecosystem.config.js --env production
  */
+const path = require('path');
+
 module.exports = {
   apps: [
     {
@@ -400,6 +402,39 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Canonical owner of the legacy Heidi Core HTTP service on :3459.
+      // Matches start-heidi-everything.ps1 exactly: node server.js from
+      // heidi-core/ with HEIDI_PORT=3459 and execution disabled.
+      name: 'heidi-core',
+      script: 'server.js',
+      args: '',
+      cwd: path.join(__dirname, 'heidi-core'),
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'development',
+        HEIDI_PORT: '3459',
+        HEIDI_ALLOW_EXEC: 'false',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        HEIDI_PORT: '3459',
+        HEIDI_ALLOW_EXEC: 'false',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: path.join(__dirname, 'logs', 'pm2-heidi-core.err.log'),
+      out_file: path.join(__dirname, 'logs', 'pm2-heidi-core.out.log'),
+      merge_logs: true,
+      kill_timeout: 15000,
+    },
+    {
       // Heidi Web Layer — the canonical 'heidi-web' service's runtime owner.
       //
       // Ownership contract (reconciled 2026-09-27):
@@ -426,9 +461,11 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        EXECUTION_FABRIC_PERSIST: 'postgres',
       },
       env_production: {
         NODE_ENV: 'production',
+        EXECUTION_FABRIC_PERSIST: 'postgres',
       },
       autorestart: true,
       watch: false,
