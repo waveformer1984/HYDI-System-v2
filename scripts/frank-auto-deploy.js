@@ -30,10 +30,18 @@ function executable(name, platform = process.platform) {
   return platform === 'win32' && (name === 'npm' || name === 'pm2') ? `${name}.cmd` : name;
 }
 
+// Node >= 20.12 refuses to spawn .cmd/.bat without a shell
+// (CVE-2024-27980) — execFile('npm.cmd') throws EINVAL. Route batch files
+// through cmd.exe; real executables keep shell:false.
+function cmdNeedsShell(file, platform = process.platform) {
+  return platform === 'win32' && /\.(cmd|bat)$/i.test(file);
+}
+
 function execResult(file, args, options = {}) {
   return new Promise((resolve) => {
     execFile(file, args, {
       cwd: options.cwd,
+      shell: cmdNeedsShell(file, options.platform),
       timeout: options.timeout || 10 * 60 * 1000,
       maxBuffer: 4 * 1024 * 1024,
       windowsHide: true,
@@ -376,6 +384,7 @@ module.exports = {
   LOCK_STALE_MS,
   HEALTH_CHECKS,
   executable,
+  cmdNeedsShell,
   pidAlive,
   lockIsStale,
   acquireLock,

@@ -8,6 +8,7 @@ const {
   APP_NAME,
   LOCK_STALE_MS,
   acquireLock,
+  cmdNeedsShell,
   lockIsStale,
   parseMergedPrTitles,
   readAlertState,
@@ -336,6 +337,17 @@ describe('Frank auto-deploy', () => {
     // which would kill a run mid-build.
     expect(source).not.toContain('cron_restart');
     expect(source).not.toContain('cron-restart');
+  });
+
+  it('routes .cmd/.bat spawns through a shell on win32 only (Node EINVAL fix)', () => {
+    // Node >= 20.12 throws `spawn EINVAL` on execFile('npm.cmd') without
+    // shell:true (CVE-2024-27980) — this broke every deploy step after merge.
+    expect(cmdNeedsShell('npm.cmd', 'win32')).toBe(true);
+    expect(cmdNeedsShell('pm2.cmd', 'win32')).toBe(true);
+    expect(cmdNeedsShell('git', 'win32')).toBe(false);
+    expect(cmdNeedsShell('git.exe', 'win32')).toBe(false);
+    expect(cmdNeedsShell('npm.cmd', 'linux')).toBe(false);
+    expect(cmdNeedsShell('npm', 'win32')).toBe(false);
   });
 
   it('extracts merge PR numbers and titles', () => {
