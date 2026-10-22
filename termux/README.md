@@ -286,3 +286,5 @@ On the phone, `python hydi.py` serves the shared board at `http://127.0.0.1:3006
 
 Auto-deploy verified 2026-10-22
 Auto-deploy verified 2026-10-22 (run 2)
+
+Auto-deploy verified 2026-10-22 (post-timeout-fix)
