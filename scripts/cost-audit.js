@@ -35,13 +35,15 @@ const PAID_KEYS = {
   REPLICATE_API_TOKEN: 'Replicate',
 };
 
+// Plain substrings, not regexes: this greps source lines for where a paid
+// host appears; it never validates or allows a URL.
 const PAID_ENDPOINTS = [
-  { provider: 'Anthropic', re: /api\.anthropic\.com/ },
-  { provider: 'OpenAI', re: /api\.openai\.com/ },
-  { provider: 'AIML API', re: /api\.aimlapi\.com/ },
-  { provider: 'OpenRouter', re: /openrouter\.ai\/api/ },
-  { provider: 'Groq', re: /api\.groq\.com/ },
-  { provider: 'Google AI', re: /generativelanguage\.googleapis\.com/ },
+  { provider: 'Anthropic', needle: 'api.anthropic.com' },
+  { provider: 'OpenAI', needle: 'api.openai.com' },
+  { provider: 'AIML API', needle: 'api.aimlapi.com' },
+  { provider: 'OpenRouter', needle: 'openrouter.ai/api' },
+  { provider: 'Groq', needle: 'api.groq.com' },
+  { provider: 'Google AI', needle: 'generativelanguage.googleapis.com' },
 ];
 
 const SCAN_DIRS = ['api', 'lib', 'pages', 'src', 'modules', 'pao-system', 'apps', 'heidi-core', 'heidi-life', 'termux'];
@@ -101,8 +103,8 @@ function callSiteReport(root) {
       try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
       text.split(/\r?\n/).forEach((line, i) => {
         if (/^\s*(\/\/|\*|#)/.test(line)) return;
-        for (const { provider, re } of PAID_ENDPOINTS) {
-          if (re.test(line)) rows.push({ provider, file: path.relative(root, file), line: i + 1 });
+        for (const { provider, needle } of PAID_ENDPOINTS) {
+          if (line.includes(needle)) rows.push({ provider, file: path.relative(root, file), line: i + 1 });
         }
       });
     }
