@@ -102,5 +102,9 @@ testCriticalPath().then(success => {
     console.log('\n✅ SAFE TO PROCEED WITH DEPLOYMENTS');
   } else {
     console.log('\n❌ FIX ISSUES BEFORE DEPLOYING');
+    process.exitCode = 1;
   }
+}).catch(err => {
+  console.log(`\n❌ Critical path check crashed: ${err && err.message ? err.message : err}`);
+  process.exitCode = 1;
 });

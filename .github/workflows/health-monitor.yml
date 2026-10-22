@@ -2,8 +2,9 @@ name: Health Monitor
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
+    # Hourly. GitHub throttles 5-minute schedules to every few hours anyway,
+    # and a tighter cadence only adds noise to the tracking issue.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,12 +25,21 @@ jobs:
       run: |
         echo "🔍 Checking for Actions runs stuck in 'queued' (e.g. an offline self-hosted runner — see issue #195)"
         THRESHOLD_MINUTES=15
+        # A run queued longer than this is an abandoned ghost (GitHub normally
+        # expires queued jobs within 24h). One such ghost from 2026-08-10 kept
+        # this check red on every run and buried real failures in #337.
+        # Ghosts are reported as warnings; cancel them by hand.
+        ABANDONED_MINUTES=1440
         NOW=$(date -u +%s)
         STUCK=0
         for run_id in $(gh api "repos/${{ github.repository }}/actions/runs?status=queued&per_page=50" --jq '.workflow_runs[].id'); do
           CREATED=$(gh api "repos/${{ github.repository }}/actions/runs/$run_id" --jq '.created_at')
           CREATED_TS=$(date -u -d "$CREATED" +%s)
           AGE_MIN=$(( (NOW - CREATED_TS) / 60 ))
+          if [ "$AGE_MIN" -ge "$ABANDONED_MINUTES" ]; then
+            echo "::warning::Run $run_id has been queued for ${AGE_MIN}m and looks abandoned; cancel it: ${{ github.server_url }}/${{ github.repository }}/actions/runs/$run_id"
+            continue
+          fi
           if [ "$AGE_MIN" -ge "$THRESHOLD_MINUTES" ]; then
             echo "❌ Run $run_id has been queued for ${AGE_MIN}m (threshold ${THRESHOLD_MINUTES}m): ${{ github.server_url }}/${{ github.repository }}/actions/runs/$run_id"
             STUCK=1
@@ -47,8 +57,16 @@ jobs:
         node-version: '22'
 
     - name: Run health check
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       run: |
         echo "🏥 Running scheduled health check"
+        if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          echo "::notice::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY repo secrets not set; skipping DB check (Frank's /api/health is the live monitor)"
+          exit 0
+        fi
+        npm install --no-save --no-audit --no-fund --ignore-scripts dotenv @supabase/supabase-js
         node test-critical-path.js
 
     - name: Check Vercel environment
@@ -56,6 +74,10 @@ jobs:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       run: |
         echo "🔍 Checking Vercel environment"
+        if [ -z "$VERCEL_TOKEN" ]; then
+          echo "::notice::VERCEL_TOKEN repo secret not set; skipping Vercel env check"
+          exit 0
+        fi
         node vercel-api-check.js
 
     - name: Tripwire detection
