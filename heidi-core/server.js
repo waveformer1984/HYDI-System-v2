@@ -1323,6 +1323,8 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
   }
 }
 
+let heidi = null;
+
 async function gracefulShutdown(signal) {
   console.log(`\n[HEIDI] ${signal} received - shutting down...`);
   try {
@@ -1341,9 +1343,12 @@ async function gracefulShutdown(signal) {
 
 // Start if run directly
 if (require.main === module) {
-  const heidi = new HeidiCore();
+  heidi = new HeidiCore();
+  const repoRoot = require('path').resolve(__dirname, '..');
+  const provenance = require('../lib/runtime/provenance')
+    .recordProcessProvenance('heidi-core', { cwd: repoRoot, root: repoRoot });
 
-  heidi.initialize().then(() => {
+  provenance.then(() => heidi.initialize()).then(() => {
     console.log('[HEIDI] 4-layer self-awareness stack operational');
 
     // Start Express server
