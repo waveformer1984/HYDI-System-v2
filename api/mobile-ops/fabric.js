@@ -35,19 +35,23 @@ function fabricPrincipal(auth) {
   };
 }
 
-function normalizeRequestAction(body) {
+export function normalizeRequestAction(body) {
   if (!body || typeof body !== 'object') return null;
 
   if (body.approve === true) return 'approve';
   if (body.retry === true) return 'retry';
   if (body.cancel === true) return 'cancel';
 
+  // capability wins over a bare `objective` string: gateway.submit accepts
+  // `objective` as descriptive task metadata, so capability callers may send
+  // both. objective_id remains an unambiguous objective submit.
   if (typeof body.objective_id === 'string' && body.objective_id.length > 0) return 'objective';
-  if (typeof body.objective === 'string' && body.objective.length > 0) return 'objective';
 
   if (typeof body.capability_id === 'string' && body.capability_id.length > 0) return 'capability';
   if (typeof body.capability === 'string' && body.capability.length > 0) return 'capability';
   if (typeof body.action === 'string' && body.action.length > 0) return 'capability';
+
+  if (typeof body.objective === 'string' && body.objective.length > 0) return 'objective';
 
   return null;
 }
