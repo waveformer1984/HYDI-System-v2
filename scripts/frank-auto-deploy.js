@@ -18,7 +18,7 @@ const board = require('../lib/forge-board/sdk');
 const APP_NAME = 'frank-auto-deploy';
 const INTERVAL_MS = 5 * 60 * 1000;
 const LOCK_STALE_MS = 45 * 60 * 1000;
-const HEALTH_TIMEOUT_MS = 2 * 60 * 1000;
+const HEALTH_TIMEOUT_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 5 * 1000;
 const HEALTH_CHECKS = Object.freeze([
   { name: 'heidi-web', url: 'http://127.0.0.1:3000/api/health' },
@@ -162,7 +162,7 @@ async function restartApps(run, root, platform) {
   if (!names.length) throw new Error('no PM2 applications available to restart');
   await mustRun(run, executable('pm2', platform), ['restart', ...names, '--update-env'], {
     cwd: root,
-    timeout: 2 * 60 * 1000,
+    timeout: 10 * 60 * 1000,
   });
   return names;
 }
