@@ -35,7 +35,11 @@ export function openDb(dbPath) {
 
     CREATE TABLE IF NOT EXISTS actions (
       id INTEGER PRIMARY KEY, created INTEGER, insight_id INTEGER, type TEXT, payload TEXT,
-      confidence REAL, verdict TEXT, reason TEXT, status TEXT, executed INTEGER);
+      confidence REAL, raw_confidence REAL, verdict TEXT, reason TEXT, status TEXT, executed INTEGER);
+
+    CREATE TABLE IF NOT EXISTS reflections (
+      id INTEGER PRIMARY KEY, day TEXT NOT NULL UNIQUE, created INTEGER NOT NULL,
+      stats TEXT NOT NULL, changes TEXT NOT NULL, note TEXT NOT NULL, source TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY, created INTEGER, deliver_at INTEGER, title TEXT, body TEXT, delivered INTEGER);
@@ -46,6 +50,10 @@ export function openDb(dbPath) {
     CREATE TABLE IF NOT EXISTS audit (
       id INTEGER PRIMARY KEY, ts INTEGER, event TEXT, detail TEXT);
   `);
+  const actionColumns = db.prepare('PRAGMA table_info(actions)').all();
+  if (!actionColumns.some(column => column.name === 'raw_confidence')) {
+    db.exec('ALTER TABLE actions ADD COLUMN raw_confidence REAL');
+  }
   return db;
 }
 

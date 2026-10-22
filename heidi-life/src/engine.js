@@ -8,6 +8,7 @@ import { propose } from './gate.js';
 import { digest } from './llm.js';
 import { audit } from './db.js';
 import { localDay, addDays, DAY, HOUR } from './util.js';
+import { writeReflection } from './calibrate.js';
 
 export async function syncSources(db, cfg) {
   const result = {};
@@ -50,7 +51,8 @@ export function purgeOld(db, cfg) {
   if (changes) audit(db, 'purge', { pings: changes });
 }
 
-// Scheduler: light work every 15 min, sources hourly, insights once each evening (21:00 local).
+// Scheduler: light work every 15 min, sources hourly, insights once each evening,
+// and a persisted calibration self-review after 21:00 each Sunday (all local time).
 export function startScheduler(db, cfg, log = console.log) {
   let lastSources = 0, lastInsightDay = null;
   const tick = async () => {
@@ -63,6 +65,11 @@ export function startScheduler(db, cfg, log = console.log) {
         const r = await runInsights(db, cfg, today);
         lastInsightDay = today;
         log(`insights ${today}:`, r.map(x => `${x.kind}→${x.gate?.verdict ?? 'info'}`).join(', ') || 'none');
+      }
+      const weekday = new Intl.DateTimeFormat('en-US', { timeZone: cfg.timezone, weekday: 'short' }).format(new Date(now));
+      if (weekday === 'Sun' && hour >= 21) {
+        const review = await writeReflection(db, cfg, now);
+        if (review.written) log(`self-review ${today}:`, review.reflection.note);
       }
     } catch (e) { log('cycle error', e); audit(db, 'cycle_error', e.message); }
   };

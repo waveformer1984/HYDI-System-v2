@@ -2,6 +2,7 @@
 // that then has to clear the triple gate (gate.js) before anything happens.
 import { haversineM, localHour, dayStart, addDays, overlapMs, MIN, HOUR, DAY, fmtH, fmtUsd } from './util.js';
 import { unnamedHotspots } from './places.js';
+import { calibrateInsights } from './calibrate.js';
 
 const home = cfg => (cfg.places || []).find(p => p.isHome);
 
@@ -234,7 +235,7 @@ export function generateInsights(db, cfg, day) {
     action: { type: 'journal', confidence: 0.95, payload: { note: 'unnamed hotspots', spots } }
   });
 
-  return out.filter(i => !recentlyFired(db, i.kind, day));
+  return calibrateInsights(db, out.filter(i => !recentlyFired(db, i.kind, day)));
 }
 
 // First open slot on `day` within bounds, preferring mornings, avoiding calendar events and existing blocks.

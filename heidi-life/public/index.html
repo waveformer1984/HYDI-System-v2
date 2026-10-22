@@ -29,6 +29,9 @@
   .v { font-size:11px; font-weight:700; letter-spacing:.04em } .v.AUTO-APPROVE{color:var(--ok)} .v.REVIEW{color:var(--warn)} .v.BLOCK{color:var(--bad)}
   button { font:inherit; font-size:13px; padding:5px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer }
   button.go { background:var(--accent); border-color:var(--accent); color:#fff } .muted { color:var(--mute) } .empty { color:var(--mute); font-size:14px }
+  .review { margin-bottom:12px; padding:10px; border:1px solid var(--line); border-radius:8px }
+  .review h3 { margin:0 0 5px; font-size:14px } table { width:100%; border-collapse:collapse; margin:8px 0 12px; font-size:12px }
+  th,td { padding:4px 5px; border-bottom:1px solid var(--line); text-align:right } th:first-child,td:first-child { text-align:left }
 </style>
 </head>
 <body>
@@ -44,7 +47,7 @@
     <section class="card s6"><h2>Trips out from home · 14 days</h2><div id="trips"></div></section>
     <section class="card s6"><h2>Hours vs revenue by division · 14 days</h2><div id="divs"></div></section>
     <section class="card s6"><h2>Where the time went · today</h2><div id="places"></div></section>
-    <section class="card s6"><h2>Insights</h2><div id="insights"></div></section>
+    <section class="card s6"><h2>Insights</h2><div id="self-review"></div><div id="calibration"></div><div id="insights"></div></section>
     <section class="card s6"><h2>Actions · triple gate</h2><div id="actions"></div></section>
   </div>
 </main>
@@ -102,11 +105,17 @@ async function load() {
   const pl = Object.entries(t.placeMinutes||{});
   $('places').innerHTML = pl.length ? pl.map(([k,m])=>`<div class="row"><span>${esc(k)}</span><span class="muted">${h(m)}</span></div>`).join('') : '<p class="empty">No stays detected yet today.</p>';
 
-  $('insights').innerHTML = s.insights.length ? s.insights.map(i=>`<div class="ins"><div class="tag">${esc(i.focus)} · ${esc(i.day)} · conf ${i.confidence.toFixed(2)}</div>${esc(i.text)}</div>`).join('') : '<p class="empty">Insights appear after about a week of data.</p>';
+  $('self-review').innerHTML = s.reflection
+    ? `<div class="review"><h3>Heidi's self-review</h3>${esc(s.reflection.note)}<div class="src">${esc(s.reflection.day)} · ${esc(s.reflection.source)}</div></div>`
+    : `<div class="review empty"><h3>Heidi's self-review</h3>First review runs Sunday at 9 PM.</div>`;
+  $('calibration').innerHTML = s.calibration.length
+    ? `<table><thead><tr><th>Kind</th><th>Approved</th><th>Rejected</th><th>Multiplier</th></tr></thead><tbody>${s.calibration.map(c=>`<tr><td>${esc(c.kind)}</td><td>${c.approved}</td><td>${c.rejected}</td><td>${c.multiplier.toFixed(2)}</td></tr>`).join('')}</tbody></table>`
+    : '';
+  $('insights').innerHTML = s.insights.length ? s.insights.map(i=>`<div class="ins"><div class="tag">${esc(i.focus)} · ${esc(i.day)} · calibrated conf ${i.confidence.toFixed(2)}</div>${esc(i.text)}</div>`).join('') : '<p class="empty">Insights appear after about a week of data.</p>';
 
   $('actions').innerHTML = s.actions.length ? s.actions.map(a=>{
     const p = a.payload, what = a.type==='focus_block' ? `${esc(p.title)} · ${when(p.start)}` : a.type==='notify' ? `“${esc(p.title)}” · ${when(p.at)}` : 'journal entry';
-    return `<div class="act"><div><span class="v ${a.verdict}">${a.verdict}</span> <span class="tag">${a.type} · ${esc(a.status)}</span><div>${what}</div><div class="tag">${esc(a.reason)}</div></div>
+    return `<div class="act"><div><span class="v ${a.verdict}">${a.verdict}</span> <span class="tag">${a.type} · ${esc(a.status)} · calibrated conf ${a.confidence.toFixed(2)}</span><div>${what}</div><div class="tag">${esc(a.reason)}</div></div>
       ${a.status==='pending' ? `<div><button class="go" onclick="act(${a.id},'approve')">Approve</button> <button onclick="act(${a.id},'reject')">Reject</button></div>` : ''}</div>`;
   }).join('') : '<p class="empty">Nothing proposed yet.</p>';
 }
