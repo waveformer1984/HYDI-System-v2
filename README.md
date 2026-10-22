@@ -57,20 +57,27 @@ Heidi (`heidi-core/heidi-agent.js`) and `hydi-daemon` (`scripts/heidi-daemon.ts`
 ## Frank automatic deployment
 
 Frank can fast-forward a clean local `clean-main` to `origin/clean-main` every
-five minutes. The deployer builds and restarts the other PM2 applications,
-checks ports 3000, 3006, and 3459, and rolls back if a health check fails. It
-does not run tests and never writes `.env.local`.
+five minutes. The deployer builds and restarts the other **online** PM2
+applications (stopped one-shots such as `heidi-assessment-crew` are left
+alone), checks ports 3000, 3006, and 3459, and rolls back if a health check
+fails. It does not run tests and never writes `.env.local`. Build-regenerated
+files such as `next-env.d.ts` are restored after each build and never count
+as a dirty tree.
 
 One-time setup in PowerShell from the repository, after checking out a clean
 `clean-main` and making the hydi-daemon board token available to PM2:
 
 ```powershell
-pm2 start scripts/frank-auto-deploy.js --name frank-auto-deploy --cron-restart "*/5 * * * *" --no-autorestart; pm2 save
+pm2 start scripts/frank-auto-deploy.js --name frank-auto-deploy; pm2 save
 ```
 
-The process is intentionally one-shot: `cron_restart` starts it on schedule,
-while `--no-autorestart` prevents a completed or failed run from looping.
-`.runtime/frank-auto-deploy.lock` prevents overlapping deployments. A dirty
-tree, the wrong branch, a non-fast-forward update, a rollback, or a rollback
-failure is reported on Forge Board `#alerts`; successful deployments and
-verified rollback results are summarized on `#ops` as `hydi-daemon`.
+The process is long-lived with autorestart: an internal loop runs one
+deployment pass every five minutes, so a run is never killed mid-build the
+way `cron_restart` would. `.runtime/frank-auto-deploy.lock` prevents
+overlapping deployments; a stale lock is dropped when its pid is dead or it
+is older than 45 minutes. A dirty tree, the wrong branch, a
+non-fast-forward update, a rollback, or a rollback failure is reported on
+Forge Board `#alerts` once per distinct reason (the last alert is persisted
+in `.runtime`), with a single "unblocked" message when the reason clears;
+successful deployments and verified rollback results are summarized on
+`#ops` as `hydi-daemon`.
