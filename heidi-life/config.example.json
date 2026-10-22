@@ -1,0 +1,46 @@
+{
+  "port": 3470,
+  "timezone": "America/Chicago",
+  "dbPath": "C:\\ProtoForge_Ecosystem\\data\\heidi-life.db",
+  "allowTailnetApprovals": false,
+  "token": "CHANGE-ME-run: node -e \"console.log(crypto.randomUUID())\"",
+
+  "retention": { "rawPingDays": 90 },
+
+  "places": [
+    { "name": "Home", "lat": 29.4241, "lon": -98.4936, "radius": 120, "division": null, "isHome": true },
+    { "name": "Colter's Little Smokehouse", "lat": 29.4300, "lon": -98.5000, "radius": 150, "division": "Colter's Little Smokehouse" },
+    { "name": "ProtoForge Shop", "lat": 29.4400, "lon": -98.4800, "radius": 150, "division": "ProtoForge Manufacturing" }
+  ],
+
+  "divisionKeywords": {
+    "AppForge": ["appforge", "app build"],
+    "GroundWork": ["groundwork"],
+    "J.STEIN Collection": ["j.stein", "jstein"],
+    "Colter's Little Smokehouse": ["smokehouse", "colter", "brisket"],
+    "Rezonate/Waveformer Records": ["rezonate", "waveformer", "studio", "mix", "master"],
+    "Build-A-Mind": ["build-a-mind", "buildamind"],
+    "Z-Aero Foundation": ["z-aero", "zaero"],
+    "ForgeFinder": ["forgefinder"],
+    "Galactic Bytes": ["galactic", "ursula", "ursila"],
+    "ProtoForge Manufacturing": ["protoforge mfg", "print", "3d", "manufacturing"]
+  },
+
+  "sources": {
+    "calendarIcsUrls": [],
+    "stripe": { "restrictedKey": "", "divisionFromMetadataKey": "division" },
+    "adbUsage": { "enabled": false, "adbPath": "adb", "socialPackages": ["com.instagram.android", "com.zhiliaoapp.musically", "com.facebook.katana", "com.twitter.android", "com.reddit.frontpage", "com.google.android.youtube"] }
+  },
+
+  "ollama": { "url": "http://127.0.0.1:11434", "model": "qwen2.5:3b-instruct-q4_K_M", "enabled": true },
+
+  "gate": {
+    "allowExecEnvVar": "HEIDI_ALLOW_EXEC",
+    "minConfidence": 0.85,
+    "bounds": {
+      "notify":      { "maxPerDay": 3, "quietHours": [22, 7] },
+      "focus_block": { "maxPerDay": 2, "maxMinutes": 120, "earliestHour": 8, "latestHour": 20 },
+      "journal":     { "maxPerDay": 20 }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+DTSTART;TZID=America/Chicago:{{START}}T190000
+DTEND;TZID=America/Chicago:{{START}}T210000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE,TH
+UID:studio-session@google.com
+SUMMARY:Waveformer studio session
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=America/Chicago:{{START}}T110000
+DTEND;TZID=America/Chicago:{{START}}T113000
+RRULE:FREQ=DAILY
+UID:standup@google.com
+SUMMARY:Galactic Bytes check-in
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=America/Chicago:{{START}}T120000
+DTEND;TZID=America/Chicago:{{START}}T123000
+RRULE:FREQ=DAILY
+UID:ursula@google.com
+SUMMARY:Ursula pipeline review
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=America/Chicago:{{START}}T130000
+DTEND;TZID=America/Chicago:{{START}}T133000
+RRULE:FREQ=WEEKLY;BYDAY=TU,TH
+UID:jstein@google.com
+SUMMARY:J.STEIN fabric call
+END:VEVENT
+END:VCALENDAR

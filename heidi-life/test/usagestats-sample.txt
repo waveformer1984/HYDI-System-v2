@@ -1,0 +1,12 @@
+user=0
+In-memory daily stats
+  timeRange="2026-10-22, 12:00 AM - 3:12 PM"
+  packages
+    package=com.instagram.android totalTimeUsed="1:12:40" lastTimeUsed="2026-10-22 15:01:02" totalTimeVisible="1:15:00" appLaunchCount=34
+    package=com.google.android.youtube totalTimeUsed="48:10" lastTimeUsed="2026-10-22 13:20:44" appLaunchCount=8
+    package=com.termux totalTimeUsed="2:05:31" lastTimeUsed="2026-10-22 15:10:00" appLaunchCount=19
+    package=com.android.chrome totalTimeUsed="22:05" lastTimeUsed="2026-10-22 14:00:00"
+    package=com.samsung.android.clock totalTimeUsed="0:20" lastTimeUsed="2026-10-22 07:00:00"
+In-memory weekly stats
+  packages
+    package=com.instagram.android totalTimeUsed="9:40:00" lastTimeUsed="2026-10-22 15:01:02"
