@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heidi Life</title>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1d1b18; --mute:#6f6a62; --line:#e4dfd5; --accent:#c2410c; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --bar:#d6d0c4; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141210; --card:#1d1a17; --ink:#efe9df; --mute:#9a9286; --line:#2e2a25; --accent:#fb923c; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --bar:#3a352e; } }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 60px; }
+  header { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  h1 { font-size:22px; margin:0; letter-spacing:-.01em } h1 span { color:var(--accent) }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); margin:0 0 10px; font-weight:600 }
+  .pill { font-size:12px; padding:3px 9px; border-radius:99px; border:1px solid var(--line); color:var(--mute) }
+  .pill.on { color:var(--ok); border-color:currentColor } .pill.off { color:var(--warn); border-color:currentColor }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(12,1fr); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; grid-column:span 12; }
+  @media (min-width:800px) { .s4{grid-column:span 4} .s6{grid-column:span 6} .s8{grid-column:span 8} }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px }
+  .kpi b { display:block; font-size:24px; font-variant-numeric:tabular-nums; letter-spacing:-.02em } .kpi small { color:var(--mute) }
+  .digest { white-space:pre-wrap } .src { color:var(--mute); font-size:12px; margin-top:6px }
+  .bars { display:flex; align-items:flex-end; gap:4px; height:90px } .bars div { flex:1; background:var(--bar); border-radius:3px 3px 0 0; position:relative; min-height:2px }
+  .bars div.hi { background:var(--accent) } .axis { display:flex; gap:4px; font-size:10px; color:var(--mute) } .axis span { flex:1; text-align:center }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-top:1px solid var(--line) } .row:first-of-type { border-top:0 }
+  .hbar { height:6px; background:var(--bar); border-radius:3px; margin-top:4px } .hbar i { display:block; height:100%; background:var(--accent); border-radius:3px }
+  .ins { padding:10px 0; border-top:1px solid var(--line) } .ins:first-of-type{border-top:0} .tag { font-size:11px; color:var(--mute) }
+  .act { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px 0; border-top:1px solid var(--line); flex-wrap:wrap }
+  .v { font-size:11px; font-weight:700; letter-spacing:.04em } .v.AUTO-APPROVE{color:var(--ok)} .v.REVIEW{color:var(--warn)} .v.BLOCK{color:var(--bad)}
+  button { font:inherit; font-size:13px; padding:5px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer }
+  button.go { background:var(--accent); border-color:var(--accent); color:#fff } .muted { color:var(--mute) } .empty { color:var(--mute); font-size:14px }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Heidi <span>Life</span></h1>
+    <div id="status"></div>
+  </header>
+  <div class="grid">
+    <section class="card s8"><h2>Tonight's digest</h2><div id="digest" class="digest empty">No digest yet — it runs at 9 PM.</div></section>
+    <section class="card s4"><h2>Today</h2><div id="kpis" class="kpis"></div></section>
+    <section class="card s6"><h2>Estimated sleep · 14 nights</h2><div id="sleep"></div></section>
+    <section class="card s6"><h2>Trips out from home · 14 days</h2><div id="trips"></div></section>
+    <section class="card s6"><h2>Hours vs revenue by division · 14 days</h2><div id="divs"></div></section>
+    <section class="card s6"><h2>Where the time went · today</h2><div id="places"></div></section>
+    <section class="card s6"><h2>Insights</h2><div id="insights"></div></section>
+    <section class="card s6"><h2>Actions · triple gate</h2><div id="actions"></div></section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const h = m => (m/60).toFixed(1)+'h', usd = c => '$'+Math.round(c/100).toLocaleString();
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tz = () => window.__tz || undefined;
+const when = ts => new Date(ts).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:tz()});
+const dow = d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'narrow'});
+
+function bars(el, days, val, fmt, hiFn) {
+  const vals = days.map(val), max = Math.max(1, ...vals.filter(v=>v!=null));
+  if (!vals.some(v=>v!=null)) { el.innerHTML = '<p class="empty">Not enough data yet.</p>'; return; }
+  el.innerHTML = `<div class="bars">${vals.map((v,i)=>`<div class="${hiFn&&v!=null&&hiFn(v)?'hi':''}" style="height:${v==null?2:Math.max(2,v/max*100)}%" title="${days[i].day}: ${v==null?'no data':fmt(v)}"></div>`).join('')}</div>
+    <div class="axis">${days.map(d=>`<span>${dow(d.day)}</span>`).join('')}</div>`;
+}
+
+async function act(id, what) {
+  const r = await fetch(`/api/actions/${id}/${what}` + location.search, {method:'POST'}).then(r=>r.json());
+  if (r.error) alert(r.error);
+  load();
+}
+
+async function load() {
+  const s = await fetch('/api/summary' + location.search).then(r => r.json());
+  window.__tz = s.timezone;
+  const age = s.status.lastPing ? Math.round((Date.now()-s.status.lastPing)/60000) : null;
+  $('status').innerHTML = `<span class="pill ${age!=null&&age<30?'on':'off'}">${age==null?'no phone data yet':`phone ${age}m ago${s.status.battery!=null?` · ${s.status.battery}%`:''}`}</span>
+    <span class="pill ${s.status.allowExec?'on':'off'}">exec ${s.status.allowExec?'ON':'OFF'}</span>`;
+
+  if (s.digest) $('digest').innerHTML = `${esc(s.digest.text)}<div class="src">${esc(s.digest.day)} · ${esc(s.digest.source)}</div>`, $('digest').classList.remove('empty');
+
+  const t = s.days.at(-1) || {};
+  const kp = [
+    ['At home', t.homeMinutes!=null ? h(t.homeMinutes) : '—'],
+    ['Trips out', t.departures ?? '—'], ['Distance', t.distanceKm!=null ? t.distanceKm+' km' : '—'],
+    ['Sleep (est.)', t.sleep ? h(t.sleep.minutes) : '—'], ['Screen', t.screenMinutes ? h(t.screenMinutes) : '—'],
+    ['Revenue', t.revenueCents!=null ? usd(t.revenueCents) : '—']
+  ];
+  $('kpis').innerHTML = kp.map(([k,v])=>`<div class="kpi"><b>${v}</b><small>${k}</small></div>`).join('');
+
+  bars($('sleep'), s.days, d => d.sleep?.minutes ?? null, h, v => v < 390);
+  bars($('trips'), s.days, d => d.departures, v => v+' trips', v => v >= 3);
+
+  const hrs = {}, rev = {};
+  for (const d of s.days) { for (const [k,m] of Object.entries(d.divisionMinutes||{})) hrs[k]=(hrs[k]||0)+m; for (const [k,c] of Object.entries(d.revenueByDivision||{})) rev[k]=(rev[k]||0)+c; }
+  const divs = [...new Set([...Object.keys(hrs),...Object.keys(rev)])].sort((a,b)=>(hrs[b]||0)-(hrs[a]||0));
+  const maxH = Math.max(1,...Object.values(hrs));
+  $('divs').innerHTML = divs.length ? divs.map(k=>`<div class="row"><div style="flex:1">${esc(k)}<div class="hbar"><i style="width:${(hrs[k]||0)/maxH*100}%"></i></div></div><div class="muted" style="text-align:right;white-space:nowrap">${h(hrs[k]||0)}<br>${usd(rev[k]||0)}</div></div>`).join('') : '<p class="empty">Name your places and add calendar/Stripe to see this.</p>';
+
+  const pl = Object.entries(t.placeMinutes||{});
+  $('places').innerHTML = pl.length ? pl.map(([k,m])=>`<div class="row"><span>${esc(k)}</span><span class="muted">${h(m)}</span></div>`).join('') : '<p class="empty">No stays detected yet today.</p>';
+
+  $('insights').innerHTML = s.insights.length ? s.insights.map(i=>`<div class="ins"><div class="tag">${esc(i.focus)} · ${esc(i.day)} · conf ${i.confidence.toFixed(2)}</div>${esc(i.text)}</div>`).join('') : '<p class="empty">Insights appear after about a week of data.</p>';
+
+  $('actions').innerHTML = s.actions.length ? s.actions.map(a=>{
+    const p = a.payload, what = a.type==='focus_block' ? `${esc(p.title)} · ${when(p.start)}` : a.type==='notify' ? `“${esc(p.title)}” · ${when(p.at)}` : 'journal entry';
+    return `<div class="act"><div><span class="v ${a.verdict}">${a.verdict}</span> <span class="tag">${a.type} · ${esc(a.status)}</span><div>${what}</div><div class="tag">${esc(a.reason)}</div></div>
+      ${a.status==='pending' ? `<div><button class="go" onclick="act(${a.id},'approve')">Approve</button> <button onclick="act(${a.id},'reject')">Reject</button></div>` : ''}</div>`;
+  }).join('') : '<p class="empty">Nothing proposed yet.</p>';
+}
+load(); setInterval(load, 60000);
+</script>
+</body>
+</html>

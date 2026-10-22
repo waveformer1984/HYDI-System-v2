@@ -1,0 +1,14 @@
+{
+  "name": "heidi-life",
+  "version": "0.1.0",
+  "description": "Heidi Life layer: local-only personal telemetry (location, calendar, phone usage, revenue) with triple-gated improvement actions. Runs on Frank.",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "analyze": "node --no-warnings src/cli.js analyze",
+    "simulate": "node --no-warnings test/simulate.js"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
