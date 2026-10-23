@@ -11,6 +11,9 @@ const BusinessSignalInterpreter = require('../../../src/hydi-v3/BusinessSignalIn
 
 const silent = { log: () => {}, error: () => {}, warn: () => {} };
 
+// Every test spawns real git init/commit subprocesses; hooks need headroom too.
+jest.setTimeout(90000);
+
 function git(cwd, ...args) {
   return execFileSync('git', args, {
     cwd,
