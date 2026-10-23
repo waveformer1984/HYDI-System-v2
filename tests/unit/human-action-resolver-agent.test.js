@@ -226,7 +226,7 @@ describe('priority ordering', () => {
 describe('inventory — the "no silent abandonment" audit', () => {
   test('every open action has exactly one disposition; unclassified = 0', async () => {
     const svc = new HumanActionService();
-    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 } });
+    await syncHumanActions(svc, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env: mkEnv(), resolve: { throttleMs: 0 } });
     const inv = inventoryBlockers({ service: svc, env: mkEnv() });
     expect(inv.actions.dispositions.UNCLASSIFIED).toBe(0);
     expect(inv.actions.duplicatesPrevented).toBe(true);
@@ -240,8 +240,8 @@ describe('inventory — the "no silent abandonment" audit', () => {
 
   test('ASK chat reports the resolution breakdown — armed vs human-only', async () => {
     const svc = new HumanActionService();
-    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 } });
-    const ans = await tryHumanActionAnswer('what do you need from me', { service: svc });
+    await syncHumanActions(svc, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env: mkEnv(), resolve: { throttleMs: 0 } });
+    const ans = await tryHumanActionAnswer('what do you need from me', { service: svc, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(ans.text).toMatch(/autonomous-resolver armed|awaiting human/);
     expect(ans.text).toContain('resolution:');
   });
@@ -256,6 +256,7 @@ describe('inventory — the "no silent abandonment" audit', () => {
     const setCalls = [];
     await tryHumanActionAnswer('what is blocking revenue', {
       service: svc,
+      dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) },
       resolverDeps: { configPlane: { canAutoModify: () => true, set: (...a) => setCalls.push(a) } },
     });
     expect(setCalls.length).toBe(0);

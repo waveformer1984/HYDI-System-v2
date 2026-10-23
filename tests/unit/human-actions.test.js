@@ -272,7 +272,7 @@ describe('mission linkage', () => {
   test('syncHumanActions detects + links + resumes in one pass', async () => {
     const s = new HumanActionService({});
     const goals = fakeGoals([]);
-    const r = await syncHumanActions(s, goals);
+    const r = await syncHumanActions(s, goals, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, });
     expect(r.detection.checked).toBeGreaterThan(0);
     expect(r.goalScan).toBeTruthy();
     expect(r.resume).toBeTruthy();
@@ -291,7 +291,7 @@ describe('heidi answer', () => {
       blockerKey: 'test:qa', title: 'QA action', instructions: ['do A', 'do B'],
       verifier: { name: 'manual', spec: {} }, sourceMissionId: 'm-x', priority: 'high',
     });
-    const a = await tryHumanActionAnswer('what do you need from me', { service: s });
+    const a = await tryHumanActionAnswer('what do you need from me', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toContain('QA action');
     expect(a.text).toContain('do A');
     expect(a.text).toContain('mission: m-x');
@@ -302,7 +302,7 @@ describe('heidi answer', () => {
     const s = new HumanActionService({});
     s.request({ blockerKey: 'test:rez', title: 'Rezonate creds', verifier: { name: 'manual', spec: {} }, sourceMissionId: 'rezonate-v1.3' });
     s.request({ blockerKey: 'test:other', title: 'Unrelated thing', verifier: { name: 'manual', spec: {} } });
-    const a = await tryHumanActionAnswer('what is blocking rezonate', { service: s });
+    const a = await tryHumanActionAnswer('what is blocking rezonate', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toContain('Rezonate creds');
     expect(a.text).not.toContain('Unrelated thing');
   });
@@ -310,14 +310,14 @@ describe('heidi answer', () => {
   test('"I did it" re-runs verifiers instead of trusting the claim', async () => {
     const s = new HumanActionService({});
     s.request({ blockerKey: 'test:claim', title: 'Set thing', verifier: { name: 'env-vars', spec: { envNames: ['HA_NEVER_SET_XYZ'] } } });
-    const a = await tryHumanActionAnswer('i did it', { service: s });
+    const a = await tryHumanActionAnswer('i did it', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toMatch(/still failing|manual-attestation/);
   });
 
   test('"check again" verifies and reports check rows', async () => {
     const s = new HumanActionService({});
     s.request({ blockerKey: 'test:again', title: 'Set HA_AGAIN', verifier: { name: 'env-vars', spec: { envNames: ['HA_AGAIN_XYZ'] } } });
-    const a = await tryHumanActionAnswer('check again', { service: s });
+    const a = await tryHumanActionAnswer('check again', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toMatch(/still failing|Verification re-run/);
   });
 
@@ -327,7 +327,7 @@ describe('heidi answer', () => {
       blockerKey: 'test:why', title: 'Set HA_WHY', instructions: ['set HA_WHY=1'],
       verifier: { name: 'env-vars', spec: { envNames: ['HA_WHY_MISSING'] } },
     });
-    const a = await tryHumanActionAnswer('why is this still blocked', { service: s });
+    const a = await tryHumanActionAnswer('why is this still blocked', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toContain('Still blocked');
     expect(a.text).toContain('Set HA_WHY');
     expect(a.text).toMatch(/last check:/);
@@ -340,12 +340,12 @@ describe('heidi answer', () => {
       blockerKey: 'test:worked', title: 'Set HA_WORKED',
       verifier: { name: 'env-vars', spec: { envNames: ['HA_WORKED_MISSING'] } },
     });
-    const a = await tryHumanActionAnswer('did my action work', { service: s });
+    const a = await tryHumanActionAnswer('did my action work', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toContain('not checked yet');
     expect(a.text).toContain('check again');
     // after a failed verify, it answers with the durable failure
     await s.verify(action.id, 'tester');
-    const b = await tryHumanActionAnswer('did that work', { service: s });
+    const b = await tryHumanActionAnswer('did that work', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(b.text).toMatch(/not yet|FAILED/i);
   });
 
@@ -355,7 +355,7 @@ describe('heidi answer', () => {
       blockerKey: 'test:after', title: 'Set HA_AFTER', resumeCapability: 'the deploy mission resumes',
       verifier: { name: 'env-vars', spec: { envNames: ['HA_AFTER_MISSING'] } },
     });
-    const a = await tryHumanActionAnswer('what happens after I do this', { service: s });
+    const a = await tryHumanActionAnswer('what happens after I do this', { service: s, dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) } });
     expect(a.text).toContain('the deploy mission resumes');
     expect(a.text).toContain('env-vars');
     expect(a.text).toMatch(/independently confirms/);
@@ -363,11 +363,11 @@ describe('heidi answer', () => {
 });
 
 describe('boundary contract (universal boundary protocol)', () => {
-  test('the vocabulary is the canonical 12 categories', () => {
+  test('the vocabulary is the canonical 13 categories', () => {
     expect(CATEGORIES).toEqual([
       'PAYMENT', 'CREDENTIAL', 'AUTHORIZATION', 'EXTERNAL_SERVICE', 'ACCOUNT_SETUP',
       'DOMAIN', 'DEPLOYMENT', 'FUNDING', 'CUSTOMER_ACTION', 'PHYSICAL_ACTION',
-      'COMPLIANCE', 'OTHER',
+      'COMPLIANCE', 'INFRASTRUCTURE', 'OTHER',
     ]);
   });
 
@@ -486,7 +486,7 @@ describe('periodic verification sweep', () => {
     });
     expect((await goals.getGoal('g-sweep')).status).toBe('escalated');
     process.env.HA_SWEEP_GOAL_VAR = '1';
-    const r = await syncHumanActions(s, goals, { verify: { throttleMs: 0 } });
+    const r = await syncHumanActions(s, goals, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, verify: { throttleMs: 0 } });
     delete process.env.HA_SWEEP_GOAL_VAR;
     expect(r.verify.resolved.length).toBe(1);
     expect(r.resume.resumed.length).toBe(1);
