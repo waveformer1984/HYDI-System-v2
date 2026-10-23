@@ -1,14 +1,13 @@
 /**
  * REAL regression test for graceful shutdown via IPC on Windows.
  *
- * Unlike the source-text checks in heidi-daemon-bugfix-regression.test.ts,
- * this test actually spawns the daemon as a child process (via the launcher),
+ * Unlike source-text checks, this test actually spawns the PM2 entry process,
  * waits for it to start cycling, sends a real shutdown message via IPC
  * (the same mechanism PM2 uses with shutdown_with_message: true), and
  * asserts on the child's OBSERVABLE behavior — not on source code text.
  *
  * What this proves:
- *   1. The launcher's fork() + IPC relay actually works
+ *   1. PM2's process is the real daemon process (no launcher child)
  *   2. The daemon's process.on('message') handler actually fires
  *   3. gracefulShutdown() actually runs and writes a shutdown audit record
  *   4. The lock file is actually released by the daemon (not left stale)
@@ -89,7 +88,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     }
   }, 30000);
 
-  test('IPC shutdown message triggers graceful shutdown (shutdown audit record + lock released + exit 0)', async () => {
+  test('PM2-style restart leaves no orphan and the replacement acquires the lock', async () => {
     // Skip if the real daemon is running — we'd conflict on the lock
     if (fs.existsSync(LOCK_FILE)) {
       const content = fs.readFileSync(LOCK_FILE, 'utf-8');
@@ -150,6 +149,8 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
 
     // Verify the daemon is actually running (lock file exists)
     expect(fs.existsSync(LOCK_FILE)).toBe(true);
+    const firstPid = child.pid!;
+    expect(JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8')).pid).toBe(firstPid);
 
     // Record audit state after startup — at least the initial cycle should have recorded
     const auditAfterStartup = fs.existsSync(AUDIT_FILE)
@@ -186,6 +187,26 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
 
     // 4. The lock file should have been released by the daemon
     expect(fs.existsSync(LOCK_FILE)).toBe(false);
+    expect(pidIsAlive(firstPid)).toBe(false);
+
+    // A PM2 replacement starts in the same entry point and owns the new lock
+    // directly. If the first run left an orphan, this instance cannot start.
+    let restartOutput = '';
+    child = fork(LAUNCHER, ['--no-stabilization', '--skip-self-check', `--interval=${TEST_INTERVAL_MS}`], {
+      stdio: 'pipe',
+      cwd: REPO_ROOT,
+    });
+    child.on('error', () => { /* surfaced by readiness/exit assertions */ });
+    child.stdout?.on('data', (data: Buffer) => { restartOutput += data.toString(); });
+    await waitForCondition(
+      () => restartOutput.includes('Daemon is running'),
+      75000,
+      'Replacement daemon did not reach running state',
+    );
+    expect(JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8')).pid).toBe(child.pid);
+    child.send({ type: 'shutdown' });
+    expect(await waitForExit(child, 40000)).toBe(0);
+    expect(fs.existsSync(LOCK_FILE)).toBe(false);
 
     console.log('');
     console.log('════════════════════════════════════════════════════════════════');
@@ -197,28 +218,19 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     console.log(`Stdout contains "shutting down gracefully": ${stdoutContent.includes('shutting down gracefully')}`);
     console.log(`Stdout contains "Shutdown complete":       ${stdoutContent.includes('Shutdown complete')}`);
     console.log('════════════════════════════════════════════════════════════════');
-  }, 180000); // 180s overall: 75s startup wait + settle + 40s exit wait + buffer
+  }, 300000);
 
-  test('launcher uses fork() not spawn() (IPC channel required for shutdown_with_message)', () => {
+  test('launcher loads the daemon in-process without spawning or forking', () => {
     const launcherPath = path.resolve(REPO_ROOT, 'scripts', 'heidi-daemon-launcher.js');
     const content = fs.readFileSync(launcherPath, 'utf-8');
 
-    // Must use fork() to establish IPC channel
-    expect(content).toContain('fork(');
-
-    // Must NOT use spawn() in actual code (only fork).
-    // Strip comments before checking to avoid false positives from
-    // comment text that mentions "spawn".
     const strippedOfComments = content
       .replace(/\/\*[\s\S]*?\*\//g, '') // block comments
       .replace(/\/\/.*$/gm, '');         // line comments
+    expect(strippedOfComments).toContain("require('tsx/cjs')");
+    expect(strippedOfComments).toContain("require('./heidi-daemon.ts')");
     expect(strippedOfComments).not.toMatch(/\bspawn\s*\(/);
-
-    // Must relay shutdown message via child.send()
-    expect(content).toContain("child.send({ type: 'shutdown' })");
-
-    // Must listen for process.on('message') to receive PM2's shutdown
-    expect(content).toContain("process.on('message'");
+    expect(strippedOfComments).not.toMatch(/\bfork\s*\(/);
   });
 
   test('daemon has IPC message handler alongside signal handlers', () => {
@@ -241,8 +253,9 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     // Must have shutdown_with_message: true
     expect(content).toContain('shutdown_with_message: true');
 
-    // Must use the launcher script
+    // Must use the in-process launcher script
     expect(content).toContain('heidi-daemon-launcher.js');
+    expect(content).toContain('PM2 owns this exact PID');
   });
 });
 
@@ -278,4 +291,13 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<number | n
       resolve(code);
     });
   });
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
