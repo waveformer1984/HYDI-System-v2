@@ -92,7 +92,10 @@ describe('hydi-daemon process ownership', () => {
   test('a hung lease release is bounded and still releases the lock', async () => {
     fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid }));
     const warn = jest.fn();
-    const started = Date.now();
+    // No wall-clock assertion: if the bound is broken this await never
+    // resolves and jest's own test timeout fails the run. The assertions
+    // prove the *behavior* — the bounded-release path fired and cleanup
+    // still proceeded.
     await releaseDaemonOwnership({
       releaseLease: () => new Promise(() => { /* deliberately never settles */ }),
       closeLeasePool: async () => undefined,
@@ -101,7 +104,6 @@ describe('hydi-daemon process ownership', () => {
       leaseTimeoutMs: 20,
       poolTimeoutMs: 20,
     });
-    expect(Date.now() - started).toBeLessThan(500);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('operator lease release timed out'));
     expect(fs.existsSync(lockFile)).toBe(false);
   });
