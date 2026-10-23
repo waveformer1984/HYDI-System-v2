@@ -228,6 +228,7 @@ describe('end-to-end orchestration proof', () => {
     const s = svc();
     const goals = fakeGoals([{ goalId: 'goal_sync', status: 'active', context: {} }]);
     const out = await syncHumanActions(s, goals, {
+      dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) },
       env: envFor(), staleCheck: { confirmAttempts: 1 },
       resolve: { throttleMs: 0, deps: { configPlane: { canAutoModify: () => false, set: () => ({ success: false }) } } },
       verify: { throttleMs: 0 },
@@ -238,7 +239,7 @@ describe('end-to-end orchestration proof', () => {
     expect(out.goalScan).toBeTruthy();
     // A second identical pass converges — no duplicated minted records.
     const n1 = load().actions.length;
-    await syncHumanActions(s, goals, { env: envFor(), staleCheck: { confirmAttempts: 1 }, resolve: { throttleMs: 0 }, verify: { throttleMs: 0 } });
+    await syncHumanActions(s, goals, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env: envFor(), staleCheck: { confirmAttempts: 1 }, resolve: { throttleMs: 0 }, verify: { throttleMs: 0 } });
     expect(load().actions.length).toBe(n1);
   });
 });

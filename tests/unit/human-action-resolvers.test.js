@@ -299,7 +299,7 @@ describe('resolution sweep invariants', () => {
   test('full sync wires resolve→verify→resume end-to-end', async () => {
     const svc = new HumanActionService();
     const env = mkEnv({ WEBHOOK_PROCESSING_ENABLED: 'true' }); // boundary already clear
-    const out = await syncHumanActions(svc, null, { env, resolve: { throttleMs: 0 } });
+    const out = await syncHumanActions(svc, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env, resolve: { throttleMs: 0 } });
     expect(out.resolve).toBeTruthy();
     // webhook-processing rule inactive (env set) → that action not requested;
     // other rules may legitimately materialize under a sparse env stub

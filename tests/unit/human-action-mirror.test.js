@@ -178,11 +178,11 @@ describe('syncHumanActions reports the mirror pass', () => {
     const pool = makePool();
     const env = { envNamePresent: () => false, envValue: () => undefined };
 
-    const pooled = await syncHumanActions(svc, null, { env, pool });
+    const pooled = await syncHumanActions(svc, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env, pool });
     expect(pooled.mirror).toBeTruthy();
     expect(pooled.mirror.synced).toBeGreaterThanOrEqual(0);
 
-    const unpolled = await syncHumanActions(svc, null, { env });
+    const unpolled = await syncHumanActions(svc, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env });
     expect(unpolled.mirror).toBeNull();
   });
 });

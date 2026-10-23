@@ -134,7 +134,7 @@ describe('detectStaleBaseUrl', () => {
     const r = await detectStaleBaseUrl(s, env, { fetch });
     expect(r.stale).toBe(true);
     up = true;
-    const out = await syncHumanActions(s, null, { env, staleCheck: { fetch }, verify: { throttleMs: 0 } });
+    const out = await syncHumanActions(s, null, { dockerCheck: { collect: async () => ({ docker: 'NOT_CONFIGURED', containers: [] }) }, env, staleCheck: { fetch }, verify: { throttleMs: 0 } });
     const a = s.get(r.actionId);
     expect(a.status).toBe('RESOLVED');
     expect(a.resolution).toBe('auto_verified');
