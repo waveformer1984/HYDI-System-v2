@@ -132,6 +132,7 @@ describe('HealthProvenanceChecker.checkModule: process-identity loophole', () =>
     checker.canConnect = jest.fn().mockResolvedValue(true);
     checker.findPidsOnPort = jest.fn().mockReturnValue(['555']);
     checker.getProcessInfo = jest.fn().mockReturnValue({ name: 'python.exe', cmdline: 'python -m http.server 8080' });
+    checker.getParentPid = jest.fn().mockReturnValue(null); // same hermeticity stub as Test B
     checker.httpGet = jest.fn().mockResolvedValue({ ok: true, statusCode: 200, body: '{"status":"ok"}' });
 
     const result = await checker.checkModule(legacyModule);
