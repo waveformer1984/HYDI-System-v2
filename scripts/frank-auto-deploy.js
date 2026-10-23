@@ -20,6 +20,9 @@ const INTERVAL_MS = 5 * 60 * 1000;
 const LOCK_STALE_MS = 45 * 60 * 1000;
 const HEALTH_TIMEOUT_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 5 * 1000;
+// Deploys run `npm ci` + `next build` — refuse to start one into a
+// nearly-full drive; ENOSPC mid-deploy leaves a broken tree.
+const MIN_FREE_DISK_GB = 10;
 const HEALTH_CHECKS = Object.freeze([
   { name: 'heidi-web', url: 'http://127.0.0.1:3000/api/health' },
   { name: 'heidi-mobile', url: 'http://127.0.0.1:3006/api/health' },
@@ -167,6 +170,14 @@ async function restartApps(run, root, platform) {
   return names;
 }
 
+async function defaultFreeDiskGB(root) {
+  const statfs = fs.statfsSync || fs.statfs;
+  if (!statfs) return Infinity;
+  const target = path.parse(path.resolve(root)).root || root;
+  const stats = statfs.call(fs, target);
+  return (stats.bfree * stats.bsize) / 1e9;
+}
+
 async function defaultProbe(check) {
   const started = Date.now();
   try {
@@ -276,6 +287,14 @@ async function runAutoDeploy(overrides = {}) {
           const reason = 'local clean-main cannot fast-forward to origin/clean-main';
           await alert(reason, `Frank auto-deploy stopped: ${reason}. Nothing changed.`);
           result = { status: 'blocked', reason };
+        } else {
+          const freeDiskGB = overrides.freeDiskGB || defaultFreeDiskGB;
+          const free = await freeDiskGB(root);
+          if (Number.isFinite(free) && free < MIN_FREE_DISK_GB) {
+            const reason = `low disk space: ${free.toFixed(1)} GB free (need ${MIN_FREE_DISK_GB}+)`;
+            await alert('low_disk', `Frank auto-deploy stopped: ${reason}. Nothing changed.`);
+            result = { status: 'blocked', reason };
+          }
         }
       }
     }
@@ -382,6 +401,8 @@ module.exports = {
   APP_NAME,
   INTERVAL_MS,
   LOCK_STALE_MS,
+  MIN_FREE_DISK_GB,
+  defaultFreeDiskGB,
   HEALTH_CHECKS,
   executable,
   cmdNeedsShell,
