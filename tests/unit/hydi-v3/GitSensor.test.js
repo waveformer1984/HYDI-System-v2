@@ -459,6 +459,8 @@ describe('GitSensor through the interpreter', () => {
     expect(signal.payload.impact).toBe('risk-stale');
   });
 
+  // Real OperatorSession startup + several sequential git subprocesses —
+  // generous bound because a loaded box runs each subprocess in seconds.
   test('a commit reaches the briefing without the Executive OS knowing git exists', async () => {
     const OperatorSession = require('../../../src/hydi-v3/OperatorSession');
     const ExecutiveOperatingSystem = require('../../../src/hydi-v3/ExecutiveOperatingSystem');
@@ -498,7 +500,7 @@ describe('GitSensor through the interpreter', () => {
     } finally {
       await session.destroy();
     }
-  });
+  }, 60000);
 
   test('git events never carry the generic fallback interpretation', async () => {
     git(dir, 'branch', 'feature/x');
