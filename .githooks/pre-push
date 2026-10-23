@@ -70,6 +70,20 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if [ -n "$(git for-each-ref --points-at="$local_sha" --format='x' refs/remotes/origin/)" ]; then
       SAW_REFCOPY=true
     else
+      BRANCH=${local_ref#refs/heads/}
+      LABELS=""
+      if command -v gh >/dev/null 2>&1; then
+        LABELS=$(gh pr view "$BRANCH" --json labels --jq '.labels[].name' 2>/dev/null | tr '\n' ',' || true)
+      fi
+      echo "[pre-push] Checking added secrets, generated files, and change size..."
+      node scripts/check-change-safety.js \
+        --base "$remote_sha" \
+        --head "$local_sha" \
+        --labels "$LABELS"
+      if [ $? -ne 0 ]; then
+        echo "[pre-push] change-safety check failed -- push aborted"
+        exit 1
+      fi
       SKIP_TESTS=false
     fi
   fi
