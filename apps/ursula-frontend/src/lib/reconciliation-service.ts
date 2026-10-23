@@ -5,10 +5,17 @@ import { LedgerService, CreditTransaction } from './ledger-service';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
  type StripeTransaction = any;
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-05-27.dahlia',
-});
+// Initialize Stripe lazily — module top-level runs during build-time
+// page-data collection, where STRIPE_SECRET_KEY is not guaranteed present.
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2026-05-27.dahlia',
+    });
+  }
+  return stripeClient;
+}
 
 export interface ReconciliationResult {
   success: boolean;
@@ -111,7 +118,7 @@ export class ReconciliationService {
   private async getStripePayments(startTime: Date, endTime: Date): Promise<StripeTransaction[]> {
     try {
       // Get charges from Stripe
-      const charges = await stripe.charges.list({
+      const charges = await getStripe().charges.list({
         created: {
           gte: Math.floor(startTime.getTime() / 1000),
           lte: Math.floor(endTime.getTime() / 1000)
@@ -288,7 +295,7 @@ export class ReconciliationService {
     // Check Stripe connectivity
     let stripeConnectivity = false;
     try {
-      await stripe.balance.retrieve();
+      await getStripe().balance.retrieve();
       stripeConnectivity = true;
     } catch (error) {
       alerts.push('Stripe API connectivity failed');
