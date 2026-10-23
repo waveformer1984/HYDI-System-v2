@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
 const OllamaClient = require('../../heidi-core/brain/ollama-client');
+const { paidApiKey } = require('../../lib/cost/paid-llm-gate.js');
 
 class LocalModelAdapter extends EventEmitter {
   constructor(options = {}) {
@@ -43,7 +44,7 @@ class LocalModelAdapter extends EventEmitter {
     this.cloudFailover = {
       enabled: process.env.ENABLE_CLOUD_FAILOVER === 'true',
       firebaseFunctionsUrl: process.env.FIREBASE_FUNCTIONS_URL,
-      geminiApiKey: process.env.GEMINI_API_KEY,
+      geminiApiKey: paidApiKey('GEMINI_API_KEY'),
       latencyThreshold: 2000, // 2 seconds - failover if local latency exceeds
       failoverCount: 0,
       lastFailover: 0

@@ -112,13 +112,43 @@ function callSiteReport(root) {
   return rows;
 }
 
+const { SWITCH_NAME, isPaidLlmAllowed } = require('../lib/cost/paid-llm-gate.js');
+
+// Where the switch could be set, in precedence order (process env wins).
+function switchSources(root, env) {
+  const sources = [{ label: 'process env', value: env[SWITCH_NAME] }];
+  for (const name of fs.readdirSync(root)) {
+    if (!/^\.env(\..+)?$/.test(name)) continue;
+    if (/\.(example|template|sample)$/.test(name)) continue;
+    sources.push({ label: name, value: parseEnvFile(path.join(root, name))[SWITCH_NAME] });
+  }
+  return sources;
+}
+
+function effectiveSwitch(root, env) {
+  const sources = switchSources(root, env);
+  const first = sources.find((s) => s.value !== undefined && s.value !== '');
+  if (!first) return { allowed: false, label: 'unset (default: off)' };
+  const allowed = isPaidLlmAllowed({ [SWITCH_NAME]: first.value });
+  return { allowed, label: `${first.label}=${first.value}` };
+}
+
 function main(argv = process.argv.slice(2), env = process.env, root = ROOT) {
   const strict = argv.includes('--strict');
   const keys = keyReport(root, env);
   const sites = callSiteReport(root);
+  const gate = effectiveSwitch(root, env);
 
   console.log('HYDI cost audit');
   console.log('===============\n');
+
+  console.log(`Paid-LLM switch (${SWITCH_NAME}): ${gate.allowed ? 'ON — paid endpoints MAY be called' : 'OFF — paid endpoints are unreachable'}`);
+  console.log(`  Resolved from: ${gate.label}`);
+  if (!gate.allowed) {
+    console.log('  All 15 paid call sites behave as if the provider key were missing.\n');
+  } else {
+    console.log('  Paid call sites are live wherever a real provider key is also set.\n');
+  }
   if (keys.length === 0) {
     console.log('Paid-provider keys set: none. Cloud fallbacks stay off; spend is $0 from model calls.\n');
   } else {
@@ -137,6 +167,10 @@ function main(argv = process.argv.slice(2), env = process.env, root = ROOT) {
   console.log('\nNot checked here: hosting dashboards (Vercel, Supabase, Netlify), GitHub plan,');
   console.log('and any key stored only in a cloud provider. Check those by hand.');
 
+  if (strict && gate.allowed) {
+    console.error(`\nSTRICT FAIL: ${SWITCH_NAME}=true — paid model spend is enabled.`);
+    return 1;
+  }
   return strict && keys.length > 0 ? 1 : 0;
 }
 
@@ -144,4 +178,4 @@ if (require.main === module) {
   process.exitCode = main();
 }
 
-module.exports = { main, keyReport, callSiteReport, looksReal, parseEnvFile };
+module.exports = { main, keyReport, callSiteReport, looksReal, parseEnvFile, switchSources, effectiveSwitch };

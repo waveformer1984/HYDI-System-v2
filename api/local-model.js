@@ -4,6 +4,7 @@
  */
 
 const axios = require('axios');
+const { paidApiKey } = require('../lib/cost/paid-llm-gate.js');
 
 function isRealApiKey(key) {
   if (!key || key.trim().length < 30) return false;
@@ -291,8 +292,11 @@ class HeidiLocalHandler {
       ? `Current System Health: ${JSON.stringify(healthContext)}\n\nUser message: ${message}`
       : message;
 
+    const anthropicKey = paidApiKey('ANTHROPIC_API_KEY');
+    const openaiKey = paidApiKey('OPENAI_API_KEY');
+
     try {
-      if (isRealApiKey(process.env.ANTHROPIC_API_KEY)) {
+      if (isRealApiKey(anthropicKey)) {
         const resp = await axios.post(
           'https://api.anthropic.com/v1/messages',
           {
@@ -303,7 +307,7 @@ class HeidiLocalHandler {
           },
           {
             headers: {
-              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'x-api-key': anthropicKey,
               'anthropic-version': '2023-06-01',
               'Content-Type': 'application/json',
             },
@@ -317,7 +321,7 @@ class HeidiLocalHandler {
         return { text, model: resp.data.model, provider: 'anthropic', usage: resp.data.usage };
       }
 
-      if (isRealApiKey(process.env.OPENAI_API_KEY)) {
+      if (isRealApiKey(openaiKey)) {
         const resp = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
@@ -330,7 +334,7 @@ class HeidiLocalHandler {
           },
           {
             headers: {
-              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+              Authorization: `Bearer ${openaiKey}`,
               'Content-Type': 'application/json',
             },
             timeout: 30000,

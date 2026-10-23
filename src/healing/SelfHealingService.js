@@ -1,6 +1,7 @@
 'use strict';
 
 const https = require('https');
+const { paidApiKey } = require('../../lib/cost/paid-llm-gate.js');
 
 class SelfHealingService {
   constructor(config = {}) {
@@ -16,7 +17,7 @@ class SelfHealingService {
 
   async diagnoseAndCorrect(issue) {
     if (this._destroyed) return null;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = paidApiKey('ANTHROPIC_API_KEY');
     if (!apiKey) return null;
 
     try {
@@ -35,7 +36,7 @@ class SelfHealingService {
 
   async healFromCrash(error) {
     if (this._destroyed) return null;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = paidApiKey('ANTHROPIC_API_KEY');
     if (!apiKey) return null;
 
     const errorMsg = error instanceof Error ? error.message : String(error);

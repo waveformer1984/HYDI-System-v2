@@ -1,4 +1,5 @@
 import { generateEmbedding } from '../../lib/embeddings';
+import { paidApiKey } from '../../lib/cost/paid-llm-gate';
 
 interface LLMOptions {
   maxTokens?: number;
@@ -16,11 +17,12 @@ export class LLMService {
   async generateText(prompt: string, options?: LLMOptions): Promise<string> {
     const maxTokens = options?.maxTokens ?? 1000;
 
-    if (process.env.ANTHROPIC_API_KEY) {
+    const anthropicKey = paidApiKey('ANTHROPIC_API_KEY');
+    if (anthropicKey) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'x-api-key': anthropicKey,
           'anthropic-version': '2023-06-01',
           'Content-Type': 'application/json',
         },
@@ -35,11 +37,12 @@ export class LLMService {
       return data.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     }
 
-    if (process.env.OPENAI_API_KEY) {
+    const openaiKey = paidApiKey('OPENAI_API_KEY');
+    if (openaiKey) {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${openaiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

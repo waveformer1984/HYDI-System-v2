@@ -26,6 +26,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createTimedClient } from './supabase-timed';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
+import { paidApiKey } from './cost/paid-llm-gate';
 
 export interface InferenceMetadata {
   provider: string;
@@ -642,13 +643,13 @@ export class ModelManager {
     const start = Date.now();
 
     try {
-      if (this.isRealApiKey(process.env.ANTHROPIC_API_KEY)) {
+      if (this.isRealApiKey(paidApiKey('ANTHROPIC_API_KEY'))) {
         const anthropic = await this.generateAnthropicResponse(prompt);
         if (anthropic.success) return anthropic;
         console.warn('[ModelManager] Anthropic failed, trying OpenAI:', anthropic.error);
       }
 
-      if (this.isRealApiKey(process.env.OPENAI_API_KEY)) {
+      if (this.isRealApiKey(paidApiKey('OPENAI_API_KEY'))) {
         return await this.generateOpenAIResponse(prompt);
       }
 
@@ -672,8 +673,8 @@ export class ModelManager {
 
   private hasAnyRealApiKey(): boolean {
     return (
-      this.isRealApiKey(process.env.ANTHROPIC_API_KEY) ||
-      this.isRealApiKey(process.env.OPENAI_API_KEY)
+      this.isRealApiKey(paidApiKey('ANTHROPIC_API_KEY')) ||
+      this.isRealApiKey(paidApiKey('OPENAI_API_KEY'))
     );
   }
 
@@ -693,11 +694,21 @@ export class ModelManager {
   private async generateOpenAIResponse(prompt: string): Promise<ApiResponse> {
     const start = Date.now();
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const apiKey = paidApiKey('OPENAI_API_KEY');
+    if (!apiKey) {
+      return {
+        content: '',
+        success: false,
+        error: 'OpenAI API key not available (unset, or HYDI_ALLOW_PAID_LLM is off)',
+        model: 'openai',
+        latency: 0,
+      };
+    }
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -756,11 +767,21 @@ export class ModelManager {
   private async generateAnthropicResponse(prompt: string): Promise<ApiResponse> {
     const start = Date.now();
     const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+    const apiKey = paidApiKey('ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      return {
+        content: '',
+        success: false,
+        error: 'Anthropic API key not available (unset, or HYDI_ALLOW_PAID_LLM is off)',
+        model: 'anthropic',
+        latency: 0,
+      };
+    }
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'x-api-key': process.env.ANTHROPIC_API_KEY!,
+          'x-api-key': apiKey,
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01',
         },
