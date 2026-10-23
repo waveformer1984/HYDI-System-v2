@@ -1,0 +1,79 @@
+{
+  "payload_raw": "{\"agents\":[{\"checkedAt\":\"2026-08-17T20:14:13.157131+00:00\",\"detail\":\"<urlopen error [Errno 111] Connection refused>\",\"name\":\"Heidi\",\"status\":\"unknown\"},{\"checkedAt\":\"2026-08-17T20:14:13.157145+00:00\",\"detail\":\"<urlopen error [Errno 111] Connection refused>\",\"name\":\"Ursula\",\"status\":\"unknown\"},{\"checkedAt\":\"2026-08-17T20:14:13.157148+00:00\",\"detail\":\"no dedicated local health endpoint\",\"name\":\"CASCADE\",\"status\":\"unknown\"},{\"checkedAt\":\"2026-08-17T20:14:13.157149+00:00\",\"detail\":\"no dedicated local health endpoint\",\"name\":\"KILO\",\"status\":\"unknown\"},{\"checkedAt\":\"2026-08-17T20:14:13.157151+00:00\",\"detail\":\"no dedicated local health endpoint\",\"name\":\"ProtoForge\",\"status\":\"unknown\"},{\"checkedAt\":\"2026-08-17T20:14:13.157152+00:00\",\"detail\":\"no dedicated local health endpoint\",\"name\":\"Hyve\",\"status\":\"unknown\"}],\"checkedAt\":\"2026-08-17T20:14:17.125081+00:00\",\"collector\":{\"status\":\"healthy\"},\"infrastructure\":{\"supabase_analytics_HYDI-System-v2\":\"healthy\",\"supabase_auth_HYDI-System-v2\":\"healthy\",\"supabase_db_HYDI-System-v2\":\"healthy\",\"supabase_inbucket_HYDI-System-v2\":\"healthy\",\"supabase_kong_HYDI-System-v2\":\"healthy\",\"supabase_pg_meta_HYDI-System-v2\":\"healthy\",\"supabase_realtime_HYDI-System-v2\":\"healthy\",\"supabase_rest_HYDI-System-v2\":\"healthy\",\"supabase_storage_HYDI-System-v2\":\"healthy\",\"supabase_studio_HYDI-System-v2\":\"healthy\",\"supabase_vector_HYDI-System-v2\":\"healthy\",\"ursula-flask\":\"healthy\",\"ursula-hub\":\"healthy\",\"ursula-postgres\":\"healthy\",\"ursula-redis\":\"healthy\"},\"pipeline\":{\"current_status\":\"unknown\",\"detail\":\"<urlopen error [Errno 111] Connection refused>\",\"status\":\"unknown\"},\"snapshot_id\":\"734T98v5WoSEI__wuv-dVA\",\"source\":\"local-hydi\",\"supabase\":{\"detail\":\"LOCAL_SUPABASE_NETWORK_ERROR: URLError\",\"status\":\"down\"},\"version\":1}",
+  "payload": {
+    "source": "local-hydi",
+    "version": 1,
+    "snapshot_id": "734T98v5WoSEI__wuv-dVA",
+    "checkedAt": "2026-08-17T20:14:17.125081+00:00",
+    "agents": [
+      {
+        "name": "Heidi",
+        "status": "unknown",
+        "detail": "<urlopen error [Errno 111] Connection refused>",
+        "checkedAt": "2026-08-17T20:14:13.157131+00:00"
+      },
+      {
+        "name": "Ursula",
+        "status": "unknown",
+        "detail": "<urlopen error [Errno 111] Connection refused>",
+        "checkedAt": "2026-08-17T20:14:13.157145+00:00"
+      },
+      {
+        "name": "CASCADE",
+        "status": "unknown",
+        "detail": "no dedicated local health endpoint",
+        "checkedAt": "2026-08-17T20:14:13.157148+00:00"
+      },
+      {
+        "name": "KILO",
+        "status": "unknown",
+        "detail": "no dedicated local health endpoint",
+        "checkedAt": "2026-08-17T20:14:13.157149+00:00"
+      },
+      {
+        "name": "ProtoForge",
+        "status": "unknown",
+        "detail": "no dedicated local health endpoint",
+        "checkedAt": "2026-08-17T20:14:13.157151+00:00"
+      },
+      {
+        "name": "Hyve",
+        "status": "unknown",
+        "detail": "no dedicated local health endpoint",
+        "checkedAt": "2026-08-17T20:14:13.157152+00:00"
+      }
+    ],
+    "pipeline": {
+      "status": "unknown",
+      "current_status": "unknown",
+      "detail": "<urlopen error [Errno 111] Connection refused>"
+    },
+    "supabase": {
+      "status": "down",
+      "detail": "LOCAL_SUPABASE_NETWORK_ERROR: URLError"
+    },
+    "infrastructure": {
+      "ursula-flask": "healthy",
+      "ursula-postgres": "healthy",
+      "ursula-redis": "healthy",
+      "ursula-hub": "healthy",
+      "supabase_studio_HYDI-System-v2": "healthy",
+      "supabase_pg_meta_HYDI-System-v2": "healthy",
+      "supabase_storage_HYDI-System-v2": "healthy",
+      "supabase_rest_HYDI-System-v2": "healthy",
+      "supabase_realtime_HYDI-System-v2": "healthy",
+      "supabase_inbucket_HYDI-System-v2": "healthy",
+      "supabase_auth_HYDI-System-v2": "healthy",
+      "supabase_kong_HYDI-System-v2": "healthy",
+      "supabase_vector_HYDI-System-v2": "healthy",
+      "supabase_analytics_HYDI-System-v2": "healthy",
+      "supabase_db_HYDI-System-v2": "healthy"
+    },
+    "collector": {
+      "status": "healthy"
+    }
+  },
+  "signature": "2bf3d30b6bfdd805a5b6a6851009ab41765851101420054a1d60e92e6c5dfea2",
+  "algorithm": "hmac-sha256",
+  "timestamp": "2026-08-17T20:14:17.125081+00:00"
+}

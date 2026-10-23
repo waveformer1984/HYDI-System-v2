@@ -138,7 +138,7 @@ async function handleStripeWebhook(req, res) {
     // See config export below (bodyParser: false) for why this can't just
     // read req.body directly.
     const rawBody = await getRawBody(req);
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const stripe = require('../../lib/stripe/client');
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.log('Webhook signature verification failed:', err.message);
@@ -451,7 +451,7 @@ async function updateRevenueMetrics(amount, currency) {
 
 async function getCustomerEmail(customerId) {
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const stripe = require('../../lib/stripe/client');
     const customer = await stripe.customers.retrieve(customerId);
     return { email: customer.email };
   } catch (err) {

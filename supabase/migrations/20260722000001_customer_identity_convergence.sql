@@ -70,7 +70,7 @@ update hydi_subscriptions hs
 set customer_id = c.customer_id
 from customers c
 where hs.customer_id is null
-  and hs.client_id::uuid = c.customer_id;
+  and hs.client_id = c.customer_id::text;
 
 -- Subscriptions that match by Stripe customer ID.
 update hydi_subscriptions hs
@@ -160,15 +160,15 @@ where h.customer_id is null
   and h.subscription_id = s.id;
 
 -- 7. Foreign keys: tables that are guaranteed to exist in this migration path.
-alter table clients add constraint if not exists fk_clients_customer
+alter table clients add constraint fk_clients_customer
     foreign key (customer_id) references customers(customer_id);
-alter table payouts add constraint if not exists fk_payouts_customer
+alter table payouts add constraint fk_payouts_customer
     foreign key (customer_id) references customers(customer_id);
-alter table hydi_subscriptions add constraint if not exists fk_hydi_subscriptions_customer
+alter table hydi_subscriptions add constraint fk_hydi_subscriptions_customer
     foreign key (customer_id) references customers(customer_id);
-alter table hydi_client_health_runs add constraint if not exists fk_hydi_health_customer
+alter table hydi_client_health_runs add constraint fk_hydi_health_customer
     foreign key (customer_id) references customers(customer_id);
-alter table hydi_schedules add constraint if not exists fk_hydi_schedules_customer
+alter table hydi_schedules add constraint fk_hydi_schedules_customer
     foreign key (customer_id) references customers(customer_id);
 
 -- Ledger is renamed in a later phase; keep customer_id nullable here so events can populate it.
@@ -178,23 +178,23 @@ alter table hydi_schedules add constraint if not exists fk_hydi_schedules_custom
 do $$
 begin
     if to_regclass('public.leads') is not null then
-        alter table leads add constraint if not exists fk_leads_customer
+        alter table leads add constraint fk_leads_customer
             foreign key (customer_id) references customers(customer_id);
     end if;
     if to_regclass('public.outreach') is not null then
-        alter table outreach add constraint if not exists fk_outreach_customer
+        alter table outreach add constraint fk_outreach_customer
             foreign key (customer_id) references customers(customer_id);
     end if;
     if to_regclass('public.proposals') is not null then
-        alter table proposals add constraint if not exists fk_proposals_customer
+        alter table proposals add constraint fk_proposals_customer
             foreign key (customer_id) references customers(customer_id);
     end if;
     if to_regclass('public.quotes') is not null then
-        alter table quotes add constraint if not exists fk_quotes_customer
+        alter table quotes add constraint fk_quotes_customer
             foreign key (customer_id) references customers(customer_id);
     end if;
     if to_regclass('public.checkout_sessions') is not null then
-        alter table checkout_sessions add constraint if not exists fk_checkout_sessions_customer
+        alter table checkout_sessions add constraint fk_checkout_sessions_customer
             foreign key (customer_id) references customers(customer_id);
     end if;
 end $$;

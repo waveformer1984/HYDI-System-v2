@@ -1,9 +1,6907 @@
 {
   "whatWorked": [],
-  "whatFailed": [],
-  "confidenceReality": [],
+  "whatFailed": [
+    [
+      "loop_1787142380661_f5gmtlhae",
+      {
+        "id": "loop_1787142380661_f5gmtlhae",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-35-turbo",
+          "reasoning": "Standard tasks use cost-effective local models",
+          "confidence": 0.75,
+          "fallback": "local-llama"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "observation",
+          "confidence": 0.75
+        },
+        "timestamp": 1787142380676,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787142380662_fnsqmim67",
+      {
+        "id": "loop_1787142380662_fnsqmim67",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787142380677,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787142680684_3kr9hkej5",
+      {
+        "id": "loop_1787142680684_3kr9hkej5",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787142680684,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787142680685_1w3rxxw68",
+      {
+        "id": "loop_1787142680685_1w3rxxw68",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787142680685,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787142980688_ygd6i7tep",
+      {
+        "id": "loop_1787142980688_ygd6i7tep",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787142980694,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787143280701_1we619c82",
+      {
+        "id": "loop_1787143280701_1we619c82",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143280701,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787143280701_q8t2c1sd8",
+      {
+        "id": "loop_1787143280701_q8t2c1sd8",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143280702,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787143580702_c932k1uy0",
+      {
+        "id": "loop_1787143580702_c932k1uy0",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143580702,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787143580703_p24jjr0sl",
+      {
+        "id": "loop_1787143580703_p24jjr0sl",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143580703,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787143880704_3mvozf3hm",
+      {
+        "id": "loop_1787143880704_3mvozf3hm",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143880705,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787143880706_4rjv47hxo",
+      {
+        "id": "loop_1787143880706_4rjv47hxo",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787143880706,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787144180709_rcqors78k",
+      {
+        "id": "loop_1787144180709_rcqors78k",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144180709,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787144180710_2gxonfedw",
+      {
+        "id": "loop_1787144180710_2gxonfedw",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144180710,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787144480719_13glhmano",
+      {
+        "id": "loop_1787144480719_13glhmano",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144480719,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787144480721_xadejxn7v",
+      {
+        "id": "loop_1787144480721_xadejxn7v",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144480721,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787144780733_if6fv2aad",
+      {
+        "id": "loop_1787144780733_if6fv2aad",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144780733,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787144780734_lb4ux9sws",
+      {
+        "id": "loop_1787144780734_lb4ux9sws",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787144780734,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787145080736_15hw0n9vo",
+      {
+        "id": "loop_1787145080736_15hw0n9vo",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787145080736,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787145080737_ugea8zink",
+      {
+        "id": "loop_1787145080737_ugea8zink",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787145080737,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787145380752_6kpsfv5uh",
+      {
+        "id": "loop_1787145380752_6kpsfv5uh",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787145380752,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787145380752_csotq8so6",
+      {
+        "id": "loop_1787145380752_csotq8so6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787145380752,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787382586552_z5494bs6o",
+      {
+        "id": "loop_1787382586552_z5494bs6o",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-35-turbo",
+          "reasoning": "Standard tasks use cost-effective local models",
+          "confidence": 0.75,
+          "fallback": "local-llama"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "observation",
+          "confidence": 0.75
+        },
+        "timestamp": 1787382586559,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787382586553_5zjbxwn5f",
+      {
+        "id": "loop_1787382586553_5zjbxwn5f",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787382586560,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787382886570_502pcmx9j",
+      {
+        "id": "loop_1787382886570_502pcmx9j",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787382886573,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787383186580_n3et3g5kd",
+      {
+        "id": "loop_1787383186580_n3et3g5kd",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383186582,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787383186582_o11rqeg6w",
+      {
+        "id": "loop_1787383186582_o11rqeg6w",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383186582,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787383486585_ka56b0oq8",
+      {
+        "id": "loop_1787383486585_ka56b0oq8",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383486585,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787383486586_bpuosj9eh",
+      {
+        "id": "loop_1787383486586_bpuosj9eh",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383486586,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787383786590_7fhc4y35l",
+      {
+        "id": "loop_1787383786590_7fhc4y35l",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383786590,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787383786590_66owjqrxs",
+      {
+        "id": "loop_1787383786590_66owjqrxs",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787383786591,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787384086603_l5d224hwp",
+      {
+        "id": "loop_1787384086603_l5d224hwp",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384086603,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787384086603_613t1myyk",
+      {
+        "id": "loop_1787384086603_613t1myyk",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384086603,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787384386604_h8r3boxuv",
+      {
+        "id": "loop_1787384386604_h8r3boxuv",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384386604,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787384386606_jhrjbnn32",
+      {
+        "id": "loop_1787384386606_jhrjbnn32",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384386606,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787384686614_vijmjrwbw",
+      {
+        "id": "loop_1787384686614_vijmjrwbw",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384686614,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787384686614_r108czht7",
+      {
+        "id": "loop_1787384686614_r108czht7",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384686614,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787384986630_axf8fjoya",
+      {
+        "id": "loop_1787384986630_axf8fjoya",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384986630,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787384986631_0upmqar5p",
+      {
+        "id": "loop_1787384986631_0upmqar5p",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787384986631,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787385286632_qesyj4okt",
+      {
+        "id": "loop_1787385286632_qesyj4okt",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385286632,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787385286632_l2a12lqnu",
+      {
+        "id": "loop_1787385286632_l2a12lqnu",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385286632,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787385586636_24d1ywmjs",
+      {
+        "id": "loop_1787385586636_24d1ywmjs",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385586636,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787385586636_echa2cuz8",
+      {
+        "id": "loop_1787385586636_echa2cuz8",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385586636,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787385886650_ruu87gnmz",
+      {
+        "id": "loop_1787385886650_ruu87gnmz",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385886650,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787385886650_ret6gq5wd",
+      {
+        "id": "loop_1787385886650_ret6gq5wd",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787385886650,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787386186661_xgoz98gun",
+      {
+        "id": "loop_1787386186661_xgoz98gun",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386186661,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787386186661_ig0d2zedt",
+      {
+        "id": "loop_1787386186661_ig0d2zedt",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386186661,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787386486673_xew4hqg5a",
+      {
+        "id": "loop_1787386486673_xew4hqg5a",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386486673,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787386486673_05aexu4ca",
+      {
+        "id": "loop_1787386486673_05aexu4ca",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386486674,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787386786679_6pgiq3h69",
+      {
+        "id": "loop_1787386786679_6pgiq3h69",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386786679,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787386786679_pdlyn8gp6",
+      {
+        "id": "loop_1787386786679_pdlyn8gp6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787386786679,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787387086694_vle75zmt5",
+      {
+        "id": "loop_1787387086694_vle75zmt5",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387086694,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787387086694_p2gmnd65q",
+      {
+        "id": "loop_1787387086694_p2gmnd65q",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387086694,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787387386697_bubopagyu",
+      {
+        "id": "loop_1787387386697_bubopagyu",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387386697,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787387386698_gfj21woyq",
+      {
+        "id": "loop_1787387386698_gfj21woyq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387386698,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787387686701_ya9odc138",
+      {
+        "id": "loop_1787387686701_ya9odc138",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387686701,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787387686701_to5tnkauq",
+      {
+        "id": "loop_1787387686701_to5tnkauq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387686701,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787387986704_mtutdjyci",
+      {
+        "id": "loop_1787387986704_mtutdjyci",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387986704,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787387986706_jg2zjxlk0",
+      {
+        "id": "loop_1787387986706_jg2zjxlk0",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787387986706,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787388286714_6c7tq6azf",
+      {
+        "id": "loop_1787388286714_6c7tq6azf",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388286714,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787388286714_jx1qu2oju",
+      {
+        "id": "loop_1787388286714_jx1qu2oju",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388286714,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787388586717_iuddz2k8a",
+      {
+        "id": "loop_1787388586717_iuddz2k8a",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388586718,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787388586719_zt8l9czcr",
+      {
+        "id": "loop_1787388586719_zt8l9czcr",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388586720,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787388886725_6j44eawbn",
+      {
+        "id": "loop_1787388886725_6j44eawbn",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388886725,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787388886725_sqhsybi9t",
+      {
+        "id": "loop_1787388886725_sqhsybi9t",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787388886725,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787389186736_nl7mcv0dq",
+      {
+        "id": "loop_1787389186736_nl7mcv0dq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389186736,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787389186736_5dfgs2wzs",
+      {
+        "id": "loop_1787389186736_5dfgs2wzs",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389186736,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787389486746_zvxhwcuo8",
+      {
+        "id": "loop_1787389486746_zvxhwcuo8",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389486746,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787389486747_ofbxkx8ze",
+      {
+        "id": "loop_1787389486747_ofbxkx8ze",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389486747,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787389786760_vr2j4erfl",
+      {
+        "id": "loop_1787389786760_vr2j4erfl",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389786760,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787389786760_uniu12pjn",
+      {
+        "id": "loop_1787389786760_uniu12pjn",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787389786760,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787390086766_fgwwsenzs",
+      {
+        "id": "loop_1787390086766_fgwwsenzs",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390086766,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787390086766_89sipre48",
+      {
+        "id": "loop_1787390086766_89sipre48",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390086766,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787390386769_fmt1h7ric",
+      {
+        "id": "loop_1787390386769_fmt1h7ric",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390386769,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787390386769_hvfb5zts2",
+      {
+        "id": "loop_1787390386769_hvfb5zts2",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390386769,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787390686774_qw9j8iclx",
+      {
+        "id": "loop_1787390686774_qw9j8iclx",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390686774,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787390686774_ix3lly838",
+      {
+        "id": "loop_1787390686774_ix3lly838",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390686774,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787390986786_ara4qzrcm",
+      {
+        "id": "loop_1787390986786_ara4qzrcm",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390986787,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787390986787_sz0st9are",
+      {
+        "id": "loop_1787390986787_sz0st9are",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787390986787,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787391286791_zppx2j6ie",
+      {
+        "id": "loop_1787391286791_zppx2j6ie",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391286791,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787391286792_brmu9ggqa",
+      {
+        "id": "loop_1787391286792_brmu9ggqa",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391286792,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787391586799_qxcjkfho4",
+      {
+        "id": "loop_1787391586799_qxcjkfho4",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391586799,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787391586799_kpefx54b9",
+      {
+        "id": "loop_1787391586799_kpefx54b9",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391586799,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787391886814_jr2e8xwbb",
+      {
+        "id": "loop_1787391886814_jr2e8xwbb",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391886815,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787391886815_es5hk6vks",
+      {
+        "id": "loop_1787391886815_es5hk6vks",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787391886815,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787392186823_1cedzgh1z",
+      {
+        "id": "loop_1787392186823_1cedzgh1z",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392186823,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787392186823_vz3lw06zu",
+      {
+        "id": "loop_1787392186823_vz3lw06zu",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392186823,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787392486837_x7x6xtovx",
+      {
+        "id": "loop_1787392486837_x7x6xtovx",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392486837,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787392486837_tgoastpcj",
+      {
+        "id": "loop_1787392486837_tgoastpcj",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392486837,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787392786852_ix1odz4jx",
+      {
+        "id": "loop_1787392786852_ix1odz4jx",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392786852,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787392786852_d5qgkmzrh",
+      {
+        "id": "loop_1787392786852_d5qgkmzrh",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787392786852,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787393086854_49byahe0w",
+      {
+        "id": "loop_1787393086854_49byahe0w",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393086854,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787393086854_c133rh21w",
+      {
+        "id": "loop_1787393086854_c133rh21w",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393086854,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787393386862_wvo6wqqn6",
+      {
+        "id": "loop_1787393386862_wvo6wqqn6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393386862,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787393386862_hao8ajnbe",
+      {
+        "id": "loop_1787393386862_hao8ajnbe",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393386862,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787393686865_7smshff3o",
+      {
+        "id": "loop_1787393686865_7smshff3o",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393686865,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787393686866_ezxczcu2o",
+      {
+        "id": "loop_1787393686866_ezxczcu2o",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393686866,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787393986868_dahb6q5qe",
+      {
+        "id": "loop_1787393986868_dahb6q5qe",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393986868,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787393986868_i6d0cy2qq",
+      {
+        "id": "loop_1787393986868_i6d0cy2qq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787393986868,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787394286873_jqucsm17a",
+      {
+        "id": "loop_1787394286873_jqucsm17a",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1787394286873,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1787394286873_f9rlsoxq6",
+      {
+        "id": "loop_1787394286873_f9rlsoxq6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1787394286873,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787394586880_k7rjs8epd",
+      {
+        "id": "loop_1787394586880_k7rjs8epd",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787394586885,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787394886894_bla85nkuw",
+      {
+        "id": "loop_1787394886894_bla85nkuw",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787394886896,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787395186905_y1z5eyxa8",
+      {
+        "id": "loop_1787395186905_y1z5eyxa8",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787395186908,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787395486910_1o7q6ylz8",
+      {
+        "id": "loop_1787395486910_1o7q6ylz8",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787395486913,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787395786918_nh2mrnemr",
+      {
+        "id": "loop_1787395786918_nh2mrnemr",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787395786921,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787396086931_3064qudvz",
+      {
+        "id": "loop_1787396086931_3064qudvz",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787396086936,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787396386946_n7oz3fryd",
+      {
+        "id": "loop_1787396386946_n7oz3fryd",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787396386952,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787396686957_aa0y7dozl",
+      {
+        "id": "loop_1787396686957_aa0y7dozl",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787396686960,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787396986975_7wmobh8p9",
+      {
+        "id": "loop_1787396986975_7wmobh8p9",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787396986985,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787397286993_rqj4ir1wf",
+      {
+        "id": "loop_1787397286993_rqj4ir1wf",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787397286997,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787397587009_iolqtc1a3",
+      {
+        "id": "loop_1787397587009_iolqtc1a3",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787397587013,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787397887023_xq606qt71",
+      {
+        "id": "loop_1787397887023_xq606qt71",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787397887026,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787398187038_sgl93ipj5",
+      {
+        "id": "loop_1787398187038_sgl93ipj5",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787398187042,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787398487053_s06z12mpj",
+      {
+        "id": "loop_1787398487053_s06z12mpj",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787398487055,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787398787055_087xvqdxe",
+      {
+        "id": "loop_1787398787055_087xvqdxe",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787398787058,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787399087061_9yde46n7u",
+      {
+        "id": "loop_1787399087061_9yde46n7u",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787399087065,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787399387070_9zo6lj9fb",
+      {
+        "id": "loop_1787399387070_9zo6lj9fb",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787399387072,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787399687085_0lfyk5pd0",
+      {
+        "id": "loop_1787399687085_0lfyk5pd0",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787399687088,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787399987098_dlll9884i",
+      {
+        "id": "loop_1787399987098_dlll9884i",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787399987100,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787400287103_pzeb3i7fo",
+      {
+        "id": "loop_1787400287103_pzeb3i7fo",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787400287107,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787400587111_hu3v35b6k",
+      {
+        "id": "loop_1787400587111_hu3v35b6k",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787400587117,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787400887124_k583wybsk",
+      {
+        "id": "loop_1787400887124_k583wybsk",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787400887130,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787401187141_emran1956",
+      {
+        "id": "loop_1787401187141_emran1956",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787401187143,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1787401510662_7eu7wfsov",
+      {
+        "id": "loop_1787401510662_7eu7wfsov",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1787401511095,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789035854573_nd2ud4pyb",
+      {
+        "id": "loop_1789035854573_nd2ud4pyb",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-35-turbo",
+          "reasoning": "Standard tasks use cost-effective local models",
+          "confidence": 0.75,
+          "fallback": "local-llama"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "observation",
+          "confidence": 0.75
+        },
+        "timestamp": 1789035854588,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789035854573_hv9m693bm",
+      {
+        "id": "loop_1789035854573_hv9m693bm",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1789035854588,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789036154593_8agcwh4k5",
+      {
+        "id": "loop_1789036154593_8agcwh4k5",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036154593,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789036154594_n8ymcaxx7",
+      {
+        "id": "loop_1789036154594_n8ymcaxx7",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036154594,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789036454606_qgexvni5k",
+      {
+        "id": "loop_1789036454606_qgexvni5k",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036454606,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789036454607_dfddgs8my",
+      {
+        "id": "loop_1789036454607_dfddgs8my",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036454607,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789036754609_q6022194c",
+      {
+        "id": "loop_1789036754609_q6022194c",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036754611,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789036754612_oq4aj86l6",
+      {
+        "id": "loop_1789036754612_oq4aj86l6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789036754612,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789037054624_attso423u",
+      {
+        "id": "loop_1789037054624_attso423u",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037054624,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789037054626_5z39vgddv",
+      {
+        "id": "loop_1789037054626_5z39vgddv",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037054626,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789037354639_ngwv2x0ib",
+      {
+        "id": "loop_1789037354639_ngwv2x0ib",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037354639,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789037354639_k7avgcysb",
+      {
+        "id": "loop_1789037354639_k7avgcysb",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037354639,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789037654641_1dmg46ons",
+      {
+        "id": "loop_1789037654641_1dmg46ons",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037654641,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789037654642_cbnfz1d70",
+      {
+        "id": "loop_1789037654642_cbnfz1d70",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037654643,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789037954658_lansr8jvf",
+      {
+        "id": "loop_1789037954658_lansr8jvf",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037954659,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789037954659_gtz5nvycj",
+      {
+        "id": "loop_1789037954659_gtz5nvycj",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789037954659,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789038254667_to48mdnk8",
+      {
+        "id": "loop_1789038254667_to48mdnk8",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038254667,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789038254667_j6uo0lei5",
+      {
+        "id": "loop_1789038254667_j6uo0lei5",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038254667,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789038554679_qb3ibme44",
+      {
+        "id": "loop_1789038554679_qb3ibme44",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038554679,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789038554680_wyqlxnwa1",
+      {
+        "id": "loop_1789038554680_wyqlxnwa1",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038554680,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789038854695_fayv6nqnq",
+      {
+        "id": "loop_1789038854695_fayv6nqnq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038854695,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789038854696_6ll9r96b4",
+      {
+        "id": "loop_1789038854696_6ll9r96b4",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789038854696,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789039154709_y4gblxg0c",
+      {
+        "id": "loop_1789039154709_y4gblxg0c",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039154710,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789039154710_xfho54ebw",
+      {
+        "id": "loop_1789039154710_xfho54ebw",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039154710,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789039454724_d2yrpd3mr",
+      {
+        "id": "loop_1789039454724_d2yrpd3mr",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039454724,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789039454724_zga7ig9tq",
+      {
+        "id": "loop_1789039454724_zga7ig9tq",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039454724,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789039754727_ijb9guf2n",
+      {
+        "id": "loop_1789039754727_ijb9guf2n",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039754727,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789039754728_z27xd6boh",
+      {
+        "id": "loop_1789039754728_z27xd6boh",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789039754728,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789040054742_ov48d05i6",
+      {
+        "id": "loop_1789040054742_ov48d05i6",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040054742,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789040054742_j4acmat3h",
+      {
+        "id": "loop_1789040054742_j4acmat3h",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040054742,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789040354754_809ixlqp1",
+      {
+        "id": "loop_1789040354754_809ixlqp1",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040354754,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789040354755_ay2yixv17",
+      {
+        "id": "loop_1789040354755_ay2yixv17",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040354755,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789040654756_8928bp2kf",
+      {
+        "id": "loop_1789040654756_8928bp2kf",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "optimization",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040654756,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789040654756_2w63na1zo",
+      {
+        "id": "loop_1789040654756_2w63na1zo",
+        "strategy": {
+          "action": "reject",
+          "reason": "low_confidence",
+          "strategy": "none",
+          "confidence": 0.4
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.4
+        },
+        "timestamp": 1789040654756,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789041612440_oxzviptix",
+      {
+        "id": "loop_1789041612440_oxzviptix",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-35-turbo",
+          "reasoning": "Standard tasks use cost-effective local models",
+          "confidence": 0.75,
+          "fallback": "local-llama"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "observation",
+          "confidence": 0.75
+        },
+        "timestamp": 1789041612472,
+        "severity": 0.5
+      }
+    ],
+    [
+      "loop_1789041612443_4qntk06hu",
+      {
+        "id": "loop_1789041612443_4qntk06hu",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1789041612474,
+        "severity": 0.7
+      }
+    ],
+    [
+      "loop_1789041912481_zbfno7epk",
+      {
+        "id": "loop_1789041912481_zbfno7epk",
+        "strategy": {
+          "action": "proceed",
+          "strategy": "local",
+          "model": "gpt-4-local",
+          "reasoning": "Revenue tasks get best local model with fallback",
+          "confidence": 0.75,
+          "fallback": "gpt-35-turbo"
+        },
+        "error": "Unknown error",
+        "context": {
+          "type": "revenue",
+          "confidence": 0.75
+        },
+        "timestamp": 1789041912485,
+        "severity": 0.7
+      }
+    ]
+  ],
+  "confidenceReality": [
+    {
+      "taskId": "loop_1787142380661_f5gmtlhae",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787142380676
+    },
+    {
+      "taskId": "loop_1787142380662_fnsqmim67",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787142380677
+    },
+    {
+      "taskId": "loop_1787142680684_3kr9hkej5",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787142680685
+    },
+    {
+      "taskId": "loop_1787142680685_1w3rxxw68",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787142680685
+    },
+    {
+      "taskId": "loop_1787142980688_ygd6i7tep",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787142980694
+    },
+    {
+      "taskId": "loop_1787143280701_1we619c82",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143280701
+    },
+    {
+      "taskId": "loop_1787143280701_q8t2c1sd8",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143280702
+    },
+    {
+      "taskId": "loop_1787143580702_c932k1uy0",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143580702
+    },
+    {
+      "taskId": "loop_1787143580703_p24jjr0sl",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143580703
+    },
+    {
+      "taskId": "loop_1787143880704_3mvozf3hm",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143880705
+    },
+    {
+      "taskId": "loop_1787143880706_4rjv47hxo",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787143880706
+    },
+    {
+      "taskId": "loop_1787144180709_rcqors78k",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144180709
+    },
+    {
+      "taskId": "loop_1787144180710_2gxonfedw",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144180710
+    },
+    {
+      "taskId": "loop_1787144480719_13glhmano",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144480719
+    },
+    {
+      "taskId": "loop_1787144480721_xadejxn7v",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144480721
+    },
+    {
+      "taskId": "loop_1787144780733_if6fv2aad",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144780733
+    },
+    {
+      "taskId": "loop_1787144780734_lb4ux9sws",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787144780734
+    },
+    {
+      "taskId": "loop_1787145080736_15hw0n9vo",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787145080736
+    },
+    {
+      "taskId": "loop_1787145080737_ugea8zink",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787145080737
+    },
+    {
+      "taskId": "loop_1787145380752_6kpsfv5uh",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787145380752
+    },
+    {
+      "taskId": "loop_1787145380752_csotq8so6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787145380752
+    },
+    {
+      "taskId": "loop_1787382586552_z5494bs6o",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787382586559
+    },
+    {
+      "taskId": "loop_1787382586553_5zjbxwn5f",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787382586560
+    },
+    {
+      "taskId": "loop_1787382886570_502pcmx9j",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787382886573
+    },
+    {
+      "taskId": "loop_1787383186580_n3et3g5kd",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383186582
+    },
+    {
+      "taskId": "loop_1787383186582_o11rqeg6w",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383186582
+    },
+    {
+      "taskId": "loop_1787383486585_ka56b0oq8",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383486585
+    },
+    {
+      "taskId": "loop_1787383486586_bpuosj9eh",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383486586
+    },
+    {
+      "taskId": "loop_1787383786590_7fhc4y35l",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383786590
+    },
+    {
+      "taskId": "loop_1787383786590_66owjqrxs",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787383786591
+    },
+    {
+      "taskId": "loop_1787384086603_l5d224hwp",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384086603
+    },
+    {
+      "taskId": "loop_1787384086603_613t1myyk",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384086603
+    },
+    {
+      "taskId": "loop_1787384386604_h8r3boxuv",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384386605
+    },
+    {
+      "taskId": "loop_1787384386606_jhrjbnn32",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384386606
+    },
+    {
+      "taskId": "loop_1787384686614_vijmjrwbw",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384686614
+    },
+    {
+      "taskId": "loop_1787384686614_r108czht7",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384686614
+    },
+    {
+      "taskId": "loop_1787384986630_axf8fjoya",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384986630
+    },
+    {
+      "taskId": "loop_1787384986631_0upmqar5p",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787384986631
+    },
+    {
+      "taskId": "loop_1787385286632_qesyj4okt",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385286632
+    },
+    {
+      "taskId": "loop_1787385286632_l2a12lqnu",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385286632
+    },
+    {
+      "taskId": "loop_1787385586636_24d1ywmjs",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385586636
+    },
+    {
+      "taskId": "loop_1787385586636_echa2cuz8",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385586636
+    },
+    {
+      "taskId": "loop_1787385886650_ruu87gnmz",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385886650
+    },
+    {
+      "taskId": "loop_1787385886650_ret6gq5wd",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787385886650
+    },
+    {
+      "taskId": "loop_1787386186661_xgoz98gun",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386186661
+    },
+    {
+      "taskId": "loop_1787386186661_ig0d2zedt",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386186661
+    },
+    {
+      "taskId": "loop_1787386486673_xew4hqg5a",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386486673
+    },
+    {
+      "taskId": "loop_1787386486673_05aexu4ca",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386486674
+    },
+    {
+      "taskId": "loop_1787386786679_6pgiq3h69",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386786679
+    },
+    {
+      "taskId": "loop_1787386786679_pdlyn8gp6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787386786679
+    },
+    {
+      "taskId": "loop_1787387086694_vle75zmt5",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387086694
+    },
+    {
+      "taskId": "loop_1787387086694_p2gmnd65q",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387086694
+    },
+    {
+      "taskId": "loop_1787387386697_bubopagyu",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387386697
+    },
+    {
+      "taskId": "loop_1787387386698_gfj21woyq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387386698
+    },
+    {
+      "taskId": "loop_1787387686701_ya9odc138",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387686701
+    },
+    {
+      "taskId": "loop_1787387686701_to5tnkauq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387686701
+    },
+    {
+      "taskId": "loop_1787387986704_mtutdjyci",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387986704
+    },
+    {
+      "taskId": "loop_1787387986706_jg2zjxlk0",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787387986706
+    },
+    {
+      "taskId": "loop_1787388286714_6c7tq6azf",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388286714
+    },
+    {
+      "taskId": "loop_1787388286714_jx1qu2oju",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388286714
+    },
+    {
+      "taskId": "loop_1787388586717_iuddz2k8a",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388586718
+    },
+    {
+      "taskId": "loop_1787388586719_zt8l9czcr",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388586721
+    },
+    {
+      "taskId": "loop_1787388886725_6j44eawbn",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388886725
+    },
+    {
+      "taskId": "loop_1787388886725_sqhsybi9t",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787388886725
+    },
+    {
+      "taskId": "loop_1787389186736_nl7mcv0dq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389186736
+    },
+    {
+      "taskId": "loop_1787389186736_5dfgs2wzs",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389186736
+    },
+    {
+      "taskId": "loop_1787389486746_zvxhwcuo8",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389486746
+    },
+    {
+      "taskId": "loop_1787389486747_ofbxkx8ze",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389486747
+    },
+    {
+      "taskId": "loop_1787389786760_vr2j4erfl",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389786760
+    },
+    {
+      "taskId": "loop_1787389786760_uniu12pjn",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787389786760
+    },
+    {
+      "taskId": "loop_1787390086766_fgwwsenzs",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390086766
+    },
+    {
+      "taskId": "loop_1787390086766_89sipre48",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390086766
+    },
+    {
+      "taskId": "loop_1787390386769_fmt1h7ric",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390386769
+    },
+    {
+      "taskId": "loop_1787390386769_hvfb5zts2",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390386769
+    },
+    {
+      "taskId": "loop_1787390686774_qw9j8iclx",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390686774
+    },
+    {
+      "taskId": "loop_1787390686774_ix3lly838",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390686774
+    },
+    {
+      "taskId": "loop_1787390986786_ara4qzrcm",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390986787
+    },
+    {
+      "taskId": "loop_1787390986787_sz0st9are",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787390986787
+    },
+    {
+      "taskId": "loop_1787391286791_zppx2j6ie",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391286791
+    },
+    {
+      "taskId": "loop_1787391286792_brmu9ggqa",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391286792
+    },
+    {
+      "taskId": "loop_1787391586799_qxcjkfho4",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391586799
+    },
+    {
+      "taskId": "loop_1787391586799_kpefx54b9",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391586799
+    },
+    {
+      "taskId": "loop_1787391886814_jr2e8xwbb",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391886815
+    },
+    {
+      "taskId": "loop_1787391886815_es5hk6vks",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787391886815
+    },
+    {
+      "taskId": "loop_1787392186823_1cedzgh1z",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392186823
+    },
+    {
+      "taskId": "loop_1787392186823_vz3lw06zu",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392186823
+    },
+    {
+      "taskId": "loop_1787392486837_x7x6xtovx",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392486837
+    },
+    {
+      "taskId": "loop_1787392486837_tgoastpcj",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392486837
+    },
+    {
+      "taskId": "loop_1787392786852_ix1odz4jx",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392786852
+    },
+    {
+      "taskId": "loop_1787392786852_d5qgkmzrh",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787392786852
+    },
+    {
+      "taskId": "loop_1787393086854_49byahe0w",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393086854
+    },
+    {
+      "taskId": "loop_1787393086854_c133rh21w",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393086854
+    },
+    {
+      "taskId": "loop_1787393386862_wvo6wqqn6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393386862
+    },
+    {
+      "taskId": "loop_1787393386862_hao8ajnbe",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393386862
+    },
+    {
+      "taskId": "loop_1787393686865_7smshff3o",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393686866
+    },
+    {
+      "taskId": "loop_1787393686866_ezxczcu2o",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393686866
+    },
+    {
+      "taskId": "loop_1787393986868_dahb6q5qe",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393986868
+    },
+    {
+      "taskId": "loop_1787393986868_i6d0cy2qq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787393986868
+    },
+    {
+      "taskId": "loop_1787394286873_jqucsm17a",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787394286873
+    },
+    {
+      "taskId": "loop_1787394286873_f9rlsoxq6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787394286873
+    },
+    {
+      "taskId": "loop_1787394586880_k7rjs8epd",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787394586885
+    },
+    {
+      "taskId": "loop_1787394886894_bla85nkuw",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787394886896
+    },
+    {
+      "taskId": "loop_1787395186905_y1z5eyxa8",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787395186908
+    },
+    {
+      "taskId": "loop_1787395486910_1o7q6ylz8",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787395486913
+    },
+    {
+      "taskId": "loop_1787395786918_nh2mrnemr",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787395786921
+    },
+    {
+      "taskId": "loop_1787396086931_3064qudvz",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787396086936
+    },
+    {
+      "taskId": "loop_1787396386946_n7oz3fryd",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787396386952
+    },
+    {
+      "taskId": "loop_1787396686957_aa0y7dozl",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787396686960
+    },
+    {
+      "taskId": "loop_1787396986975_7wmobh8p9",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787396986985
+    },
+    {
+      "taskId": "loop_1787397286993_rqj4ir1wf",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787397286997
+    },
+    {
+      "taskId": "loop_1787397587009_iolqtc1a3",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787397587013
+    },
+    {
+      "taskId": "loop_1787397887023_xq606qt71",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787397887026
+    },
+    {
+      "taskId": "loop_1787398187038_sgl93ipj5",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787398187042
+    },
+    {
+      "taskId": "loop_1787398487053_s06z12mpj",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787398487055
+    },
+    {
+      "taskId": "loop_1787398787055_087xvqdxe",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787398787058
+    },
+    {
+      "taskId": "loop_1787399087061_9yde46n7u",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787399087065
+    },
+    {
+      "taskId": "loop_1787399387070_9zo6lj9fb",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787399387072
+    },
+    {
+      "taskId": "loop_1787399687085_0lfyk5pd0",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787399687088
+    },
+    {
+      "taskId": "loop_1787399987098_dlll9884i",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787399987100
+    },
+    {
+      "taskId": "loop_1787400287103_pzeb3i7fo",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787400287107
+    },
+    {
+      "taskId": "loop_1787400587111_hu3v35b6k",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787400587117
+    },
+    {
+      "taskId": "loop_1787400887124_k583wybsk",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787400887130
+    },
+    {
+      "taskId": "loop_1787401187141_emran1956",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787401187143
+    },
+    {
+      "taskId": "loop_1787401510662_7eu7wfsov",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1787401511095
+    },
+    {
+      "taskId": "loop_1789035854573_nd2ud4pyb",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789035854588
+    },
+    {
+      "taskId": "loop_1789035854573_hv9m693bm",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789035854588
+    },
+    {
+      "taskId": "loop_1789036154593_8agcwh4k5",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036154593
+    },
+    {
+      "taskId": "loop_1789036154594_n8ymcaxx7",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036154594
+    },
+    {
+      "taskId": "loop_1789036454606_qgexvni5k",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036454607
+    },
+    {
+      "taskId": "loop_1789036454607_dfddgs8my",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036454607
+    },
+    {
+      "taskId": "loop_1789036754609_q6022194c",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036754611
+    },
+    {
+      "taskId": "loop_1789036754612_oq4aj86l6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789036754612
+    },
+    {
+      "taskId": "loop_1789037054624_attso423u",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037054624
+    },
+    {
+      "taskId": "loop_1789037054626_5z39vgddv",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037054626
+    },
+    {
+      "taskId": "loop_1789037354639_ngwv2x0ib",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037354639
+    },
+    {
+      "taskId": "loop_1789037354639_k7avgcysb",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037354639
+    },
+    {
+      "taskId": "loop_1789037654641_1dmg46ons",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037654641
+    },
+    {
+      "taskId": "loop_1789037654642_cbnfz1d70",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037654643
+    },
+    {
+      "taskId": "loop_1789037954658_lansr8jvf",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037954659
+    },
+    {
+      "taskId": "loop_1789037954659_gtz5nvycj",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789037954659
+    },
+    {
+      "taskId": "loop_1789038254667_to48mdnk8",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038254667
+    },
+    {
+      "taskId": "loop_1789038254667_j6uo0lei5",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038254667
+    },
+    {
+      "taskId": "loop_1789038554679_qb3ibme44",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038554680
+    },
+    {
+      "taskId": "loop_1789038554680_wyqlxnwa1",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038554680
+    },
+    {
+      "taskId": "loop_1789038854695_fayv6nqnq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038854695
+    },
+    {
+      "taskId": "loop_1789038854696_6ll9r96b4",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789038854696
+    },
+    {
+      "taskId": "loop_1789039154709_y4gblxg0c",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039154710
+    },
+    {
+      "taskId": "loop_1789039154710_xfho54ebw",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039154710
+    },
+    {
+      "taskId": "loop_1789039454724_d2yrpd3mr",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039454724
+    },
+    {
+      "taskId": "loop_1789039454724_zga7ig9tq",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039454724
+    },
+    {
+      "taskId": "loop_1789039754727_ijb9guf2n",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039754727
+    },
+    {
+      "taskId": "loop_1789039754728_z27xd6boh",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789039754728
+    },
+    {
+      "taskId": "loop_1789040054742_ov48d05i6",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040054742
+    },
+    {
+      "taskId": "loop_1789040054742_j4acmat3h",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040054742
+    },
+    {
+      "taskId": "loop_1789040354754_809ixlqp1",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040354755
+    },
+    {
+      "taskId": "loop_1789040354755_ay2yixv17",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040354755
+    },
+    {
+      "taskId": "loop_1789040654756_8928bp2kf",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040654756
+    },
+    {
+      "taskId": "loop_1789040654756_2w63na1zo",
+      "expectedConfidence": 0.4,
+      "actualOutcome": {
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789040654756
+    },
+    {
+      "taskId": "loop_1789041612440_oxzviptix",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789041612472
+    },
+    {
+      "taskId": "loop_1789041612443_4qntk06hu",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789041612474
+    },
+    {
+      "taskId": "loop_1789041912481_zbfno7epk",
+      "expectedConfidence": 0.75,
+      "actualOutcome": {
+        "success": false,
+        "latency": 0,
+        "quality": 0.3,
+        "impact": 0.2,
+        "userSatisfaction": 0.2,
+        "businessValue": 0,
+        "revenueGenerated": 0,
+        "conversionRate": 0
+      },
+      "accuracy": 0,
+      "timestamp": 1789041912485
+    }
+  ],
   "driftScore": 0,
   "patterns": [],
-  "adaptations": [],
-  "lastReflection": 1784493477179
+  "adaptations": [
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787142380677_utdwe97cj",
+      "timestamp": 1787142380677,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787142380677_n3kh51y83",
+      "timestamp": 1787142380677,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787142680685_vqe9cf8tq",
+      "timestamp": 1787142680685,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787142680685_ut0v4vljb",
+      "timestamp": 1787142680685,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787142980694_pr02qtdum",
+      "timestamp": 1787142980694,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143280701_v38xx1s7j",
+      "timestamp": 1787143280701,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143280702_vp230skge",
+      "timestamp": 1787143280702,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143580702_je8yasd9p",
+      "timestamp": 1787143580702,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143580703_yscska4fd",
+      "timestamp": 1787143580703,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143880705_zqle2b92c",
+      "timestamp": 1787143880705,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787143880706_dgqyvdkw8",
+      "timestamp": 1787143880706,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144180709_kjt9tfzkp",
+      "timestamp": 1787144180709,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144180710_3yxu9ibt2",
+      "timestamp": 1787144180710,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144480720_miuqztxoo",
+      "timestamp": 1787144480720,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144480721_22sk6gi0l",
+      "timestamp": 1787144480721,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144780734_zn4nob0fk",
+      "timestamp": 1787144780734,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787144780734_bj6vjh55b",
+      "timestamp": 1787144780734,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787145080736_rg8g90gtj",
+      "timestamp": 1787145080736,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787145080737_u5yn54aex",
+      "timestamp": 1787145080737,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787145380752_ty29o4n18",
+      "timestamp": 1787145380752,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787145380752_5ada78ccb",
+      "timestamp": 1787145380752,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787382586560_olpayduci",
+      "timestamp": 1787382586560,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787382586560_66db6iz1x",
+      "timestamp": 1787382586560,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787382886573_h61ni612w",
+      "timestamp": 1787382886573,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383186582_cx6y3918u",
+      "timestamp": 1787383186582,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383186582_2evmyuy2w",
+      "timestamp": 1787383186582,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383486585_14le1lzkn",
+      "timestamp": 1787383486585,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383486586_n7hluug7n",
+      "timestamp": 1787383486586,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383786590_7k7m0zi0i",
+      "timestamp": 1787383786590,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787383786592_h0y1n2eup",
+      "timestamp": 1787383786592,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384086603_rvcdncetx",
+      "timestamp": 1787384086603,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384086603_kvosuxoqt",
+      "timestamp": 1787384086603,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384386606_cvzfk6gbg",
+      "timestamp": 1787384386606,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384386606_nujmurf54",
+      "timestamp": 1787384386606,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384686614_blx0avihn",
+      "timestamp": 1787384686614,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384686614_a7z490s35",
+      "timestamp": 1787384686614,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384986630_hbs6p6z1v",
+      "timestamp": 1787384986630,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787384986631_69wa2a5zq",
+      "timestamp": 1787384986631,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385286632_g0pt6m4zi",
+      "timestamp": 1787385286632,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385286632_5jp69b9kk",
+      "timestamp": 1787385286632,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385586636_welv0v31l",
+      "timestamp": 1787385586636,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385586636_0josokhpf",
+      "timestamp": 1787385586636,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385886650_2e1gj8hsu",
+      "timestamp": 1787385886650,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787385886650_pczrtu0w6",
+      "timestamp": 1787385886650,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386186661_156c1v4bb",
+      "timestamp": 1787386186661,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386186661_lr16zubnc",
+      "timestamp": 1787386186661,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386486673_wd6swiilw",
+      "timestamp": 1787386486673,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386486674_syojju2pq",
+      "timestamp": 1787386486674,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386786679_dqf67nzpf",
+      "timestamp": 1787386786679,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787386786679_bes7yi3h0",
+      "timestamp": 1787386786679,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387086694_64gps1z82",
+      "timestamp": 1787387086694,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387086694_b3hyiyvwj",
+      "timestamp": 1787387086694,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387386697_t2uekbjrk",
+      "timestamp": 1787387386697,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387386698_if1hfi4aa",
+      "timestamp": 1787387386698,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387686701_bx7r0xj0j",
+      "timestamp": 1787387686701,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387686701_amsvwwbb6",
+      "timestamp": 1787387686701,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387986704_7falonb4z",
+      "timestamp": 1787387986704,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787387986706_1h32jct72",
+      "timestamp": 1787387986706,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388286714_5cj88eulo",
+      "timestamp": 1787388286714,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388286714_x9p761da0",
+      "timestamp": 1787388286714,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388586718_spwtmkzyi",
+      "timestamp": 1787388586718,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388586721_b2mmdsxqr",
+      "timestamp": 1787388586721,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388886725_wcnv4jgag",
+      "timestamp": 1787388886725,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787388886725_cfc1dc4w8",
+      "timestamp": 1787388886725,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389186736_oum6y4yti",
+      "timestamp": 1787389186736,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389186736_waft25yte",
+      "timestamp": 1787389186736,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389486747_hmvxihcbe",
+      "timestamp": 1787389486747,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389486747_49mk4dsg9",
+      "timestamp": 1787389486747,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389786760_v2itsylfr",
+      "timestamp": 1787389786760,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787389786760_4egjn8h9k",
+      "timestamp": 1787389786760,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390086766_anwj7iik1",
+      "timestamp": 1787390086766,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390086766_cyoslv9uj",
+      "timestamp": 1787390086766,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390386769_bwqpl2kqh",
+      "timestamp": 1787390386769,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390386769_qc6vwt2xc",
+      "timestamp": 1787390386769,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390686774_3emdglxor",
+      "timestamp": 1787390686774,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390686774_yiichuojp",
+      "timestamp": 1787390686774,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390986787_hrk2m5owu",
+      "timestamp": 1787390986787,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787390986787_b8b6zq7vu",
+      "timestamp": 1787390986787,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391286791_ou9zlc5tm",
+      "timestamp": 1787391286791,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391286792_uuadzfq3y",
+      "timestamp": 1787391286792,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391586799_lcm4hvad8",
+      "timestamp": 1787391586799,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391586799_bdm6tabr1",
+      "timestamp": 1787391586799,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391886815_lv0wo8km5",
+      "timestamp": 1787391886815,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787391886815_bcvbzfwam",
+      "timestamp": 1787391886815,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392186823_k1t9ntctu",
+      "timestamp": 1787392186823,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392186823_6jqu8y8b7",
+      "timestamp": 1787392186823,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392486837_u07me7kry",
+      "timestamp": 1787392486837,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392486837_8mevdum51",
+      "timestamp": 1787392486837,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392786852_crqp6yg25",
+      "timestamp": 1787392786852,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787392786852_jw7m0iw40",
+      "timestamp": 1787392786852,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393086854_r4iagdr7o",
+      "timestamp": 1787393086854,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393086854_8v35r3m37",
+      "timestamp": 1787393086854,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393386862_0e2cq45n8",
+      "timestamp": 1787393386862,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393386862_2jt733153",
+      "timestamp": 1787393386862,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393686866_lpp8l0u6g",
+      "timestamp": 1787393686866,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393686866_ubxlxvsl8",
+      "timestamp": 1787393686866,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393986868_kibynsba0",
+      "timestamp": 1787393986868,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787393986868_mr5u4px38",
+      "timestamp": 1787393986868,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787394286873_25rvifvlf",
+      "timestamp": 1787394286873,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787394286874_2fi87764m",
+      "timestamp": 1787394286874,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787394586885_v1nzdjk3c",
+      "timestamp": 1787394586885,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787394886896_haxgy210m",
+      "timestamp": 1787394886896,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787395186908_3i3ouam1w",
+      "timestamp": 1787395186908,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787395486913_6g2ua9yhy",
+      "timestamp": 1787395486913,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787395786921_l2q32n5i1",
+      "timestamp": 1787395786921,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787396086936_036h5c4vi",
+      "timestamp": 1787396086936,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787396386952_b15kbdwnv",
+      "timestamp": 1787396386952,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787396686960_5hq41nppm",
+      "timestamp": 1787396686960,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787396986985_b5unns74e",
+      "timestamp": 1787396986985,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787397286997_07aukxfor",
+      "timestamp": 1787397286997,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787397587013_ffbt4bmfq",
+      "timestamp": 1787397587013,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787397887026_8712spju7",
+      "timestamp": 1787397887026,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787398187042_kjabb9cwg",
+      "timestamp": 1787398187042,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787398487056_l2f6yh73n",
+      "timestamp": 1787398487056,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787398787058_3ilqrraax",
+      "timestamp": 1787398787058,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787399087065_9xnm0k8l5",
+      "timestamp": 1787399087065,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787399387072_5d6datvvx",
+      "timestamp": 1787399387072,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787399687088_m01ew7z6g",
+      "timestamp": 1787399687088,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787399987100_udl8ykz8c",
+      "timestamp": 1787399987100,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787400287107_a04xuqrbg",
+      "timestamp": 1787400287108,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787400587117_ux0owpf1w",
+      "timestamp": 1787400587117,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787400887130_npvscb9f7",
+      "timestamp": 1787400887130,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787401187143_3jqq3enoj",
+      "timestamp": 1787401187143,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1787401511095_fijn3f2xr",
+      "timestamp": 1787401511095,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789035854589_2f75f0ewh",
+      "timestamp": 1789035854589,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789035854589_43f6dowy4",
+      "timestamp": 1789035854589,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036154593_7xsb6050r",
+      "timestamp": 1789036154593,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036154594_kasnfoiwr",
+      "timestamp": 1789036154594,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036454607_ew0s67nhs",
+      "timestamp": 1789036454607,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036454608_dvg6bp90k",
+      "timestamp": 1789036454608,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036754611_20edzvmbc",
+      "timestamp": 1789036754611,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789036754612_v8jxw4ans",
+      "timestamp": 1789036754612,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037054625_8zmfzg0p6",
+      "timestamp": 1789037054625,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037054628_p0borayv7",
+      "timestamp": 1789037054628,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037354639_j3r30qc2u",
+      "timestamp": 1789037354639,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037354640_dmm78a5wg",
+      "timestamp": 1789037354640,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037654641_8sm4o8hx5",
+      "timestamp": 1789037654641,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037654643_a8gf7jabj",
+      "timestamp": 1789037654643,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037954659_kq69kaqg7",
+      "timestamp": 1789037954659,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789037954659_8clys9mlc",
+      "timestamp": 1789037954659,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038254667_qrgfzb1ay",
+      "timestamp": 1789038254667,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038254667_od8klshcp",
+      "timestamp": 1789038254667,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038554680_enb6her8z",
+      "timestamp": 1789038554680,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038554680_kftx77iop",
+      "timestamp": 1789038554680,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038854695_2r9bobqdu",
+      "timestamp": 1789038854695,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789038854696_e4ht5fbhu",
+      "timestamp": 1789038854696,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039154710_stke3zk83",
+      "timestamp": 1789039154710,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039154710_u4vjscpkd",
+      "timestamp": 1789039154710,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039454724_17pn75g0o",
+      "timestamp": 1789039454724,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039454724_b72o4q099",
+      "timestamp": 1789039454724,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039754728_squta0t18",
+      "timestamp": 1789039754728,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789039754728_zzcn7kfhu",
+      "timestamp": 1789039754728,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040054742_kfnu412w4",
+      "timestamp": 1789040054742,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040054742_eib6kc73k",
+      "timestamp": 1789040054742,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040354755_3n92b4ui9",
+      "timestamp": 1789040354755,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040354755_bsvg43vco",
+      "timestamp": 1789040354755,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040654756_slughck3o",
+      "timestamp": 1789040654756,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789040654756_ealuym75r",
+      "timestamp": 1789040654756,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789041612474_86tiohlvw",
+      "timestamp": 1789041612474,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789041612475_5i8gm2nil",
+      "timestamp": 1789041612475,
+      "effectiveness": 0
+    },
+    {
+      "type": "confidence_calibration",
+      "adjustment": "lower_threshold",
+      "reason": "Overconfidence detected",
+      "priority": "high",
+      "id": "adaptation_1789041912485_8y7ukmqwl",
+      "timestamp": 1789041912485,
+      "effectiveness": 0
+    }
+  ],
+  "lastReflection": 1790585560258,
+  "lastSaved": 1789997192895
 }

@@ -1,0 +1,10 @@
+{
+  "mode": "SHADOW",
+  "startedAt": "2026-08-17T14:41:16.814Z",
+  "endedAt": "2026-08-17T14:44:24.346Z",
+  "cycles": 5,
+  "actionsTaken": 0,
+  "escalations": 0,
+  "healthyCycles": 4,
+  "stopped": false
+}

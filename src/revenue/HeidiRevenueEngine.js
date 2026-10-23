@@ -11,7 +11,7 @@
  */
 
 const EventEmitter = require('events');
-const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = require('../../lib/stripe/client');
 const { supabase } = require('../database');
 
 class HeidiRevenueEngine extends EventEmitter {

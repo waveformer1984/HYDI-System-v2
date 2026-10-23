@@ -32,6 +32,7 @@ class ControlledExecutor {
       'docker.local': {
         'status': { resources: ['supabase_db', 'supabase_kong', 'supabase_inbucket', 'supabase_auth', 'supabase_rest'] },
         'restart_service': { resources: ['supabase_inbucket'] },
+        'compose_restart': { resources: ['postgres', 'redis', 'protohub-api'] },
       },
       'database.local': {
         'status': { resources: ['supabase'] },
@@ -88,6 +89,10 @@ class ControlledExecutor {
       if (operation === 'restart_service') {
         const containerName = this.containerName(resource);
         return runExecFile('docker', ['restart', containerName]);
+      }
+      if (operation === 'compose_restart') {
+        const composeFile = 'C:\\ProtoForge_Ecosystem\\Ursula_Suite\\docker-compose.yml';
+        return runExecFile('docker', ['compose', '-f', composeFile, 'restart', resource]);
       }
       throw new Error(`DENIED: operation not implemented: ${operation}`);
     });

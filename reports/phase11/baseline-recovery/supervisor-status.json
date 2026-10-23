@@ -1,0 +1,43 @@
+{
+  "uptime": 607220,
+  "state": "RUNNING",
+  "health": {
+    "memory-engine": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:43:25.535Z"
+    },
+    "hydi-core": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:43:27.600Z"
+    },
+    "docker-stack": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:43:27.636Z"
+    },
+    "heidi-bridge": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:43:29.680Z"
+    },
+    "next-app": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:44:27.354Z"
+    },
+    "heidi-mobile": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:44:33.465Z"
+    },
+    "forge-loop": {
+      "status": "UP",
+      "checkedAt": "2026-08-16T15:44:33.483Z"
+    }
+  },
+  "processes": [
+    "memory-engine",
+    "hydi-core",
+    "docker-stack",
+    "heidi-bridge",
+    "next-app",
+    "heidi-mobile",
+    "forge-loop"
+  ]
+}

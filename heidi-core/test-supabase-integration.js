@@ -13,7 +13,7 @@ class SupabaseIntegrationTest {
     // Load from .env file (parent directory)
     require('dotenv').config({ path: '../.env' });
     
-    this.supabaseUrl = process.env.SUPABASE_URL || 'https://akbnfovjdcobifeupvbn.supabase.co';
+    this.supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
     this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     if (!this.supabaseKey) {

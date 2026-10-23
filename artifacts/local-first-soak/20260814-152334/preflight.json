@@ -1,0 +1,10 @@
+{
+  "preflight_start": "2026-08-14T15:23:34.716210+00:00",
+  "preflight_end": "2026-08-14T15:23:36.323892+00:00",
+  "local_supabase_url": "http://127.0.0.1:54321",
+  "persistence_mode": "local",
+  "cloud_url": "http://192.0.2.1:54321",
+  "health_result": false,
+  "persistence_result": false,
+  "all_passed": false
+}

@@ -39,7 +39,7 @@
     },
     "docker-stack": {
       "name": "Docker Compose Stack (Ursula)",
-      "cmd": "cd C:\\ProtoForge_Ecosystem\\Ursula_Suite && docker compose up postgres redis protohub-api",
+      "cmd": "cd C:\\ProtoForge_Ecosystem\\Ursula_Suite && docker compose up -d postgres redis protohub-api",
       "cwd": "C:\\ProtoForge_Ecosystem\\Ursula_Suite",
       "port": 4000,
       "required": false,
@@ -75,7 +75,7 @@
       "required": true,
       "dependencies": ["docker-stack"],
       "healthCheck": "http://localhost:3000/api/health",
-      "timeout": 45000,
+      "timeout": 300000,
       "restart": "exponential",
       "env": {
         "NODE_ENV": "development",

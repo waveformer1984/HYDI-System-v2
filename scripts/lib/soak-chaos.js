@@ -38,6 +38,46 @@ function execFileAsync(cmd, args, options = {}) {
   });
 }
 
+/** Convert a Windows path to a WSL /mnt/<drive> path for bash -c commands. */
+function toWslPath(p) {
+  if (typeof p !== 'string') return p;
+  if (!/^[A-Za-z]:[\\/]/.test(p)) return p.replace(/\\/g, '/');
+  const drive = p[0].toLowerCase();
+  const rest = p.slice(2).replace(/\\/g, '/');
+  return `/mnt/${drive}${rest}`;
+}
+
+async function dockerVersion() {
+  return execFileAsync('docker', ['--version']);
+}
+
+async function dockerCompose(cwd, subcommand, extraArgs = [], options = {}) {
+  return execFileAsync('docker', ['compose', subcommand, ...extraArgs], { ...options, cwd });
+}
+
+/**
+ * Capture live Docker runtime identity so the harness can prove it is targeting
+ * the same daemon that hosts the qualification workload.
+ */
+async function runtimeIdentity() {
+  const version = await execFileAsync('docker', ['version', '--format', '{{.Server.Version}}']);
+  const context = await execFileAsync('docker', ['context', 'show']);
+  const containerList = await execFileAsync('docker', ['ps', '--all', '--format', '{{.Names}}:{{.ID}}']);
+  return {
+    client: 'Windows docker CLI',
+    serverVersion: version.ok ? version.stdout.trim() : null,
+    context: context.ok ? context.stdout.trim() : null,
+    containers: containerList.ok
+      ? containerList.stdout.trim().split('\n').filter(Boolean)
+      : [],
+  };
+}
+
+async function resolveComposeService(cwd, service) {
+  const ps = await dockerCompose(cwd, 'ps', ['-q', service], { timeout: 60000 });
+  return { target: service, containerId: ps.ok ? ps.stdout.trim() : null, ok: ps.ok && ps.stdout.trim() !== '' };
+}
+
 /** Single health probe. Resolves {ok, statusCode, latencyMs} and never rejects. */
 function probe(url, timeoutMs = 5000) {
   return new Promise((resolve) => {
@@ -133,6 +173,21 @@ class ServiceRestartScenario {
     this.destructive = true;
   }
 
+  async resolve() {
+    const manifest = loadManifest();
+    const service = manifest.services[this.serviceName];
+    if (!service) return { ok: false, target: this.serviceName, reason: 'not in services-manifest.json' };
+    const pids = await pidsOnPort(service.port);
+    return {
+      ok: pids.length > 0,
+      target: this.serviceName,
+      port: service.port,
+      pids,
+      healthCheck: service.healthCheck,
+      reason: pids.length === 0 ? 'no listening PID found' : undefined,
+    };
+  }
+
   async run(ctx) {
     const manifest = loadManifest();
     const service = manifest.services[this.serviceName];
@@ -224,8 +279,15 @@ class DockerServiceRestartScenario {
     this.destructive = true;
   }
 
+  async resolve() {
+    const cwd = this.cwd && fs.existsSync(this.cwd) ? this.cwd : null;
+    if (!cwd) return { ok: false, target: this.composeService, reason: `project directory not found: ${this.cwd}` };
+    const resolved = await resolveComposeService(cwd, this.composeService);
+    return { ...resolved, runtime: 'Windows docker compose' };
+  }
+
   async run() {
-    const version = await execFileAsync('docker', ['--version']);
+    const version = await dockerVersion();
     if (!version.ok) {
       return { status: 'skipped', reason: 'docker CLI is not available on this host' };
     }
@@ -235,13 +297,13 @@ class DockerServiceRestartScenario {
       return { status: 'skipped', reason: `docker compose project directory not found: ${this.cwd}` };
     }
 
-    const ps = await execFileAsync('docker', ['compose', 'ps', '-q', this.composeService], { cwd });
+    const ps = await dockerCompose(cwd, 'ps', ['-q', this.composeService]);
     if (!ps.ok || ps.stdout.trim() === '') {
       return { status: 'skipped', reason: `container "${this.composeService}" is not running; fault could not be injected` };
     }
 
     const injectedAt = new Date().toISOString();
-    const restart = await execFileAsync('docker', ['compose', 'restart', this.composeService], { cwd, timeout: 120000 });
+    const restart = await dockerCompose(cwd, 'restart', [this.composeService], { timeout: 120000 });
     if (!restart.ok) {
       return {
         status: 'failed',
@@ -300,24 +362,31 @@ class DelayedDependencyScenario {
     this.destructive = true;
   }
 
+  async resolve() {
+    const cwd = this.cwd && fs.existsSync(this.cwd) ? this.cwd : null;
+    if (!cwd) return { ok: false, target: this.composeService, reason: `project directory not found: ${this.cwd}` };
+    const resolved = await resolveComposeService(cwd, this.composeService);
+    return { ...resolved, runtime: 'Windows docker compose' };
+  }
+
   async run() {
     const cwd = this.cwd && fs.existsSync(this.cwd) ? this.cwd : null;
     if (!cwd) return { status: 'skipped', reason: `docker compose project directory not found: ${this.cwd}` };
 
-    const ps = await execFileAsync('docker', ['compose', 'ps', '-q', this.composeService], { cwd });
+    const ps = await dockerCompose(cwd, 'ps', ['-q', this.composeService]);
     if (!ps.ok || ps.stdout.trim() === '') {
       return { status: 'skipped', reason: `container "${this.composeService}" is not running; fault could not be injected` };
     }
 
     const injectedAt = new Date().toISOString();
-    const stop = await execFileAsync('docker', ['compose', 'stop', this.composeService], { cwd, timeout: 60000 });
+    const stop = await dockerCompose(cwd, 'stop', [this.composeService], { timeout: 60000 });
     if (!stop.ok) {
       return { status: 'failed', injectedAt, injectedFault: `stop ${this.composeService}`, observedBehaviour: stop.error, recoveryMs: null };
     }
 
     const duringOutage = await probe(this.dependentHealthUrl);
     await sleep(this.downtimeMs);
-    await execFileAsync('docker', ['compose', 'start', this.composeService], { cwd, timeout: 120000 });
+    await dockerCompose(cwd, 'start', [this.composeService], { timeout: 120000 });
 
     const recovery = await waitForHealthy(this.dependentHealthUrl, this.recoveryTimeoutMs);
 
@@ -347,6 +416,7 @@ function buildScenarios(options = {}) {
     new ServiceRestartScenario('next-app', {
       name: 'restart-next',
       description: 'Terminate the Next.js frontend/API process and verify it returns to health',
+      recoveryTimeoutMs: 300000,
     }),
     new ServiceRestartScenario('heidi-bridge', {
       name: 'kill-bridge',
@@ -410,11 +480,18 @@ class ChaosOrchestrator {
     const startedAt = Date.now();
 
     if (this.dryRun) {
+      let resolved;
+      try {
+        resolved = await scenario.resolve();
+      } catch (err) {
+        resolved = { ok: false, reason: `resolve threw: ${err.message}` };
+      }
       const result = {
         scenario: scenario.name,
         description: scenario.description,
-        status: 'skipped',
-        reason: 'dry run: no fault injected',
+        status: resolved && resolved.ok ? 'dry-run-resolved' : 'dry-run-unresolved',
+        reason: resolved && resolved.ok ? 'dry run: no fault injected' : `dry run: target unresolved (${resolved.reason || 'unknown'})`,
+        target: resolved,
         injectedAt: new Date(startedAt).toISOString(),
       };
       this.results.push(result);
@@ -485,4 +562,6 @@ module.exports = {
   buildScenarios,
   probe,
   waitForHealthy,
+  runtimeIdentity,
+  resolveComposeService,
 };

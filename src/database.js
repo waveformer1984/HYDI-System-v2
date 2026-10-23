@@ -1,39 +1,17 @@
 // SINGLE Supabase client - the only database interface
 // No duplicates, no ambiguity, no emotional labor for broken imports
 
-const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
-const path = require('path');
 
 // Node < 22 has no global WebSocket; supabase-js realtime requires one.
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
 }
-// Load .env.local first so it takes precedence, then .env as fallback.
-require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-// Validate environment at startup
-let supabaseUrl = process.env.SUPABASE_URL;
-let supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// Strip quotes if present
-if (supabaseUrl && supabaseUrl.startsWith('"')) {
-  supabaseUrl = supabaseUrl.slice(1, -1);
-}
-if (supabaseKey && supabaseKey.startsWith('"')) {
-  supabaseKey = supabaseKey.slice(1, -1);
-}
-
-console.log('[DATABASE] SUPABASE_URL:', supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'MISSING');
-console.log('[DATABASE] SUPABASE_KEY:', supabaseKey ? 'PRESENT' : 'MISSING');
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('CRITICAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env file');
-}
-
-// Create singleton client - the ONLY database interface
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Create singleton client - the ONLY database interface.
+// Persistence target (local/cloud/auto) is determined by HYDI_PERSISTENCE_MODE.
+const { getSupabaseClient } = require('./persistence/supabase-client');
+const supabase = getSupabaseClient();
 
 // Test connection immediately
 async function testConnection() {

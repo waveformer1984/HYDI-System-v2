@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 class KeeperBoundaryHardening {
   constructor() {
     this.supabase = createClient(
-      process.env.SUPABASE_URL || 'https://akbnfovjdcobifeupvbn.supabase.co',
+      process.env.SUPABASE_URL || 'http://127.0.0.1:54321',
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
   }

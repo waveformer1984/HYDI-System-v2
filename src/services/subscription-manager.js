@@ -3,17 +3,13 @@
  * Handles Stripe integration, billing, and subscription lifecycle
  */
 
-const Stripe = require('stripe');
+const stripe = require('../../lib/stripe/client');
 const UrsulaServiceBundle = require('../../modules/ursula-service-bundle');
 const { supabase } = require('../database');
 
 class SubscriptionManager {
   constructor() {
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (!stripeKey) {
-      console.warn('[SubscriptionManager] STRIPE_SECRET_KEY not set — Stripe features disabled');
-    }
-    this.stripe = stripeKey ? new Stripe(stripeKey) : null;
+    this.stripe = stripe;
     this.serviceBundle = new UrsulaServiceBundle();
     this._onboardingTimers = [];
     this.setupEventHandlers();

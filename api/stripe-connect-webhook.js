@@ -3,11 +3,10 @@
  * Routes payments to correct sub-account and writes financial_ledger entries
  */
 
-const Stripe = require('stripe');
+const stripe = require('../lib/stripe/client');
 const { createClient } = require('@supabase/supabase-js');
 const { getRawBody } = require('../lib/get-raw-body');
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY

@@ -1,0 +1,10 @@
+{
+  "mode": "CONTROLLED",
+  "startedAt": "2026-08-17T17:57:05.995Z",
+  "endedAt": "2026-08-17T18:00:11.671Z",
+  "cycles": 6,
+  "actionsTaken": 1,
+  "escalations": 0,
+  "healthyCycles": 6,
+  "stopped": false
+}

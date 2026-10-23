@@ -1,0 +1,910 @@
+{
+  "timestamp": "2026-08-17T03:28:23.118Z",
+  "source": "HEIDI_DIAGNOSTIC",
+  "overall": "HEALTHY",
+  "sections": [
+    {
+      "label": "system-health",
+      "kind": "OBSERVED",
+      "data": {
+        "persistence": {
+          "status": "HEALTHY",
+          "detail": "Supabase REST reachable (200)"
+        },
+        "postgres": {
+          "status": "HEALTHY",
+          "detail": "supabase_db_HYDI-System-v2:Up 18 hours (healthy)"
+        },
+        "ollama": {
+          "status": "NOT_CONFIGURED",
+          "detail": "local model not enabled"
+        },
+        "docker": {
+          "status": "HEALTHY",
+          "detail": "Docker 29.7.2"
+        },
+        "workers": {
+          "status": "NOT_CONFIGURED",
+          "detail": "worker queue monitor not registered"
+        },
+        "controlPlane": {
+          "status": "HEALTHY",
+          "detail": "Heidi control plane is active"
+        },
+        "inbucket": {
+          "status": "HEALTHY",
+          "detail": "supabase_inbucket_HYDI-System-v2:Up 18 hours (healthy)"
+        },
+        "wsl": {
+          "status": "HEALTHY",
+          "detail": "WSL Ubuntu responded",
+          "latencyMs": 10189
+        },
+        "docker-daemon": {
+          "status": "HEALTHY",
+          "detail": "Docker daemon 29.7.2",
+          "latencyMs": 174
+        },
+        "docker-containers": {
+          "status": "DEGRADED",
+          "detail": "14 running, 2 crashed, 0 restarting, 16 total",
+          "states": [
+            {
+              "name": "ursula-hub",
+              "status": "Up About a minute (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-flask",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-postgres",
+              "status": "Up About a minute (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-redis",
+              "status": "Up About a minute (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_db_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_studio_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_pg_meta_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_edge_runtime_HYDI-System-v2",
+              "status": "Exited (255) 9 days ago",
+              "healthy": false,
+              "crashed": true,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_storage_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_rest_HYDI-System-v2",
+              "status": "Up 18 hours",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_realtime_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_inbucket_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_auth_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_kong_HYDI-System-v2",
+              "status": "Up 12 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_vector_HYDI-System-v2",
+              "status": "Exited (0) 12 hours ago",
+              "healthy": false,
+              "crashed": true,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_analytics_HYDI-System-v2",
+              "status": "Up 18 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            }
+          ]
+        },
+        "docker-resource-pressure": {
+          "status": "HEALTHY",
+          "detail": "WSL resource snapshot",
+          "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/sde       1007G   25G  931G   3% /",
+          "memory": "total        used        free      shared  buff/cache   available\nMem:            5930        3074        1046          99        2195        2856\nSwap:           2048        1407         640",
+          "load": "318.59 314.16 308.68 28/2251 3062"
+        },
+        "kong": {
+          "status": "HEALTHY",
+          "detail": "Kong 54321 200 in 32ms"
+        },
+        "supabase-db-container": {
+          "status": "HEALTHY",
+          "detail": "supabase_db_HYDI-System-v2: Up 18 hours (healthy)",
+          "restarts": 0
+        },
+        "supabase-kong-container": {
+          "status": "HEALTHY",
+          "detail": "supabase_kong_HYDI-System-v2: Up 12 hours (healthy)",
+          "restarts": 0
+        },
+        "postgres-tcp": {
+          "status": "HEALTHY",
+          "detail": "Postgres TCP 5432 in 2ms"
+        },
+        "redis-tcp": {
+          "status": "HEALTHY",
+          "detail": "Redis TCP 6379 in 2ms"
+        },
+        "protohub-compose": {
+          "status": "HEALTHY",
+          "detail": "protohub-api running",
+          "restarts": 0
+        },
+        "postgres-compose": {
+          "status": "HEALTHY",
+          "detail": "postgres running",
+          "restarts": 0
+        },
+        "redis-compose": {
+          "status": "HEALTHY",
+          "detail": "redis running",
+          "restarts": 0
+        },
+        "memory-engine": {
+          "status": "HEALTHY",
+          "detail": "memory-engine http://localhost:9998/health 200 in 7ms"
+        },
+        "hydi-core": {
+          "status": "HEALTHY",
+          "detail": "hydi-core http://localhost:9997/health 200 in 5ms"
+        },
+        "heidi-bridge": {
+          "status": "HEALTHY",
+          "detail": "heidi-bridge http://localhost:5050/health 200 in 11ms"
+        },
+        "next-app": {
+          "status": "HEALTHY",
+          "detail": "next-app http://localhost:3000/api/health 200 in 59ms"
+        },
+        "heidi-mobile": {
+          "status": "HEALTHY",
+          "detail": "heidi-mobile http://localhost:3006/api/health 200 in 25ms"
+        },
+        "forge-loop": {
+          "status": "HEALTHY",
+          "detail": "forge-loop has no health check; assuming up"
+        }
+      },
+      "summary": {
+        "total": 25,
+        "healthy": 22,
+        "unknown": 0
+      }
+    },
+    {
+      "label": "dependency-graph",
+      "kind": "OBSERVED",
+      "data": {
+        "heidi": {
+          "status": "HEALTHY",
+          "detail": "control plane active"
+        },
+        "wsl": {
+          "status": "HEALTHY",
+          "detail": "WSL Ubuntu responded",
+          "latencyMs": 10189
+        },
+        "docker": {
+          "status": "HEALTHY",
+          "detail": "Docker daemon 29.7.2",
+          "latencyMs": 174
+        },
+        "postgres": {
+          "status": "HEALTHY",
+          "detail": "Postgres TCP 5432 in 2ms"
+        },
+        "redis": {
+          "status": "HEALTHY",
+          "detail": "Redis TCP 6379 in 2ms"
+        },
+        "supabase": {
+          "status": "HEALTHY",
+          "detail": "Kong 54321 200 in 32ms"
+        },
+        "protohub": {
+          "status": "HEALTHY",
+          "detail": "protohub-api running",
+          "restarts": 0
+        },
+        "memory-engine": {
+          "status": "HEALTHY",
+          "detail": "memory-engine http://localhost:9998/health 200 in 7ms"
+        },
+        "hydi-core": {
+          "status": "HEALTHY",
+          "detail": "hydi-core http://localhost:9997/health 200 in 5ms"
+        },
+        "heidi-bridge": {
+          "status": "HEALTHY",
+          "detail": "heidi-bridge http://localhost:5050/health 200 in 11ms"
+        },
+        "next-app": {
+          "status": "HEALTHY",
+          "detail": "next-app http://localhost:3000/api/health 200 in 59ms"
+        }
+      }
+    },
+    {
+      "label": "recent-incidents",
+      "kind": "OBSERVED",
+      "data": [
+        {
+          "incident_id": "inc-1786937303117-y8gfvh",
+          "timestamp": "2026-08-17T03:28:23.117Z",
+          "component": "wsl_compose.local",
+          "failure_class": "RECOVERY_FAILED",
+          "symptoms": {
+            "status": "FAILED",
+            "detail": "Execution failed and recovery exhausted: Recovery exhausted for p11-recovery-failure: DENIED: resource not allowed: not-allowed"
+          },
+          "environment": {},
+          "dependency_state": {},
+          "diagnosis": {
+            "cause": "RESOURCE_EXHAUSTION",
+            "confidence": "MEDIUM"
+          },
+          "action": {
+            "id": "p11-recovery-failure",
+            "capabilityId": "wsl_compose.local",
+            "target": "local",
+            "riskLevel": "LOW",
+            "parameters": {
+              "operation": "start",
+              "resource": "not-allowed"
+            },
+            "state": "FAILED",
+            "history": {
+              "0": {
+                "from": "PROPOSED",
+                "to": "VALIDATING",
+                "at": 1786937301102
+              },
+              "1": {
+                "from": "VALIDATING",
+                "to": "AUTHORIZED",
+                "at": 1786937301102
+              },
+              "2": {
+                "from": "AUTHORIZED",
+                "to": "EXECUTING",
+                "at": 1786937301102
+              },
+              "3": {
+                "from": "EXECUTING",
+                "to": "RECOVERY",
+                "at": 1786937301103
+              },
+              "4": {
+                "from": "RECOVERY",
+                "to": "FAILED",
+                "at": 1786937303116
+              }
+            }
+          },
+          "result": {
+            "success": false,
+            "error": "Execution failed and recovery exhausted: Recovery exhausted for p11-recovery-failure: DENIED: resource not allowed: not-allowed"
+          },
+          "recovery_time": null,
+          "final_state": "RECOVERY_FAILED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786937301101-kcud9j",
+          "timestamp": "2026-08-17T03:28:21.101Z",
+          "component": "kill-bridge",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "passed",
+            "detail": "health endpoint went down after 3ms and returned healthy after 4036ms across 3 probes"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "kill-bridge": "DEGRADED"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "soak-chaos",
+            "scenario": "kill-bridge"
+          },
+          "result": {
+            "status": "passed",
+            "injectedAt": "2026-08-17T03:28:16.790Z",
+            "injectedFault": "terminated PID(s) 26244 listening on port 5050",
+            "observedBehaviour": "health endpoint went down after 3ms and returned healthy after 4036ms across 3 probes",
+            "recoveryMs": 4036,
+            "outageDetectedAfterMs": 3,
+            "killResults": [
+              {
+                "pid": 26244,
+                "ok": true,
+                "stdout": "SUCCESS: The process with PID 26244 (child process of PID 3676) has been terminated.\r\n",
+                "stderr": "",
+                "error": null
+              }
+            ],
+            "restart": null,
+            "recoveredBy": "supervisor"
+          },
+          "recovery_time": 4036,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786937296699-nwojcp",
+          "timestamp": "2026-08-17T03:28:16.699Z",
+          "component": "restart-next",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "passed",
+            "detail": "health endpoint went down after 5ms and returned healthy after 29644ms across 14 probes"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "restart-next": "DEGRADED"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "soak-chaos",
+            "scenario": "restart-next"
+          },
+          "result": {
+            "status": "passed",
+            "injectedAt": "2026-08-17T03:27:46.692Z",
+            "injectedFault": "terminated PID(s) 18456 listening on port 3000",
+            "observedBehaviour": "health endpoint went down after 5ms and returned healthy after 29644ms across 14 probes",
+            "recoveryMs": 29644,
+            "outageDetectedAfterMs": 5,
+            "killResults": [
+              {
+                "pid": 18456,
+                "ok": true,
+                "stdout": "SUCCESS: The process with PID 18456 (child process of PID 19036) has been terminated.\r\n",
+                "stderr": "",
+                "error": null
+              }
+            ],
+            "restart": null,
+            "recoveredBy": "supervisor"
+          },
+          "recovery_time": 29644,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786937266583-06y1qn",
+          "timestamp": "2026-08-17T03:27:46.583Z",
+          "component": "protohub-api",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "UNAVAILABLE",
+            "detail": "protohub-api compose stop"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "protohub-api": "UNAVAILABLE"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "wsl_compose.local",
+            "operation": "start",
+            "resource": "protohub-api"
+          },
+          "result": {
+            "status": "COMPLETED",
+            "taskId": "p11-protohub-api",
+            "result": {
+              "success": true,
+              "result": {
+                "success": true,
+                "status": "started",
+                "detail": ""
+              },
+              "duration": 830
+            },
+            "duration": 830
+          },
+          "recovery_time": 831,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786937235541-y42qhk",
+          "timestamp": "2026-08-17T03:27:15.541Z",
+          "component": "redis",
+          "failure_class": "CACHE_FAILURE",
+          "symptoms": {
+            "status": "UNAVAILABLE",
+            "detail": "redis compose stop"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "redis": "UNAVAILABLE"
+          },
+          "diagnosis": {
+            "cause": "CACHE_FAILURE",
+            "confidence": "MEDIUM"
+          },
+          "action": {
+            "capability": "wsl_compose.local",
+            "operation": "start",
+            "resource": "redis"
+          },
+          "result": {
+            "status": "COMPLETED",
+            "taskId": "p11-redis",
+            "result": {
+              "success": true,
+              "result": {
+                "success": true,
+                "status": "started",
+                "detail": ""
+              },
+              "duration": 1139
+            },
+            "duration": 1139
+          },
+          "recovery_time": 1140,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786937225181-0ip0ml",
+          "timestamp": "2026-08-17T03:27:05.181Z",
+          "component": "postgres",
+          "failure_class": "DATABASE_FAILURE",
+          "symptoms": {
+            "status": "UNAVAILABLE",
+            "detail": "postgres compose stop"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "postgres": "UNAVAILABLE"
+          },
+          "diagnosis": {
+            "cause": "DATABASE_FAILURE",
+            "confidence": "MEDIUM"
+          },
+          "action": {
+            "capability": "wsl_compose.local",
+            "operation": "start",
+            "resource": "postgres"
+          },
+          "result": {
+            "status": "COMPLETED",
+            "taskId": "p11-postgres",
+            "result": {
+              "success": true,
+              "result": {
+                "success": true,
+                "status": "started",
+                "detail": ""
+              },
+              "duration": 1290
+            },
+            "duration": 1290
+          },
+          "recovery_time": 1293,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786907905232-lvl3x4",
+          "timestamp": "2026-08-16T19:18:25.232Z",
+          "component": "wsl_compose.local",
+          "failure_class": "RECOVERY_FAILED",
+          "symptoms": {
+            "status": "FAILED",
+            "detail": "Execution failed and recovery exhausted: Recovery exhausted for p11-recovery-failure: DENIED: resource not allowed: not-allowed"
+          },
+          "environment": {},
+          "dependency_state": {},
+          "diagnosis": {
+            "cause": "RESOURCE_EXHAUSTION",
+            "confidence": "MEDIUM"
+          },
+          "action": {
+            "id": "p11-recovery-failure",
+            "capabilityId": "wsl_compose.local",
+            "target": "local",
+            "riskLevel": "LOW",
+            "parameters": {
+              "operation": "start",
+              "resource": "not-allowed"
+            },
+            "state": "FAILED",
+            "history": {
+              "0": {
+                "from": "PROPOSED",
+                "to": "VALIDATING",
+                "at": 1786907903214
+              },
+              "1": {
+                "from": "VALIDATING",
+                "to": "AUTHORIZED",
+                "at": 1786907903214
+              },
+              "2": {
+                "from": "AUTHORIZED",
+                "to": "EXECUTING",
+                "at": 1786907903214
+              },
+              "3": {
+                "from": "EXECUTING",
+                "to": "RECOVERY",
+                "at": 1786907903214
+              },
+              "4": {
+                "from": "RECOVERY",
+                "to": "FAILED",
+                "at": 1786907905231
+              }
+            }
+          },
+          "result": {
+            "success": false,
+            "error": "Execution failed and recovery exhausted: Recovery exhausted for p11-recovery-failure: DENIED: resource not allowed: not-allowed"
+          },
+          "recovery_time": null,
+          "final_state": "RECOVERY_FAILED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786907903212-p30e2f",
+          "timestamp": "2026-08-16T19:18:23.212Z",
+          "component": "kill-bridge",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "passed",
+            "detail": "health endpoint went down after 8ms and returned healthy after 4034ms across 3 probes"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "kill-bridge": "DEGRADED"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "soak-chaos",
+            "scenario": "kill-bridge"
+          },
+          "result": {
+            "status": "passed",
+            "injectedAt": "2026-08-16T19:18:18.911Z",
+            "injectedFault": "terminated PID(s) 28556 listening on port 5050",
+            "observedBehaviour": "health endpoint went down after 8ms and returned healthy after 4034ms across 3 probes",
+            "recoveryMs": 4034,
+            "outageDetectedAfterMs": 8,
+            "killResults": [
+              {
+                "pid": 28556,
+                "ok": true,
+                "stdout": "SUCCESS: The process with PID 28556 (child process of PID 16032) has been terminated.\r\n",
+                "stderr": "",
+                "error": null
+              }
+            ],
+            "restart": null,
+            "recoveredBy": "supervisor"
+          },
+          "recovery_time": 4034,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786907898842-916ulw",
+          "timestamp": "2026-08-16T19:18:18.843Z",
+          "component": "restart-next",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "failed",
+            "detail": "health endpoint went down after 4ms and did NOT return healthy within 300000ms"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "restart-next": "UNAVAILABLE"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "soak-chaos",
+            "scenario": "restart-next"
+          },
+          "result": {
+            "status": "failed",
+            "injectedAt": "2026-08-16T19:12:17.635Z",
+            "injectedFault": "terminated PID(s) 15712 listening on port 3000",
+            "observedBehaviour": "health endpoint went down after 4ms and did NOT return healthy within 300000ms",
+            "recoveryMs": null,
+            "outageDetectedAfterMs": 4,
+            "killResults": [
+              {
+                "pid": 15712,
+                "ok": true,
+                "stdout": "SUCCESS: The process with PID 15712 (child process of PID 25248) has been terminated.\r\n",
+                "stderr": "",
+                "error": null
+              }
+            ],
+            "restart": null,
+            "recoveredBy": "supervisor"
+          },
+          "recovery_time": null,
+          "final_state": "RECOVERY_FAILED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        },
+        {
+          "incident_id": "inc-1786907537443-hxvbr4",
+          "timestamp": "2026-08-16T19:12:17.443Z",
+          "component": "protohub-api",
+          "failure_class": "DEPENDENCY_FAILURE",
+          "symptoms": {
+            "status": "UNAVAILABLE",
+            "detail": "protohub-api compose stop"
+          },
+          "environment": {
+            "wsl": "HEALTHY",
+            "platform": "win32"
+          },
+          "dependency_state": {
+            "protohub-api": "UNAVAILABLE"
+          },
+          "diagnosis": {
+            "cause": "DEPENDENCY_FAILURE",
+            "confidence": "LOW"
+          },
+          "action": {
+            "capability": "wsl_compose.local",
+            "operation": "start",
+            "resource": "protohub-api"
+          },
+          "result": {
+            "status": "COMPLETED",
+            "taskId": "p11-protohub-api",
+            "result": {
+              "success": true,
+              "result": {
+                "success": true,
+                "status": "started",
+                "detail": ""
+              },
+              "duration": 1044
+            },
+            "duration": 1044
+          },
+          "recovery_time": 1044,
+          "final_state": "RECOVERED",
+          "evidence_paths": [
+            "C:\\Users\\Owner\\HYDI_System\\reports\\phase11\\incidents"
+          ],
+          "evidence": {}
+        }
+      ],
+      "summary": {
+        "total": 24,
+        "byComponent": {
+          "postgres": 4,
+          "redis": 4,
+          "protohub-api": 4,
+          "restart-next": 4,
+          "kill-bridge": 4,
+          "wsl_compose.local": 4
+        },
+        "byClass": {
+          "DATABASE_FAILURE": 4,
+          "CACHE_FAILURE": 4,
+          "DEPENDENCY_FAILURE": 12,
+          "RECOVERY_FAILED": 4
+        },
+        "byState": {
+          "RECOVERED": 17,
+          "RECOVERY_FAILED": 7
+        }
+      }
+    },
+    {
+      "label": "current-anomalies",
+      "kind": "OBSERVED",
+      "data": [
+        {
+          "component": "docker-containers",
+          "state": "DEGRADED",
+          "detail": "14 running, 2 crashed, 0 restarting, 16 total",
+          "classified": {
+            "failure_class": "CONTAINER_FAILURE",
+            "confidence": "MEDIUM",
+            "matched": "restarting"
+          }
+        }
+      ]
+    },
+    {
+      "label": "probable-causes",
+      "kind": "INFERRED",
+      "data": [
+        {
+          "component": "docker-containers",
+          "cause": "CONTAINER_FAILURE",
+          "confidence": "MEDIUM",
+          "matched": "restarting"
+        }
+      ]
+    },
+    {
+      "label": "recommended-actions",
+      "kind": "RECOMMENDED",
+      "data": [
+        {
+          "component": "docker-containers",
+          "recommendation": "Restart the affected container via an approved recovery action.",
+          "permitted_autonomous": true
+        }
+      ]
+    },
+    {
+      "label": "permitted-autonomous-actions",
+      "kind": "RECOMMENDED",
+      "data": [
+        {
+          "component": "docker-containers",
+          "capability": "health.recover or wsl_docker.local restart",
+          "requires_approval": false
+        }
+      ]
+    },
+    {
+      "label": "action-executed",
+      "kind": "EXECUTED",
+      "data": "NONE — diagnostic is read-only"
+    },
+    {
+      "label": "verification",
+      "kind": "VERIFIED",
+      "data": "N/A — no action executed"
+    }
+  ]
+}

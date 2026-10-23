@@ -94,7 +94,8 @@ class HYDICore {
 
     for (const check of checks) {
       let ready = false;
-      for (let i = 0; i < 30; i++) {
+      const maxAttempts = check.required ? 30 : 3;
+      for (let i = 0; i < maxAttempts; i++) {
         try {
           const response = await fetch(check.url);
           if (response.ok) {

@@ -616,3 +616,6 @@ SELECT
    AND occurred_at > NOW() - INTERVAL '24 hours') AS auto_heals_24h,
 
   NOW() AS dashboard_generated_at;
+
+-- Ensure all common Supabase roles can read the dashboard view.
+GRANT SELECT ON public.system_dashboard TO service_role, authenticated, anon;

@@ -1,0 +1,59 @@
+{
+  "ports": [
+    {
+      "port": 9999,
+      "pre": false,
+      "post": true,
+      "same": false
+    },
+    {
+      "port": 9998,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 9997,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 3000,
+      "pre": false,
+      "post": true,
+      "same": false
+    },
+    {
+      "port": 5050,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 3006,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 4000,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 5432,
+      "pre": true,
+      "post": true,
+      "same": true
+    },
+    {
+      "port": 6379,
+      "pre": true,
+      "post": true,
+      "same": true
+    }
+  ],
+  "allSame": false
+}

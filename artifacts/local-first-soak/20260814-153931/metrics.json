@@ -1,0 +1,463 @@
+{
+  "overall": {
+    "total_operations": 34,
+    "success": 34,
+    "failures": 0,
+    "success_rate_percent": 100.0,
+    "duration_seconds": 60,
+    "completed_at": "2026-08-14T15:40:58.999290+00:00"
+  },
+  "metrics": {
+    "health": {
+      "success": 3,
+      "failures": 0,
+      "p95": 68.6,
+      "p99": 69.72,
+      "avg": 59.33,
+      "min": 52,
+      "max": 70
+    },
+    "ursula": {
+      "success": 3,
+      "failures": 0,
+      "p95": 104.2,
+      "p99": 108.04,
+      "avg": 76.33,
+      "min": 59,
+      "max": 109
+    },
+    "project_get": {
+      "success": 3,
+      "failures": 0,
+      "p95": 387.4,
+      "p99": 401.48,
+      "avg": 281.0,
+      "min": 209,
+      "max": 405
+    },
+    "project_update": {
+      "success": 3,
+      "failures": 0,
+      "p95": 426.3,
+      "p99": 442.86,
+      "avg": 296.33,
+      "min": 202,
+      "max": 447
+    },
+    "project_list": {
+      "success": 3,
+      "failures": 0,
+      "p95": 393.6,
+      "p99": 405.92,
+      "avg": 289.0,
+      "min": 203,
+      "max": 409
+    },
+    "track_get": {
+      "success": 3,
+      "failures": 0,
+      "p95": 405.9,
+      "p99": 421.98,
+      "avg": 280.67,
+      "min": 191,
+      "max": 426
+    },
+    "track_update": {
+      "success": 3,
+      "failures": 0,
+      "p95": 384.9,
+      "p99": 398.58,
+      "avg": 269.33,
+      "min": 175,
+      "max": 402
+    },
+    "tracks_list": {
+      "success": 3,
+      "failures": 0,
+      "p95": 255.4,
+      "p99": 255.88,
+      "avg": 230.0,
+      "min": 184,
+      "max": 256
+    },
+    "track_create": {
+      "success": 3,
+      "failures": 0,
+      "p95": 292.3,
+      "p99": 293.66,
+      "avg": 250.33,
+      "min": 180,
+      "max": 294
+    },
+    "system_health": {
+      "success": 3,
+      "failures": 0,
+      "p95": 271.5,
+      "p99": 274.3,
+      "avg": 237.67,
+      "min": 198,
+      "max": 275
+    },
+    "collector": {
+      "success": 4,
+      "failures": 0,
+      "p95": 1052.85,
+      "p99": 1074.57,
+      "avg": 923.75,
+      "min": 842,
+      "max": 1080
+    }
+  },
+  "events": [
+    {
+      "ts": "2026-08-14T15:39:31.555927+00:00",
+      "op": "preflight_supabase",
+      "ok": true,
+      "latency_ms": 255,
+      "status": 200,
+      "body": "[{\"current_status\":\"OK\",\"last_check\":\"2026-08-14T15:39:11.274357+00:00\",\"trend_status\":\"stable\",\"trend_reason\":\"System stable across 3 runs\",\"critical_pct\":0,\"warning_pct\":0,\"avg_queue_size\":0,\"escalation_level\":\"OK\",\"escalation_action\":\"none\",\"escalation_reason\":\"System stable\",\"jobs_queued\":0,\"jobs_failed\":0,\"jobs_dead\":0,\"events_last_hour\":0,\"auto_heals_24h\":0,\"dashboard_generated_at\":\"2026-08-14T15:39:31.552937+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:31.617464+00:00",
+      "op": "preflight_health",
+      "ok": true,
+      "latency_ms": 61,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:31.674165+00:00",
+      "op": "preflight_ursula",
+      "ok": true,
+      "latency_ms": 56,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:32.516942+00:00",
+      "op": "collector",
+      "ok": true,
+      "latency_ms": 842,
+      "error": ""
+    },
+    {
+      "ts": "2026-08-14T15:39:32.721389+00:00",
+      "op": "preflight_persistence_write",
+      "ok": true,
+      "latency_ms": 204,
+      "status": 201,
+      "body": "[{\"id\":4,\"run_at\":\"2026-08-14T15:39:32.717131+00:00\",\"status\":\"OK\",\"environment\":\"soak\",\"queue_status\":null,\"event_flow_status\":null,\"revenue_status\":null,\"automation_status\":null,\"entitlements_status\":null,\"issues_count\":0,\"warnings_count\":0,\"details\":{\"source\": \"soak-preflight\", \"probe_id\": \"soak-preflight-1786721972\"},\"created_at\":\"2026-08-14T15:39:32.717131+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:33.390680+00:00",
+      "op": "data_integrity_after_creation",
+      "project_ok": true,
+      "track_id": "4ea930ba-2706-4b96-b01f-ed7c60bfe36b"
+    },
+    {
+      "ts": "2026-08-14T15:39:33.443043+00:00",
+      "op": "health",
+      "ok": true,
+      "latency_ms": 52,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:33.502950+00:00",
+      "op": "ursula",
+      "ok": true,
+      "latency_ms": 59,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:33.712572+00:00",
+      "op": "project_get",
+      "ok": true,
+      "latency_ms": 209,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:32.92593+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:33.915404+00:00",
+      "op": "project_update",
+      "ok": true,
+      "latency_ms": 202,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":110,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:33.908156+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:34.119048+00:00",
+      "op": "project_list",
+      "ok": true,
+      "latency_ms": 203,
+      "status": 200,
+      "body": "[{\"id\":\"d473f4c1-4c0f-450e-8293-d9f55cbac8d3\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"Acceptance Project\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":\"Updated via acceptance\",\"status\":\"draft\",\"created_at\":\"2026-08-14T04:39:36.897+00:00\",\"updated_at\":\"2026-08-14T04:45:35.752032+00:00\"}, \n {\"id\":\"d3c86e07-d851-4739-b62f-bd2fd0c9f7a7\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721951\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:11.520584+00:00\",\"updated_at\":\"2026-08-14T15:39:11.520584+00:00\"}, \n {\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":110,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:33.908156+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:34.344864+00:00",
+      "op": "track_get",
+      "ok": true,
+      "latency_ms": 225,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":0.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:34.520440+00:00",
+      "op": "track_update",
+      "ok": true,
+      "latency_ms": 175,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-10.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:34.705185+00:00",
+      "op": "tracks_list",
+      "ok": true,
+      "latency_ms": 184,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-10.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:34.886172+00:00",
+      "op": "track_create",
+      "ok": true,
+      "latency_ms": 180,
+      "status": 201,
+      "body": ""
+    },
+    {
+      "ts": "2026-08-14T15:39:35.084603+00:00",
+      "op": "system_health",
+      "ok": true,
+      "latency_ms": 198,
+      "status": 201,
+      "body": "[{\"id\":5,\"run_at\":\"2026-08-14T15:39:35.077912+00:00\",\"status\":\"OK\",\"environment\":\"soak\",\"queue_status\":null,\"event_flow_status\":null,\"revenue_status\":null,\"automation_status\":null,\"entitlements_status\":null,\"issues_count\":0,\"warnings_count\":0,\"details\":{\"cycle\": 0, \"source\": \"soak\"},\"created_at\":\"2026-08-14T15:39:35.077912+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:35.983943+00:00",
+      "op": "collector",
+      "ok": true,
+      "latency_ms": 899,
+      "error": ""
+    },
+    {
+      "ts": "2026-08-14T15:39:53.447222+00:00",
+      "op": "health",
+      "ok": true,
+      "latency_ms": 56,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:53.508598+00:00",
+      "op": "ursula",
+      "ok": true,
+      "latency_ms": 61,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:39:53.738427+00:00",
+      "op": "project_get",
+      "ok": true,
+      "latency_ms": 229,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":110,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:33.908156+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:53.978475+00:00",
+      "op": "project_update",
+      "ok": true,
+      "latency_ms": 240,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":111,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:53.972494+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:54.233562+00:00",
+      "op": "project_list",
+      "ok": true,
+      "latency_ms": 255,
+      "status": 200,
+      "body": "[{\"id\":\"d473f4c1-4c0f-450e-8293-d9f55cbac8d3\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"Acceptance Project\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":\"Updated via acceptance\",\"status\":\"draft\",\"created_at\":\"2026-08-14T04:39:36.897+00:00\",\"updated_at\":\"2026-08-14T04:45:35.752032+00:00\"}, \n {\"id\":\"d3c86e07-d851-4739-b62f-bd2fd0c9f7a7\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721951\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:11.520584+00:00\",\"updated_at\":\"2026-08-14T15:39:11.520584+00:00\"}, \n {\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":111,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:53.972494+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:54.424745+00:00",
+      "op": "track_get",
+      "ok": true,
+      "latency_ms": 191,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-10.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:54.655985+00:00",
+      "op": "track_update",
+      "ok": true,
+      "latency_ms": 231,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-9.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:54.912942+00:00",
+      "op": "tracks_list",
+      "ok": true,
+      "latency_ms": 256,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-9.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}, \n {\"id\":\"95a5e90d-71df-459c-af81-fc364a53b2d6\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-extra-0\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":0.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:34.879606+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:55.207739+00:00",
+      "op": "track_create",
+      "ok": true,
+      "latency_ms": 294,
+      "status": 201,
+      "body": ""
+    },
+    {
+      "ts": "2026-08-14T15:39:55.448088+00:00",
+      "op": "system_health",
+      "ok": true,
+      "latency_ms": 240,
+      "status": 201,
+      "body": "[{\"id\":6,\"run_at\":\"2026-08-14T15:39:55.44311+00:00\",\"status\":\"OK\",\"environment\":\"soak\",\"queue_status\":null,\"event_flow_status\":null,\"revenue_status\":null,\"automation_status\":null,\"entitlements_status\":null,\"issues_count\":0,\"warnings_count\":0,\"details\":{\"cycle\": 1, \"source\": \"soak\"},\"created_at\":\"2026-08-14T15:39:55.44311+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:39:56.322160+00:00",
+      "op": "collector",
+      "ok": true,
+      "latency_ms": 874,
+      "error": ""
+    },
+    {
+      "ts": "2026-08-14T15:39:56.322256+00:00",
+      "op": "db_restart",
+      "action": "stop"
+    },
+    {
+      "ts": "2026-08-14T15:40:12.333213+00:00",
+      "op": "db_restart",
+      "action": "start"
+    },
+    {
+      "ts": "2026-08-14T15:40:17.701079+00:00",
+      "op": "db_restart",
+      "action": "recovered",
+      "duration_seconds": 21,
+      "first_successful_op": "GET system_dashboard"
+    },
+    {
+      "ts": "2026-08-14T15:40:18.114167+00:00",
+      "op": "data_integrity_after_db_restart",
+      "project_ok": true,
+      "track_id": "4ea930ba-2706-4b96-b01f-ed7c60bfe36b"
+    },
+    {
+      "ts": "2026-08-14T15:40:18.185010+00:00",
+      "op": "health",
+      "ok": true,
+      "latency_ms": 70,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:40:18.294958+00:00",
+      "op": "ursula",
+      "ok": true,
+      "latency_ms": 109,
+      "status": 200
+    },
+    {
+      "ts": "2026-08-14T15:40:18.700856+00:00",
+      "op": "project_get",
+      "ok": true,
+      "latency_ms": 405,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":111,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:39:53.972494+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:19.147971+00:00",
+      "op": "project_update",
+      "ok": true,
+      "latency_ms": 447,
+      "status": 200,
+      "body": "[{\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":112,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:40:19.140542+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:19.557094+00:00",
+      "op": "project_list",
+      "ok": true,
+      "latency_ms": 409,
+      "status": 200,
+      "body": "[{\"id\":\"d473f4c1-4c0f-450e-8293-d9f55cbac8d3\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"Acceptance Project\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":\"Updated via acceptance\",\"status\":\"draft\",\"created_at\":\"2026-08-14T04:39:36.897+00:00\",\"updated_at\":\"2026-08-14T04:45:35.752032+00:00\"}, \n {\"id\":\"d3c86e07-d851-4739-b62f-bd2fd0c9f7a7\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721951\",\"tempo\":120,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:11.520584+00:00\",\"updated_at\":\"2026-08-14T15:39:11.520584+00:00\"}, \n {\"id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"user_id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"soak-project-1786721972\",\"tempo\":112,\"time_signature\":\"4/4\",\"key_signature\":\"C major\",\"description\":null,\"status\":\"draft\",\"created_at\":\"2026-08-14T15:39:32.92593+00:00\",\"updated_at\":\"2026-08-14T15:40:19.140542+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:19.983416+00:00",
+      "op": "track_get",
+      "ok": true,
+      "latency_ms": 426,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-9.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:20.385894+00:00",
+      "op": "track_update",
+      "ok": true,
+      "latency_ms": 402,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-8.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:20.636595+00:00",
+      "op": "tracks_list",
+      "ok": true,
+      "latency_ms": 250,
+      "status": 200,
+      "body": "[{\"id\":\"4ea930ba-2706-4b96-b01f-ed7c60bfe36b\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-track-1786721972\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":-8.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:33.136894+00:00\"}, \n {\"id\":\"95a5e90d-71df-459c-af81-fc364a53b2d6\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-extra-0\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":0.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:34.879606+00:00\"}, \n {\"id\":\"60772e5b-b9b2-489c-a141-29da68bb8beb\",\"project_id\":\"f5e84696-c847-46c1-bf39-b8bd9e0591d2\",\"name\":\"soak-extra-1\",\"type\":\"audio\",\"muted\":false,\"solo\":false,\"volume\":1.00,\"pan\":0.00,\"position\":0,\"created_at\":\"2026-08-14T15:39:55.202922+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:20.913797+00:00",
+      "op": "track_create",
+      "ok": true,
+      "latency_ms": 277,
+      "status": 201,
+      "body": ""
+    },
+    {
+      "ts": "2026-08-14T15:40:21.188912+00:00",
+      "op": "system_health",
+      "ok": true,
+      "latency_ms": 275,
+      "status": 201,
+      "body": "[{\"id\":35,\"run_at\":\"2026-08-14T15:40:21.183771+00:00\",\"status\":\"OK\",\"environment\":\"soak\",\"queue_status\":null,\"event_flow_status\":null,\"revenue_status\":null,\"automation_status\":null,\"entitlements_status\":null,\"issues_count\":0,\"warnings_count\":0,\"details\":{\"cycle\": 2, \"source\": \"soak\"},\"created_at\":\"2026-08-14T15:40:21.183771+00:00\"}]"
+    },
+    {
+      "ts": "2026-08-14T15:40:22.269513+00:00",
+      "op": "collector",
+      "ok": true,
+      "latency_ms": 1080,
+      "error": ""
+    },
+    {
+      "ts": "2026-08-14T15:40:22.269637+00:00",
+      "op": "hydi_restart",
+      "action": "stop"
+    },
+    {
+      "ts": "2026-08-14T15:40:27.283214+00:00",
+      "op": "hydi_restart",
+      "action": "start"
+    },
+    {
+      "ts": "2026-08-14T15:40:58.570514+00:00",
+      "op": "hydi_restart",
+      "action": "recovered",
+      "duration_seconds": 36,
+      "first_successful_op": "GET /api/health"
+    },
+    {
+      "ts": "2026-08-14T15:40:58.998998+00:00",
+      "op": "data_integrity_after_hydi_restart",
+      "project_ok": true,
+      "track_id": "4ea930ba-2706-4b96-b01f-ed7c60bfe36b"
+    },
+    {
+      "ts": "2026-08-14T15:40:59.302357+00:00",
+      "op": "data_integrity_final",
+      "project_ok": true,
+      "track_id": "4ea930ba-2706-4b96-b01f-ed7c60bfe36b"
+    }
+  ]
+}

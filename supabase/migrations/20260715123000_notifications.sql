@@ -26,6 +26,15 @@ create table if not exists public.notifications (
   created_at   timestamptz not null default now()
 );
 
+-- Ensure all Phase-3 columns are present when the table already exists from an earlier migration
+alter table public.notifications add column if not exists category text;
+alter table public.notifications add column if not exists severity text;
+alter table public.notifications add column if not exists title text;
+alter table public.notifications add column if not exists body text;
+alter table public.notifications add column if not exists device_id text;
+alter table public.notifications add column if not exists read_at timestamptz;
+alter table public.notifications add column if not exists delivered_at timestamptz;
+
 create index if not exists idx_notifications_created_at on public.notifications (created_at desc);
 create index if not exists idx_notifications_unread      on public.notifications (device_id, read_at);
 create index if not exists idx_notifications_category    on public.notifications (category);

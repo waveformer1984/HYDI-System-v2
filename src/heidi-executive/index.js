@@ -16,6 +16,22 @@ const { DryRunExecutor } = require('./DryRunExecutor');
 const { HeidiExecutive } = require('./HeidiExecutive');
 const { LocalHealthProbes, registerWith } = require('./LocalHealthProbes');
 const { LocalRecoveryWorkflow } = require('./LocalRecoveryWorkflow');
+const { RuntimeObserver } = require('./RuntimeObserver');
+const { IncidentStore } = require('./IncidentStore');
+const { FailureClassifier } = require('./FailureClassifier');
+const { DiagnosticCommand } = require('./DiagnosticCommand');
+const { OperationalState } = require('./OperationalState');
+const { IncidentCorrelator } = require('./IncidentCorrelator');
+const { ImpactAssessor } = require('./ImpactAssessor');
+const { ActionSelector } = require('./ActionSelector');
+const { AutonomyPolicy } = require('./AutonomyPolicy');
+const { MissionEngine } = require('./MissionEngine');
+const { DecisionRecord } = require('./DecisionRecord');
+const { PredictiveIntelligence } = require('./PredictiveIntelligence');
+const { MaintenanceMode } = require('./MaintenanceMode');
+const { HeidiDecisionEngine } = require('./HeidiDecisionEngine');
+const { RuntimeObservationAdapter } = require('./RuntimeObservationAdapter');
+const { OperationalLoop } = require('./OperationalLoop');
 
 module.exports = {
   CapabilityRegistry,
@@ -33,4 +49,20 @@ module.exports = {
   LocalHealthProbes,
   registerWith,
   LocalRecoveryWorkflow,
+  RuntimeObserver,
+  IncidentStore,
+  FailureClassifier,
+  DiagnosticCommand,
+  OperationalState,
+  IncidentCorrelator,
+  ImpactAssessor,
+  ActionSelector,
+  AutonomyPolicy,
+  MissionEngine,
+  DecisionRecord,
+  PredictiveIntelligence,
+  MaintenanceMode,
+  HeidiDecisionEngine,
+  RuntimeObservationAdapter,
+  OperationalLoop,
 };

@@ -4,6 +4,9 @@ node_modules/
 # Next.js
 .next/
 
+# Local database backups (may contain user data)
+backups/
+
 # Environment — never commit secrets
 .env
 .env.*
@@ -92,3 +95,6 @@ reports/soak/
 reports/qualification/
 artifacts/soak/
 artifacts/qualification/
+reports/phase11/baseline-recovery/supabase_edge_runtime_inspect.json
+riq-evidence/com.docker.backend.exe.log.0
+artifacts/phase15-network-capture.pcap

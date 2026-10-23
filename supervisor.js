@@ -41,9 +41,12 @@ let portRegistry = {};
 let supervisor = {
   startTime: Date.now(),
   state: 'STARTING',
+  pid: process.pid,
   processes: {},
   health: {},
   crashes: {}, // {serviceName: [timestamp, timestamp, ...]}
+  ownership: {}, // {serviceName: { shellPid, port, startedAt }}
+  restarting: new Set(),
 };
 
 // ============================================================================
@@ -340,6 +343,11 @@ async function startService(serviceName) {
   });
 
   proc.on('exit', (code) => {
+    delete supervisor.ownership[serviceName];
+    if (supervisor.restarting.has(serviceName)) {
+      supervisor.restarting.delete(serviceName);
+      return;
+    }
     if (code !== 0) {
       log('ERROR', serviceName, `Process exited with code ${code}`);
       supervisor.crashes[serviceName] = supervisor.crashes[serviceName] || [];
@@ -350,13 +358,20 @@ async function startService(serviceName) {
   });
 
   supervisor.processes[serviceName] = proc;
+  supervisor.ownership[serviceName] = {
+    supervisorPid: process.pid,
+    shellPid: proc.pid,
+    port: svc.port,
+    serviceName,
+    startedAt: new Date().toISOString(),
+  };
   supervisor.health[serviceName] = { status: 'STARTING', startedAt: new Date().toISOString() };
 
   // Wait for health check
   const healthy = await waitForServiceReady(serviceName, svc.timeout || STARTUP_TIMEOUT);
   if (!healthy) {
     log('ERROR', serviceName, 'Health check failed');
-    proc.kill('SIGTERM');
+    await killProcessTree(proc, serviceName);
     return false;
   }
 
@@ -373,6 +388,52 @@ function scheduleRestart(serviceName) {
   log('INFO', serviceName, `Scheduling restart in ${backoff / 1000}s`);
   setTimeout(() => {
     log('INFO', serviceName, 'Attempting restart...');
+    startService(serviceName).catch((e) => {
+      log('ERROR', serviceName, `Restart attempt failed: ${e.message}`);
+    });
+  }, backoff);
+}
+
+async function killProcessTree(proc, serviceName) {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  return new Promise((resolve) => {
+    const done = () => { try { proc.removeAllListeners('exit'); } catch (_) {} resolve(); };
+    const timeout = setTimeout(() => {
+      log('WARN', serviceName, 'Process tree did not exit; force killing');
+      try { proc.kill('SIGKILL'); } catch (_) {}
+      done();
+    }, SIGNAL_TIMEOUT);
+    proc.once('exit', () => { clearTimeout(timeout); done(); });
+
+    if (process.platform === 'win32' && proc.pid) {
+      log('INFO', serviceName, `Terminating process tree at shell PID ${proc.pid}`);
+      exec(`taskkill /F /T /PID ${proc.pid}`, (err) => {
+        if (err) {
+          log('WARN', serviceName, `taskkill failed: ${err.message}`);
+          try { proc.kill('SIGTERM'); } catch (_) {}
+        }
+      });
+    } else {
+      try { proc.kill('SIGTERM'); } catch (_) {}
+    }
+  });
+}
+
+async function restartService(serviceName) {
+  if (supervisor.restarting.has(serviceName)) return;
+  supervisor.restarting.add(serviceName);
+  log('INFO', serviceName, 'Restarting due to health check failure');
+  const proc = supervisor.processes[serviceName];
+  if (proc) {
+    await killProcessTree(proc, serviceName);
+    delete supervisor.processes[serviceName];
+  }
+  releasePort(serviceName);
+  supervisor.crashes[serviceName] = supervisor.crashes[serviceName] || [];
+  supervisor.crashes[serviceName].push(Date.now());
+  const backoff = getExponentialBackoff(serviceName, (supervisor.crashes[serviceName] || []).length);
+  setTimeout(() => {
+    supervisor.restarting.delete(serviceName);
     startService(serviceName).catch((e) => {
       log('ERROR', serviceName, `Restart attempt failed: ${e.message}`);
     });
@@ -431,6 +492,7 @@ function startHealthCheckLoop() {
         if (wasUp && !isUp) {
           log('WARN', serviceName, 'Health check failed (was UP)');
           supervisor.health[serviceName].status = 'DEGRADED';
+          restartService(serviceName).catch((e) => log('ERROR', serviceName, `Restart failed: ${e.message}`));
         } else if (!wasUp && isUp) {
           log('SUCCESS', serviceName, 'Health check recovered');
           supervisor.health[serviceName].status = 'UP';
@@ -452,26 +514,8 @@ async function gracefulShutdown() {
 
   const promises = [];
   for (const [serviceName, proc] of Object.entries(supervisor.processes)) {
-    log('INFO', serviceName, 'Sending SIGTERM');
-    proc.kill('SIGTERM');
-
-    // Force kill after timeout
-    const p = new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        if (!proc.killed) {
-          log('WARN', serviceName, 'Force killing (didn\'t respond to SIGTERM)');
-          proc.kill('SIGKILL');
-        }
-        resolve();
-      }, SIGNAL_TIMEOUT);
-
-      proc.on('exit', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-    });
-
-    promises.push(p);
+    log('INFO', serviceName, 'Terminating owned process tree');
+    promises.push(killProcessTree(proc, serviceName));
   }
 
   await Promise.all(promises);
@@ -542,6 +586,7 @@ if (!dryRun) {
         state: supervisor.state,
         health: supervisor.health,
         processes: Object.keys(supervisor.processes),
+        ownership: supervisor.ownership,
       }, null, 2));
     } else if (req.url === '/health') {
       const isHealthy = Object.values(supervisor.health).every((h) => h.status === 'UP');
@@ -556,4 +601,4 @@ if (!dryRun) {
   });
 }
 
-module.exports = { supervisor, startService, gracefulShutdown };
+module.exports = { supervisor, startService, gracefulShutdown, killProcessTree };

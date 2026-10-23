@@ -13,6 +13,12 @@ const { HealthAggregator } = require('./HealthAggregator');
 const { MissionPlanner } = require('./MissionPlanner');
 const { RecoveryEngine } = require('./RecoveryEngine');
 const { DryRunExecutor } = require('./DryRunExecutor');
+const { WslExecutor } = require('./WslExecutor');
+const { RuntimeObserver } = require('./RuntimeObserver');
+const { RuntimeObservationAdapter } = require('./RuntimeObservationAdapter');
+const { HeidiDecisionEngine } = require('./HeidiDecisionEngine');
+const { IncidentStore } = require('./IncidentStore');
+const { ImpactAssessor } = require('./ImpactAssessor');
 
 class HeidiExecutive {
   constructor(options = {}) {
@@ -24,10 +30,30 @@ class HeidiExecutive {
     this.secrets = new SecretBroker();
     this.audit = new AuditLog({ redactor: this.secrets, dataDir: this.dataDir });
     this.executor = new ControlledExecutor(this.registry);
+    this.wsl = WslExecutor.registerWith(this.executor, this.registry, options.wsl);
     this.health = new HealthAggregator();
     this.planner = new MissionPlanner(this.registry);
     this.recovery = new RecoveryEngine(this.executor, this.registry);
     this.dryRun = new DryRunExecutor(this.registry);
+    this.runtimeObserver = options.runtimeObserver || new RuntimeObserver();
+    this.observationAdapter = new RuntimeObservationAdapter({ manifestPath: options.manifestPath });
+    this.decisionEngine = new HeidiDecisionEngine({
+      registry: this.registry,
+      audit: this.audit,
+      redactor: this.secrets,
+      dataDir: this.dataDir,
+    });
+    this.incidentStore = options.incidentStore || new IncidentStore({ redactor: this.secrets, dataDir: this.dataDir });
+    this.candidates = options.candidates || this.buildDefaultCandidates();
+  }
+
+  buildDefaultCandidates() {
+    return [
+      { id: 'restart-postgres', capabilityId: 'docker.local', allowedComponents: ['postgres-compose'], parameters: { operation: 'compose_restart', resource: 'postgres' }, blastRadius: 2 },
+      { id: 'restart-redis', capabilityId: 'docker.local', allowedComponents: ['redis-compose'], parameters: { operation: 'compose_restart', resource: 'redis' }, blastRadius: 2 },
+      { id: 'restart-protohub', capabilityId: 'docker.local', allowedComponents: ['protohub-compose'], parameters: { operation: 'compose_restart', resource: 'protohub-api' }, blastRadius: 2 },
+      { id: 'restart-inbucket', capabilityId: 'docker.local', allowedComponents: ['supabase-inbucket-container'], parameters: { operation: 'restart_service', resource: 'supabase_inbucket' }, blastRadius: 1 },
+    ];
   }
 
   async run(task, actor = {}) {
@@ -96,6 +122,92 @@ class HeidiExecutive {
     }
     const reset = { ...task, approval: true, state: 'PROPOSED' };
     return this.run(reset, actor);
+  }
+
+  async operationalCycle(mode = 'DECISION_ONLY', options = {}) {
+    const cycleId = options.cycleId || `cycle-${Date.now()}`;
+    const start = Date.now();
+
+    const probes = await this.runtimeObserver.inspectAll();
+    const normalized = this.observationAdapter.normalize(probes);
+    this.decisionEngine.setDependencyGraph(normalized.dependencyGraph);
+    this.decisionEngine.impact = new ImpactAssessor({
+      dependencyGraph: normalized.dependencyGraph,
+      critical: Array.from(normalized.critical || []),
+      userFacing: Array.from(normalized.userFacing || []),
+      dataIntegrity: Array.from(normalized.dataIntegrity || []),
+    });
+
+    const { correlated, decisions, escalation, state } = await this.decisionEngine.decide(
+      normalized.observations,
+      this.candidates,
+      { execute: false, missionId: cycleId }
+    );
+
+    for (const d of decisions) {
+      if (d.selected_action && (mode === 'CONTROLLED' || mode === 'AUTONOMY')) {
+        const auth = this.decisionEngine.policy.canExecute(d.selected_action.capabilityId);
+        if (!auth.ok) {
+          d.authorization_result = 'ESCALATE';
+          d.execution_result = { status: 'ESCALATE', reason: auth.reason };
+          d.verification_result = false;
+          continue;
+        }
+
+        const task = {
+          id: `${cycleId}-${d.incident_id}`,
+          capabilityId: d.selected_action.capabilityId,
+          target: d.incident_id,
+          parameters: { ...d.selected_action.parameters, ...(d.selected_action.parameters || {}) },
+          state: 'PROPOSED',
+        };
+
+        try {
+          const result = await this.run(task, { id: 'heidi' });
+          d.execution_result = result;
+          d.verification_result = result.status === 'COMPLETED';
+          this.incidentStore.append({
+            incident_id: `${cycleId}-${d.incident_id}`,
+            component: d.incident_id,
+            failure_class: d.classification && d.classification.failure_class,
+            action: d.selected_action,
+            result: result.status,
+            recovery_time: Date.now() - start,
+            final_state: d.verification_result ? 'RECOVERED' : 'RECOVERY_FAILED',
+          });
+        } catch (e) {
+          d.execution_result = { status: 'FAILED', error: e.message };
+          d.verification_result = false;
+        }
+      } else if (d.selected_action && mode === 'SHADOW') {
+        d.authorization_result = 'SHADOW';
+        d.execution_result = { status: 'SHADOW', reason: 'execution disabled in shadow mode' };
+        d.verification_result = null;
+      } else {
+        d.authorization_result = d.selected_action ? 'DECISION_ONLY' : 'ESCALATE';
+      }
+    }
+
+    this.audit.record(this.makeAuditEntry(
+      { id: cycleId, capabilityId: 'heidi.operational_cycle', target: 'system' },
+      { id: 'heidi' },
+      { mode },
+      { status: 'COMPLETED', decisions: decisions.length, escalation: !!escalation },
+      'COMPLETED'
+    ));
+
+    return {
+      cycleId,
+      mode,
+      startTime: new Date(start).toISOString(),
+      endTime: new Date().toISOString(),
+      durationMs: Date.now() - start,
+      observations: probes,
+      correlated,
+      decisions,
+      escalation,
+      finalState: state,
+    };
   }
 
   makeAuditEntry(task, actor, approvalState, executionResult, resultingState, error = null) {

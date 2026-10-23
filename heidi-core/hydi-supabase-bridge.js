@@ -12,7 +12,7 @@ const { execSync } = require('child_process');
 
 class HydiSupabaseBridge {
   constructor() {
-    this.supabaseUrl = process.env.SUPABASE_URL || 'https://akbnfovjdcobifeupvbn.supabase.co';
+    this.supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
     this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     this.edgeFunctionUrl = `${this.supabaseUrl}/functions/v1/hydi-alignment-audit`;
   }

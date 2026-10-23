@@ -1,0 +1,258 @@
+[
+    {
+        "Id": "a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548",
+        "Created": "2026-08-07T17:58:42.932066261Z",
+        "Path": "sh",
+        "Args": [
+            "-c",
+            "cat \u003c\u003c'EOF' \u003e /etc/vector/vector.yaml\napi:\n  enabled: true\n  address: 0.0.0.0:9001\n\nsources:\n  docker_host:\n    type: docker_logs\n    exclude_containers:\n      - \"supabase_vector_HYDI-System-v2\"\n\ntransforms:\n  project_logs:\n    type: remap\n    inputs:\n      - docker_host\n    source: |-\n      .project = \"default\"\n      .event_message = del(.message)\n      .appname = del(.container_name)\n      del(.container_created_at)\n      del(.container_id)\n      del(.source_type)\n      del(.stream)\n      del(.label)\n      del(.image)\n      del(.host)\n      del(.stream)\n  router:\n    type: route\n    inputs:\n      - project_logs\n    route:\n      kong: '.appname == \"supabase_kong_HYDI-System-v2\"'\n      auth: '.appname == \"supabase_auth_HYDI-System-v2\"'\n      rest: '.appname == \"supabase_rest_HYDI-System-v2\"'\n      realtime: '.appname == \"supabase_realtime_HYDI-System-v2\"'\n      storage: '.appname == \"supabase_storage_HYDI-System-v2\"'\n      functions: '.appname == \"supabase_edge_runtime_HYDI-System-v2\"'\n      db: '.appname == \"supabase_db_HYDI-System-v2\"'\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_logs:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      req, err = parse_nginx_log(.event_message, \"combined\")\n      if err == null {\n          .timestamp = req.timestamp\n          .metadata.request.headers.referer = req.referer\n          .metadata.request.headers.user_agent = req.agent\n          .metadata.request.headers.cf_connecting_ip = req.client\n          .metadata.response.status_code = req.status\n          url, split_err = split(req.request, \" \")\n          if split_err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_err:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      .metadata.request.method = \"GET\"\n      .metadata.response.status_code = 200\n      parsed, err = parse_nginx_log(.event_message, \"error\")\n      if err == null {\n          .timestamp = parsed.timestamp\n          .severity = parsed.severity\n          .metadata.request.host = parsed.host\n          .metadata.request.headers.cf_connecting_ip = parsed.client\n          url, err = split(parsed.request, \" \")\n          if err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Gotrue logs are structured json strings which frontend parses directly. But we keep metadata for consistency.\n  auth_logs:\n    type: remap\n    inputs:\n      - router.auth\n    source: |-\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .metadata.timestamp = parsed.time\n          .metadata = merge!(.metadata, parsed)\n      }\n  # PostgREST logs are structured so we separate timestamp from message using regex\n  rest_logs:\n    type: remap\n    inputs:\n      - router.rest\n    source: |-\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e.*): (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .timestamp = parse_timestamp!(value: parsed.time, format: \"%d/%b/%Y:%H:%M:%S %z\")\n          .metadata.host = .project\n      }\n  # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)\n  realtime_logs:\n    type: remap\n    inputs:\n      - router.realtime\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.external_id = .metadata.project\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e\\d+:\\d+:\\d+\\.\\d+) \\[(?P\u003clevel\u003e\\w+)\\] (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n      }\n  # Function logs are unstructured messages on stderr\n  functions_logs:\n    type: remap\n    inputs:\n      - router.functions\n    source: |-\n      .metadata.project_ref = del(.project)\n  # Storage logs may contain json objects so we parse them for completeness\n  storage_logs:\n    type: remap\n    inputs:\n      - router.storage\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.tenantId = .metadata.project\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n          .metadata.timestamp = parsed.time\n          .metadata.context[0].host = parsed.hostname\n          .metadata.context[0].pid = parsed.pid\n      }\n  # Postgres logs some messages to stderr which we map to warning severity level\n  db_logs:\n    type: remap\n    inputs:\n      - router.db\n    source: |-\n      .metadata.host = \"db-default\"\n      .metadata.parsed.timestamp = .timestamp\n\n      parsed, err = parse_regex(.event_message, r'.*(?P\u003clevel\u003eINFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)\n\n      if err != null || parsed == null || parsed.level == null {\n        .metadata.parsed.error_severity = \"info\"\n      } else {\n        .metadata.parsed.error_severity = parsed.level\n      }\n      if .metadata.parsed.error_severity == \"info\" {\n          .metadata.parsed.error_severity = \"log\"\n      }\n      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)\n\nsinks:\n  logflare_auth:\n    type: \"http\"\n    inputs:\n      - auth_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=gotrue.logs.prod\"\n  logflare_realtime:\n    type: \"http\"\n    inputs:\n      - realtime_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=realtime.logs.prod\"\n  logflare_rest:\n    type: \"http\"\n    inputs:\n      - rest_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=postgREST.logs.prod\"\n  logflare_db:\n    type: \"http\"\n    inputs:\n      - db_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=postgres.logs\"\n  logflare_functions:\n    type: \"http\"\n    inputs:\n      - functions_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=deno-relay-logs\"\n  logflare_storage:\n    type: \"http\"\n    inputs:\n      - storage_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=storage.logs.prod.2\"\n  logflare_kong:\n    type: \"http\"\n    inputs:\n      - kong_logs\n      - kong_err\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=cloudflare.logs.prod\"\n\nEOF\nuntil wget --no-verbose --tries=1 --spider http://supabase_analytics_HYDI-System-v2:4000/health 2\u003e/dev/null; do sleep 2; done\nvector --config /etc/vector/vector.yaml\n"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-08-16T15:17:05.235909683Z",
+            "FinishedAt": "2026-08-16T15:17:05.937688056Z",
+            "Health": {
+                "Status": "unhealthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-08-16T09:04:09.256387965Z",
+                        "End": "2026-08-16T09:04:12.601529797Z",
+                        "ExitCode": 1,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nwget: can't connect to remote host (127.0.0.1): Connection refused\n"
+                    },
+                    {
+                        "Start": "2026-08-16T09:04:22.608707556Z",
+                        "End": "2026-08-16T09:04:38.949777929Z",
+                        "ExitCode": 1,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nwget: can't connect to remote host (127.0.0.1): Connection refused\n"
+                    },
+                    {
+                        "Start": "2026-08-16T09:04:48.991450951Z",
+                        "End": "2026-08-16T09:04:55.741126307Z",
+                        "ExitCode": 1,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nwget: can't connect to remote host (127.0.0.1): Connection refused\n"
+                    },
+                    {
+                        "Start": "2026-08-16T09:05:05.847013773Z",
+                        "End": "2026-08-16T09:05:11.368694007Z",
+                        "ExitCode": 1,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nwget: server returned error: HTTP/1.1 503 Service Unavailable\n"
+                    },
+                    {
+                        "Start": "2026-08-16T14:41:19.088287349Z",
+                        "End": "2026-08-16T14:41:20.117241216Z",
+                        "ExitCode": 1,
+                        "Output": "Connecting to 127.0.0.1:9001 (127.0.0.1:9001)\nwget: can't connect to remote host (127.0.0.1): Connection refused\n"
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:ca92d617e905953c3f852e7e88061f7039460e733522e3f0c21bc6ae946b2558",
+        "ResolvConfPath": "/var/lib/docker/containers/a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548/hostname",
+        "HostsPath": "/var/lib/docker/containers/a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548/hosts",
+        "LogPath": "/var/lib/docker/containers/a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548/a0586c58c00c3b44e29bc26fe1b98af5be1678f7f86de20fcd7ad48cf8e75548-json.log",
+        "Name": "/supabase_vector_HYDI-System-v2",
+        "RestartCount": 393,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "supabase_network_HYDI-System-v2",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "host",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": false,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "a0586c58c00c",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DOCKER_HOST=http://host.docker.internal:2375",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": null,
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://127.0.0.1:9001/health"
+                ],
+                "Interval": 10000000000,
+                "Timeout": 2000000000,
+                "Retries": 3
+            },
+            "Image": "public.ecr.aws/supabase/vector:0.53.0-alpine",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "sh",
+                "-c",
+                "cat \u003c\u003c'EOF' \u003e /etc/vector/vector.yaml\napi:\n  enabled: true\n  address: 0.0.0.0:9001\n\nsources:\n  docker_host:\n    type: docker_logs\n    exclude_containers:\n      - \"supabase_vector_HYDI-System-v2\"\n\ntransforms:\n  project_logs:\n    type: remap\n    inputs:\n      - docker_host\n    source: |-\n      .project = \"default\"\n      .event_message = del(.message)\n      .appname = del(.container_name)\n      del(.container_created_at)\n      del(.container_id)\n      del(.source_type)\n      del(.stream)\n      del(.label)\n      del(.image)\n      del(.host)\n      del(.stream)\n  router:\n    type: route\n    inputs:\n      - project_logs\n    route:\n      kong: '.appname == \"supabase_kong_HYDI-System-v2\"'\n      auth: '.appname == \"supabase_auth_HYDI-System-v2\"'\n      rest: '.appname == \"supabase_rest_HYDI-System-v2\"'\n      realtime: '.appname == \"supabase_realtime_HYDI-System-v2\"'\n      storage: '.appname == \"supabase_storage_HYDI-System-v2\"'\n      functions: '.appname == \"supabase_edge_runtime_HYDI-System-v2\"'\n      db: '.appname == \"supabase_db_HYDI-System-v2\"'\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_logs:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      req, err = parse_nginx_log(.event_message, \"combined\")\n      if err == null {\n          .timestamp = req.timestamp\n          .metadata.request.headers.referer = req.referer\n          .metadata.request.headers.user_agent = req.agent\n          .metadata.request.headers.cf_connecting_ip = req.client\n          .metadata.response.status_code = req.status\n          url, split_err = split(req.request, \" \")\n          if split_err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Ignores non nginx errors since they are related with kong booting up\n  kong_err:\n    type: remap\n    inputs:\n      - router.kong\n    source: |-\n      .metadata.request.method = \"GET\"\n      .metadata.response.status_code = 200\n      parsed, err = parse_nginx_log(.event_message, \"error\")\n      if err == null {\n          .timestamp = parsed.timestamp\n          .severity = parsed.severity\n          .metadata.request.host = parsed.host\n          .metadata.request.headers.cf_connecting_ip = parsed.client\n          url, err = split(parsed.request, \" \")\n          if err == null {\n              .metadata.request.method = url[0]\n              .metadata.request.path = url[1]\n              .metadata.request.protocol = url[2]\n          }\n      }\n      if err != null {\n        abort\n      }\n  # Gotrue logs are structured json strings which frontend parses directly. But we keep metadata for consistency.\n  auth_logs:\n    type: remap\n    inputs:\n      - router.auth\n    source: |-\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .metadata.timestamp = parsed.time\n          .metadata = merge!(.metadata, parsed)\n      }\n  # PostgREST logs are structured so we separate timestamp from message using regex\n  rest_logs:\n    type: remap\n    inputs:\n      - router.rest\n    source: |-\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e.*): (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .timestamp = parse_timestamp!(value: parsed.time, format: \"%d/%b/%Y:%H:%M:%S %z\")\n          .metadata.host = .project\n      }\n  # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)\n  realtime_logs:\n    type: remap\n    inputs:\n      - router.realtime\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.external_id = .metadata.project\n      parsed, err = parse_regex(.event_message, r'^(?P\u003ctime\u003e\\d+:\\d+:\\d+\\.\\d+) \\[(?P\u003clevel\u003e\\w+)\\] (?P\u003cmsg\u003e.*)$')\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n      }\n  # Function logs are unstructured messages on stderr\n  functions_logs:\n    type: remap\n    inputs:\n      - router.functions\n    source: |-\n      .metadata.project_ref = del(.project)\n  # Storage logs may contain json objects so we parse them for completeness\n  storage_logs:\n    type: remap\n    inputs:\n      - router.storage\n    source: |-\n      .metadata.project = del(.project)\n      .metadata.tenantId = .metadata.project\n      parsed, err = parse_json(.event_message)\n      if err == null {\n          .event_message = parsed.msg\n          .metadata.level = parsed.level\n          .metadata.timestamp = parsed.time\n          .metadata.context[0].host = parsed.hostname\n          .metadata.context[0].pid = parsed.pid\n      }\n  # Postgres logs some messages to stderr which we map to warning severity level\n  db_logs:\n    type: remap\n    inputs:\n      - router.db\n    source: |-\n      .metadata.host = \"db-default\"\n      .metadata.parsed.timestamp = .timestamp\n\n      parsed, err = parse_regex(.event_message, r'.*(?P\u003clevel\u003eINFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC?):.*', numeric_groups: true)\n\n      if err != null || parsed == null || parsed.level == null {\n        .metadata.parsed.error_severity = \"info\"\n      } else {\n        .metadata.parsed.error_severity = parsed.level\n      }\n      if .metadata.parsed.error_severity == \"info\" {\n          .metadata.parsed.error_severity = \"log\"\n      }\n      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)\n\nsinks:\n  logflare_auth:\n    type: \"http\"\n    inputs:\n      - auth_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=gotrue.logs.prod\"\n  logflare_realtime:\n    type: \"http\"\n    inputs:\n      - realtime_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=realtime.logs.prod\"\n  logflare_rest:\n    type: \"http\"\n    inputs:\n      - rest_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=postgREST.logs.prod\"\n  logflare_db:\n    type: \"http\"\n    inputs:\n      - db_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=postgres.logs\"\n  logflare_functions:\n    type: \"http\"\n    inputs:\n      - functions_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=deno-relay-logs\"\n  logflare_storage:\n    type: \"http\"\n    inputs:\n      - storage_logs\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=storage.logs.prod.2\"\n  logflare_kong:\n    type: \"http\"\n    inputs:\n      - kong_logs\n      - kong_err\n    encoding:\n      codec: \"json\"\n    method: \"post\"\n    request:\n      retry_max_duration_secs: 10\n      headers:\n        x-api-key: \"api-key\"\n    uri: \"http://supabase_analytics_HYDI-System-v2:4000/api/logs?source_name=cloudflare.logs.prod\"\n\nEOF\nuntil wget --no-verbose --tries=1 --spider http://supabase_analytics_HYDI-System-v2:4000/health 2\u003e/dev/null; do sleep 2; done\nvector --config /etc/vector/vector.yaml\n"
+            ],
+            "Labels": {
+                "com.docker.compose.project": "HYDI-System-v2",
+                "com.supabase.cli.project": "HYDI-System-v2",
+                "org.opencontainers.image.documentation": "https://vector.dev/docs",
+                "org.opencontainers.image.source": "https://github.com/vectordotdev/vector",
+                "org.opencontainers.image.url": "https://vector.dev"
+            },
+            "StopTimeout": 1
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "supabase_network_HYDI-System-v2": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "vector"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "75367520e3d87069a93e06283b1b3eb6cf5eb31b3da693eb4a393fe75e82462d",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "supabase_vector_HYDI-System-v2",
+                        "vector",
+                        "a0586c58c00c"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:7a74872eb7791f65357b200813bcf613c8dedcac561b4f1a68f9d290f6e6a40c",
+            "size": 1428,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

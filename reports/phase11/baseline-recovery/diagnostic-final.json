@@ -1,0 +1,464 @@
+{
+  "timestamp": "2026-08-16T15:44:48.002Z",
+  "source": "HEIDI_DIAGNOSTIC",
+  "overall": "DEGRADED",
+  "sections": [
+    {
+      "label": "system-health",
+      "kind": "OBSERVED",
+      "data": {
+        "persistence": {
+          "status": "UNAVAILABLE",
+          "detail": "fetch failed"
+        },
+        "postgres": {
+          "status": "HEALTHY",
+          "detail": "supabase_db_HYDI-System-v2:Up 7 hours (healthy)"
+        },
+        "ollama": {
+          "status": "NOT_CONFIGURED",
+          "detail": "local model not enabled"
+        },
+        "docker": {
+          "status": "HEALTHY",
+          "detail": "Docker 29.7.2"
+        },
+        "workers": {
+          "status": "NOT_CONFIGURED",
+          "detail": "worker queue monitor not registered"
+        },
+        "controlPlane": {
+          "status": "HEALTHY",
+          "detail": "Heidi control plane is active"
+        },
+        "inbucket": {
+          "status": "HEALTHY",
+          "detail": "supabase_inbucket_HYDI-System-v2:Up 7 hours (healthy)"
+        },
+        "wsl": {
+          "status": "HEALTHY",
+          "detail": "WSL Ubuntu responded",
+          "latencyMs": 3767
+        },
+        "docker-daemon": {
+          "status": "HEALTHY",
+          "detail": "Docker daemon 29.7.2",
+          "latencyMs": 259
+        },
+        "docker-containers": {
+          "status": "DEGRADED",
+          "detail": "14 running, 2 crashed, 0 restarting, 16 total",
+          "states": [
+            {
+              "name": "ursula-hub",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-flask",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-postgres",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "ursula-redis",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_db_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_studio_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_pg_meta_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_edge_runtime_HYDI-System-v2",
+              "status": "Exited (255) 8 days ago",
+              "healthy": false,
+              "crashed": true,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_storage_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_rest_HYDI-System-v2",
+              "status": "Up 7 hours",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_realtime_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_inbucket_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_auth_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_kong_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_vector_HYDI-System-v2",
+              "status": "Exited (0) 28 minutes ago",
+              "healthy": false,
+              "crashed": true,
+              "restarting": false,
+              "restarts": 0
+            },
+            {
+              "name": "supabase_analytics_HYDI-System-v2",
+              "status": "Up 7 hours (healthy)",
+              "healthy": true,
+              "crashed": false,
+              "restarting": false,
+              "restarts": 0
+            }
+          ]
+        },
+        "docker-resource-pressure": {
+          "status": "HEALTHY",
+          "detail": "WSL resource snapshot",
+          "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/sde       1007G   25G  932G   3% /",
+          "memory": "total        used        free      shared  buff/cache   available\nMem:            5930        2651        1635         135        2065        3279\nSwap:           2048         624        1423",
+          "load": "20.44 18.34 14.25 23/1231 2260"
+        },
+        "kong": {
+          "status": "UNAVAILABLE",
+          "detail": "Kong 54321 read ECONNRESET",
+          "latencyMs": 2041
+        },
+        "supabase-db-container": {
+          "status": "HEALTHY",
+          "detail": "supabase_db_HYDI-System-v2: Up 7 hours (healthy)",
+          "restarts": 0
+        },
+        "supabase-kong-container": {
+          "status": "HEALTHY",
+          "detail": "supabase_kong_HYDI-System-v2: Up 7 hours (healthy)",
+          "restarts": 0
+        },
+        "postgres-tcp": {
+          "status": "HEALTHY",
+          "detail": "Postgres TCP 5432 in 1ms"
+        },
+        "redis-tcp": {
+          "status": "HEALTHY",
+          "detail": "Redis TCP 6379 in 1ms"
+        },
+        "protohub-compose": {
+          "status": "HEALTHY",
+          "detail": "protohub-api running",
+          "restarts": 0
+        },
+        "postgres-compose": {
+          "status": "HEALTHY",
+          "detail": "postgres running",
+          "restarts": 0
+        },
+        "redis-compose": {
+          "status": "HEALTHY",
+          "detail": "redis running",
+          "restarts": 0
+        },
+        "memory-engine": {
+          "status": "HEALTHY",
+          "detail": "memory-engine http://localhost:9998/health 200 in 31ms"
+        },
+        "hydi-core": {
+          "status": "HEALTHY",
+          "detail": "hydi-core http://localhost:9997/health 200 in 3ms"
+        },
+        "heidi-bridge": {
+          "status": "HEALTHY",
+          "detail": "heidi-bridge http://localhost:5050/health 200 in 8ms"
+        },
+        "next-app": {
+          "status": "UNAVAILABLE",
+          "detail": "next-app http://localhost:3000/api/health 503",
+          "latencyMs": 3268
+        },
+        "heidi-mobile": {
+          "status": "HEALTHY",
+          "detail": "heidi-mobile http://localhost:3006/api/health 200 in 53ms"
+        },
+        "forge-loop": {
+          "status": "HEALTHY",
+          "detail": "forge-loop has no health check; assuming up"
+        }
+      },
+      "summary": {
+        "total": 25,
+        "healthy": 19,
+        "unknown": 0
+      }
+    },
+    {
+      "label": "dependency-graph",
+      "kind": "OBSERVED",
+      "data": {
+        "heidi": {
+          "status": "HEALTHY",
+          "detail": "control plane active"
+        },
+        "wsl": {
+          "status": "HEALTHY",
+          "detail": "WSL Ubuntu responded",
+          "latencyMs": 3767
+        },
+        "docker": {
+          "status": "HEALTHY",
+          "detail": "Docker daemon 29.7.2",
+          "latencyMs": 259
+        },
+        "postgres": {
+          "status": "HEALTHY",
+          "detail": "Postgres TCP 5432 in 1ms"
+        },
+        "redis": {
+          "status": "HEALTHY",
+          "detail": "Redis TCP 6379 in 1ms"
+        },
+        "supabase": {
+          "status": "UNAVAILABLE",
+          "detail": "Kong 54321 read ECONNRESET",
+          "latencyMs": 2041
+        },
+        "protohub": {
+          "status": "HEALTHY",
+          "detail": "protohub-api running",
+          "restarts": 0
+        },
+        "memory-engine": {
+          "status": "HEALTHY",
+          "detail": "memory-engine http://localhost:9998/health 200 in 31ms"
+        },
+        "hydi-core": {
+          "status": "HEALTHY",
+          "detail": "hydi-core http://localhost:9997/health 200 in 3ms"
+        },
+        "heidi-bridge": {
+          "status": "HEALTHY",
+          "detail": "heidi-bridge http://localhost:5050/health 200 in 8ms"
+        },
+        "next-app": {
+          "status": "UNAVAILABLE",
+          "detail": "next-app http://localhost:3000/api/health 503",
+          "latencyMs": 3268
+        }
+      }
+    },
+    {
+      "label": "recent-incidents",
+      "kind": "OBSERVED",
+      "data": [],
+      "summary": {
+        "total": 0,
+        "byComponent": {},
+        "byClass": {},
+        "byState": {}
+      }
+    },
+    {
+      "label": "current-anomalies",
+      "kind": "OBSERVED",
+      "data": [
+        {
+          "component": "persistence",
+          "state": "UNAVAILABLE",
+          "detail": "fetch failed",
+          "classified": {
+            "failure_class": "DEPENDENCY_FAILURE",
+            "confidence": "LOW",
+            "matched": "unavailable state"
+          }
+        },
+        {
+          "component": "docker-containers",
+          "state": "DEGRADED",
+          "detail": "14 running, 2 crashed, 0 restarting, 16 total",
+          "classified": {
+            "failure_class": "CONTAINER_FAILURE",
+            "confidence": "MEDIUM",
+            "matched": "restarting"
+          }
+        },
+        {
+          "component": "kong",
+          "state": "UNAVAILABLE",
+          "detail": "Kong 54321 read ECONNRESET",
+          "classified": {
+            "failure_class": "DEPENDENCY_FAILURE",
+            "confidence": "LOW",
+            "matched": "unavailable state"
+          }
+        },
+        {
+          "component": "next-app",
+          "state": "UNAVAILABLE",
+          "detail": "next-app http://localhost:3000/api/health 503",
+          "classified": {
+            "failure_class": "DEPENDENCY_FAILURE",
+            "confidence": "LOW",
+            "matched": "unavailable state"
+          }
+        }
+      ]
+    },
+    {
+      "label": "probable-causes",
+      "kind": "INFERRED",
+      "data": [
+        {
+          "component": "persistence",
+          "cause": "DEPENDENCY_FAILURE",
+          "confidence": "LOW",
+          "matched": "unavailable state"
+        },
+        {
+          "component": "docker-containers",
+          "cause": "CONTAINER_FAILURE",
+          "confidence": "MEDIUM",
+          "matched": "restarting"
+        },
+        {
+          "component": "kong",
+          "cause": "DEPENDENCY_FAILURE",
+          "confidence": "LOW",
+          "matched": "unavailable state"
+        },
+        {
+          "component": "next-app",
+          "cause": "DEPENDENCY_FAILURE",
+          "confidence": "LOW",
+          "matched": "unavailable state"
+        }
+      ]
+    },
+    {
+      "label": "recommended-actions",
+      "kind": "RECOMMENDED",
+      "data": [
+        {
+          "component": "persistence",
+          "recommendation": "Check the dependent service health and attempt a bounded reconnect.",
+          "permitted_autonomous": true
+        },
+        {
+          "component": "docker-containers",
+          "recommendation": "Restart the affected container via an approved recovery action.",
+          "permitted_autonomous": true
+        },
+        {
+          "component": "kong",
+          "recommendation": "Check the dependent service health and attempt a bounded reconnect.",
+          "permitted_autonomous": true
+        },
+        {
+          "component": "next-app",
+          "recommendation": "Check the dependent service health and attempt a bounded reconnect.",
+          "permitted_autonomous": true
+        }
+      ]
+    },
+    {
+      "label": "permitted-autonomous-actions",
+      "kind": "RECOMMENDED",
+      "data": [
+        {
+          "component": "persistence",
+          "capability": "health.recover or wsl_docker.local restart",
+          "requires_approval": false
+        },
+        {
+          "component": "docker-containers",
+          "capability": "health.recover or wsl_docker.local restart",
+          "requires_approval": false
+        },
+        {
+          "component": "kong",
+          "capability": "health.recover or wsl_docker.local restart",
+          "requires_approval": false
+        },
+        {
+          "component": "next-app",
+          "capability": "health.recover or wsl_docker.local restart",
+          "requires_approval": false
+        }
+      ]
+    },
+    {
+      "label": "action-executed",
+      "kind": "EXECUTED",
+      "data": "NONE ΓÇö diagnostic is read-only"
+    },
+    {
+      "label": "verification",
+      "kind": "VERIFIED",
+      "data": "N/A ΓÇö no action executed"
+    }
+  ]
+}

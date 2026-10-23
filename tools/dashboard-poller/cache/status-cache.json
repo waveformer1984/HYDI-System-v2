@@ -1,0 +1,77 @@
+{
+  "status": "stale",
+  "last_checked": "2026-10-20T12:40:12.919120+00:00",
+  "last_success": "2026-08-17T20:40:10.696781+00:00",
+  "last_failure": "2026-10-20T12:40:12.919120+00:00",
+  "failure_count": 5075,
+  "payload": {
+    "status_source": "degraded",
+    "agents": [
+      {
+        "checkedAt": "2026-08-17T20:14:13.157131+00:00",
+        "detail": "<urlopen error [Errno 111] Connection refused>",
+        "name": "Heidi",
+        "status": "unknown"
+      },
+      {
+        "checkedAt": "2026-08-17T20:14:13.157145+00:00",
+        "detail": "<urlopen error [Errno 111] Connection refused>",
+        "name": "Ursula",
+        "status": "unknown"
+      },
+      {
+        "checkedAt": "2026-08-17T20:14:13.157148+00:00",
+        "detail": "no dedicated local health endpoint",
+        "name": "CASCADE",
+        "status": "unknown"
+      },
+      {
+        "checkedAt": "2026-08-17T20:14:13.157149+00:00",
+        "detail": "no dedicated local health endpoint",
+        "name": "KILO",
+        "status": "unknown"
+      },
+      {
+        "checkedAt": "2026-08-17T20:14:13.157151+00:00",
+        "detail": "no dedicated local health endpoint",
+        "name": "ProtoForge",
+        "status": "unknown"
+      },
+      {
+        "checkedAt": "2026-08-17T20:14:13.157152+00:00",
+        "detail": "no dedicated local health endpoint",
+        "name": "Hyve",
+        "status": "unknown"
+      }
+    ],
+    "supabase": {
+      "status": "down",
+      "detail": "TypeError: fetch failed; bridge is stale"
+    },
+    "pipeline": {
+      "current_status": "unknown",
+      "detail": "<urlopen error [Errno 111] Connection refused>",
+      "status": "unknown"
+    },
+    "infrastructure": {
+      "supabase_analytics_HYDI-System-v2": "healthy",
+      "supabase_auth_HYDI-System-v2": "healthy",
+      "supabase_db_HYDI-System-v2": "healthy",
+      "supabase_inbucket_HYDI-System-v2": "healthy",
+      "supabase_kong_HYDI-System-v2": "healthy",
+      "supabase_pg_meta_HYDI-System-v2": "healthy",
+      "supabase_realtime_HYDI-System-v2": "healthy",
+      "supabase_rest_HYDI-System-v2": "healthy",
+      "supabase_storage_HYDI-System-v2": "healthy",
+      "supabase_studio_HYDI-System-v2": "healthy",
+      "supabase_vector_HYDI-System-v2": "healthy",
+      "ursula-flask": "healthy",
+      "ursula-hub": "healthy",
+      "ursula-postgres": "healthy",
+      "ursula-redis": "healthy"
+    },
+    "checkedAt": "2026-08-17T20:40:10.824Z",
+    "ms": 7021,
+    "auth": "bearer-token"
+  }
+}

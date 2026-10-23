@@ -1,10 +1,5 @@
-import Stripe from 'stripe';
+import stripe from '../../lib/stripe/client';
 import { getRawBody } from '../../lib/get-raw-body';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2026-04-22.dahlia',
-  appInfo: { name: 'HYDI Stripe Integration', version: '0.9.0' },
-});
 
 const ENDPOINT_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
