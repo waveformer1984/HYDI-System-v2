@@ -1,0 +1,16 @@
+name = "ursula-frontend"
+main = ".open-next/worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Observability (free tier)
+[observability]
+enabled = true
+
+# Environment variables are set via `wrangler secret put` or the Cloudflare
+# dashboard — never in this file. See docs/VERCEL_EXIT_PLAN.md for the full
+# variable list that must be recreated before cutover.

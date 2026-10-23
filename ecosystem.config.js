@@ -143,9 +143,8 @@ module.exports = {
       // blocker classification, governed self-repair). Single-instance locked.
       // Autonomy Level 2 — R0/R1 autonomous, R2+ human-required, R5 prohibited.
       name: 'hydi-daemon',
-      // Use a JS wrapper that loads tsx and imports the TypeScript daemon.
-      // PM2 on Windows can't directly run the .bin/tsx shim.
-      // In production, run `npm run build` first and switch to the compiled JS.
+      // The JS entry registers tsx and loads the TypeScript daemon in-process.
+      // PM2 owns this exact PID; no daemon child can survive a PM2 restart.
       script: 'scripts/heidi-daemon-launcher.js',
       args: '--no-stabilization',
       cwd: __dirname,
@@ -157,13 +156,8 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
       },
-      // CRITICAL: On Windows, PM2's default stop behavior uses
-      // `taskkill /pid <pid> /T /F` (force kill the entire process tree),
-      // which gives no chance for graceful shutdown. With
-      // shutdown_with_message: true, PM2 calls proc.send('shutdown')
-      // instead, which the launcher relays to the daemon via IPC.
-      // PM2 then waits up to kill_timeout (50s) for the process to exit
-      // on its own before falling back to SIGKILL.
+      // On Windows this gives the in-process daemon a catchable IPC shutdown
+      // request before PM2's force-kill fallback.
       shutdown_with_message: true,
       autorestart: true,
       watch: false,
@@ -176,42 +170,8 @@ module.exports = {
       error_file: './logs/pm2-hydi-daemon.err.log',
       out_file: './logs/pm2-hydi-daemon.out.log',
       merge_logs: true,
-      // kill_timeout starts when PM2 sends the 'shutdown' IPC message
-      // to the process (verified from PM2 7.0.1 source: lib/God/Methods.js
-      // — God.processIsDead() is called synchronously after proc.send(),
-      // and the setTimeout(kill_timeout) is in God.processIsDead()).
-      // The PM2 CLI → God RPC delay (0-11s observed) happens BEFORE the
-      // kill_timeout timer starts, so it is NOT part of the budget.
-      //
-      // Measured IPC delivery delay (20-sample distribution test, 5s
-      // interval stress test, 500ms polling):
-      //   idle:   p50=3839ms, p95=5466ms, max=5466ms
-      //   loaded: p50=4784ms, p95=5423ms, max=6024ms
-      // Measured total shutdown duration (10-sample re-test with 100ms
-      // polling fix):
-      //   idle:   p50=25144ms, p95=32902ms, max=32902ms
-      //   loaded: p50=24121ms, p95=31975ms, max=31975ms
-      //
-      // Budget (from PM2 message send to process exit):
-      //   IPC delivery (max measured):       6024ms
-      //   Shutdown wait (SHUTDOWN_WAIT):    31000ms
-      //   Polling overshoot (100ms polls):    ~100ms
-      //   Cleanup (audit record + lock):      ~100ms
-      //   Total worst case:                ~37224ms
-      //
-      // kill_timeout = 50000ms gives 12776ms margin (34.3% over worst
-      // case). Per-condition margin with 100ms polling:
-      //   idle:   50000 - 38615 = 11385ms (29.5%)
-      //   loaded: 50000 - 37034 = 12966ms (35.0%)
-      // This means `pm2 stop`/`restart` blocks for at most 50s (plus
-      // PM2's own 0-11s internal delay) in the worst case where a
-      // cognitive cycle is in flight. In normal operation (no in-flight
-      // work), the daemon exits in <100ms.
-      //
-      // SHUTDOWN_WAIT_TIMEOUT_MS in heidi-daemon.ts is 31s (30s cycle
-      // timeout + 1s buffer). The 12.8s kill_timeout margin covers the
-      // 6s IPC delivery delay + 100ms polling overshoot + 100ms cleanup
-      // + 6.6s additional safety for event-loop jitter under load.
+      // The daemon bounds in-flight waiting at 31s and ownership cleanup at
+      // 2s. This 50s ceiling leaves margin before PM2 force-kills it.
       kill_timeout: 50000,
     },
     {

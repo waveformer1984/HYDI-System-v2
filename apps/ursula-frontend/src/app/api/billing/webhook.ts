@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { LedgerService } from '@/lib/ledger-service';
 
-// Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-05-27.dahlia',
-});
+// Initialize Stripe lazily — module top-level runs during build-time
+// page-data collection, where STRIPE_SECRET_KEY is not guaranteed present.
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2026-05-27.dahlia',
+    });
+  }
+  return stripeClient;
+}
 
 // Webhook secret for signature verification
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -23,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Verify webhook signature to ensure request is from Stripe
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = getStripe().webhooks.constructEvent(body, signature, webhookSecret);
     console.log('[WEBHOOK] Signature verified successfully');
   } catch (err) {
     console.error('[WEBHOOK] Signature verification failed:', err);
