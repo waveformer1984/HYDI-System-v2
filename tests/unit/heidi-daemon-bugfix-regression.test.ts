@@ -254,21 +254,14 @@ describe('Bug 3: Lock acquisition atomicity', () => {
 
   test('3c. daemon script uses flag:wx (not check-then-write)', () => {
     const daemonPath = path.resolve(__dirname, '../../scripts/heidi-daemon.ts');
-    const content = fs.readFileSync(daemonPath, 'utf-8');
+    const lockPath = path.resolve(__dirname, '../../scripts/lib/heidi-daemon-lock.ts');
+    const daemonContent = fs.readFileSync(daemonPath, 'utf-8');
+    const content = fs.readFileSync(lockPath, 'utf-8');
 
-    // The acquireLock function must use flag: 'wx'
+    expect(daemonContent).toContain('acquireHeidiDaemonLock');
     expect(content).toContain("flag: 'wx'");
 
-    // It must NOT use the old check-then-write pattern
-    // (existsSync followed by writeFileSync without flag)
-    const acquireLockSection = content.substring(
-      content.indexOf('function acquireLock'),
-      content.indexOf('function isNodeError'),
-    );
-    // The old pattern was: if (fs.existsSync(LOCK_FILE)) { ... } fs.writeFileSync(LOCK_FILE, ...)
-    // The new pattern uses try/catch with flag: 'wx'
-    expect(acquireLockSection).toContain("flag: 'wx'");
-    expect(acquireLockSection).toContain('EEXIST');
+    expect(content).toContain('EEXIST');
   });
 });
 

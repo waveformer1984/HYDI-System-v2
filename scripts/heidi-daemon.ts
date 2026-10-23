@@ -38,6 +38,12 @@ import { getGoalSystem } from '../lib/heidi/GoalSystem';
 import { OperatorLeaseSupervisor } from '../lib/heidi/OperatorLease';
 import { writeDaemonStatus } from '../lib/heidi/DaemonStatusSurface';
 import type { PersistenceTruth } from '../lib/heidi/DaemonStatusSurface';
+import {
+  acquireHeidiDaemonLock,
+  isProcessAlive,
+  releaseHeidiDaemonLock,
+} from './lib/heidi-daemon-lock';
+import { releaseDaemonOwnership } from './lib/daemon-ownership';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -161,9 +167,9 @@ function parseArgs(): DaemonConfig {
  * (existsSync -> unlinkSync -> writeFileSync), where two near-simultaneous
  * daemon starts could both pass the existence check before either wrote.
  *
- * If the lock file exists, we check whether the owning process is still
- * alive. If it's stale (process died without releasing), we remove it and
- * retry the atomic create. If the process IS alive, we refuse to start.
+ * If the lock exists, its PID must be alive and its command line must identify
+ * a hydi-daemon process. Dead or unrelated PID owners are stale and reclaimed.
+ * An unverifiable live PID fails closed rather than risking two daemons.
  */
 /**
  * Resolve the commit this daemon was launched from by inspecting the
@@ -185,114 +191,14 @@ function resolveRuntimeCommit(): string | null {
 }
 
 function acquireLock(): boolean {
-  const lockData = JSON.stringify({
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
+  return acquireHeidiDaemonLock(LOCK_FILE, {
     cwd: process.cwd(),
     commit: resolveRuntimeCommit(),
   });
-
-  // First attempt: atomic exclusive create
-  try {
-    fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
-    return true;
-  } catch (error: unknown) {
-    // EEXIST means the file already exists — check if it's stale
-    if (!isNodeError(error, 'EEXIST')) {
-      // Some other error (permissions, disk full, etc.)
-      console.error(`[daemon] Lock acquisition failed: ${error instanceof Error ? error.message : 'unknown'}`);
-      return false;
-    }
-  }
-
-  // Lock file exists — check if the owning process is still alive
-  try {
-    const content = fs.readFileSync(LOCK_FILE, 'utf-8').trim();
-    if (!content) {
-      // Empty lock file — remove and retry
-      fs.unlinkSync(LOCK_FILE);
-      try {
-        fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    const lockInfo = JSON.parse(content);
-    if (lockInfo.pid && isProcessAlive(lockInfo.pid)) {
-      console.error(`[daemon] Another daemon is already running (PID: ${lockInfo.pid})`);
-      return false;
-    }
-
-    // Stale lock — process is no longer alive
-    console.log(`[daemon] Stale lock from PID ${lockInfo.pid}, removing`);
-    fs.unlinkSync(LOCK_FILE);
-
-    // Retry atomic create
-    try {
-      fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
-      return true;
-    } catch (retryError: unknown) {
-      if (isNodeError(retryError, 'EEXIST')) {
-        // Someone else grabbed it between our unlink and write
-        console.error('[daemon] Lock acquired by another process during stale cleanup');
-      } else {
-        console.error(`[daemon] Lock retry failed: ${retryError instanceof Error ? retryError.message : 'unknown'}`);
-      }
-      return false;
-    }
-  } catch {
-    // Corrupt lock file — remove and retry
-    try {
-      fs.unlinkSync(LOCK_FILE);
-    } catch {
-      // Can't remove — give up
-      console.error('[daemon] Cannot remove corrupt lock file');
-      return false;
-    }
-    try {
-      fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
-/**
- * Type guard for Node.js filesystem errors with a specific code.
- */
-function isNodeError(error: unknown, code: string): boolean {
-  return error !== null &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error as { code: string }).code === code;
 }
 
 function releaseLock(): void {
-  try {
-    if (fs.existsSync(LOCK_FILE)) {
-      const content = fs.readFileSync(LOCK_FILE, 'utf-8').trim();
-      if (content) {
-        const lockData = JSON.parse(content);
-        if (lockData.pid === process.pid) {
-          fs.unlinkSync(LOCK_FILE);
-        }
-      }
-    }
-  } catch {
-    // Best effort
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  releaseHeidiDaemonLock(LOCK_FILE);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -545,6 +451,7 @@ async function main(): Promise<void> {
   if (!acquireLock()) {
     process.exit(1);
   }
+  process.once('exit', releaseLock);
   console.log(`[daemon] Lock acquired: ${LOCK_FILE}`);
 
   try {
@@ -619,6 +526,21 @@ async function main(): Promise<void> {
 
   // 3. Set up graceful shutdown
   let shuttingDown = false;
+  let ownershipReleased = false;
+  async function releaseOwnership(): Promise<void> {
+    if (ownershipReleased) return;
+    ownershipReleased = true;
+    clearInterval(leaseInterval);
+    await releaseDaemonOwnership({
+      releaseLease: () => operatorLease.release(),
+      closeLeasePool: () => leasePool.end(),
+      releaseLock: () => {
+        releaseLock();
+        console.log('[daemon] Lock released');
+      },
+    });
+  }
+
   // Track whether the self-sufficiency interval callback is currently
   // executing. This mirrors core.getLoopStatus().cycleInFlight for the
   // cognitive loop. gracefulShutdown waits for both to clear before
@@ -634,33 +556,8 @@ async function main(): Promise<void> {
   // must be >= 30s to wait for that timeout to fire. 31s gives 1s buffer
   // for timer jitter.
   //
-  // This timer starts when the daemon RECEIVES the IPC shutdown message,
-  // NOT when PM2 sends it. The IPC delivery delay (launcher → daemon)
-  // is covered by the kill_timeout margin, not by this value.
-  //
-  // Measured worst-case timing (20-sample distribution test, 5s interval
-  // stress test, idle + CPU-loaded conditions):
-  //   IPC delivery (launcher → daemon):
-  //     idle:  p50=3839ms, p95=5466ms, max=5466ms
-  //     loaded: p50=4784ms, p95=5423ms, max=6024ms
-  //   Total shutdown duration (IPC receipt → exit):
-  //     idle:  p50=28130ms, p95=34858ms, max=34858ms
-  //     loaded: p50=27926ms, p95=31092ms, max=33366ms
-  //
-  // Budget (from PM2 message send to process exit):
-  //   IPC delivery (max measured):       6024ms
-  //   Shutdown wait (SHUTDOWN_WAIT):    31000ms
-  //   Polling overshoot (100ms polls):    ~100ms
-  //   Cleanup (audit + lock):             ~100ms
-  //   Total worst case:                ~37224ms
-  //   kill_timeout: 50000ms
-  //   Margin: 12776ms (34.3% over worst case)
-  //
-  // PM2 source verification (pm2@7.0.1 lib/God/Methods.js):
-  //   kill_timeout starts in God.processIsDead(), called synchronously
-  //   after proc.send('shutdown') in God.killProcess(). The PM2 CLI →
-  //   God RPC delay (0-11s observed) happens BEFORE the kill_timeout
-  //   timer starts, so it is NOT part of the budget.
+  // PM2 sends shutdown directly to this process. The 31s in-flight ceiling
+  // plus at most 3s of bounded lease/pool cleanup stays below kill_timeout.
   const SHUTDOWN_WAIT_TIMEOUT_MS = 31000;
 
   async function gracefulShutdown(signal: string): Promise<void> {
@@ -709,17 +606,9 @@ async function main(): Promise<void> {
       cycleCount: core.getLoopStatus().cycleCount,
     });
 
-    // Release the durable operator lease before the file lock — a
-    // successor's claim should see a clean handoff, not a stale expiry.
-    // leasePool.end() runs only here, AFTER the release: the keep-alive
-    // interval ending the pool mid-shutdown was what left released_at
-    // NULL — the release failed against an ended pool, silently.
-    await operatorLease.release();
-    await leasePool.end().catch(() => { });
-
-    // Release lock
-    releaseLock();
-    console.log('[daemon] Lock released');
+    // Release the durable operator lease before the file lock — a successor's
+    // claim should see a clean handoff. DB cleanup is bounded inside this call.
+    await releaseOwnership();
 
     const shutdownDurationMs = Date.now() - shutdownStartMs;
     console.log(`[daemon] Shutdown complete (total shutdown duration: ${shutdownDurationMs}ms)`);
@@ -731,15 +620,11 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGQUIT', () => gracefulShutdown('SIGQUIT'));
 
-  // IPC message handler — used when the daemon is launched through
-  // heidi-daemon-launcher.js under PM2 with shutdown_with_message: true.
+  // IPC message handler — PM2 owns this process and sends directly to it
+  // when shutdown_with_message is true.
   // On Windows, PM2's default stop behavior uses `taskkill /T /F` (force
   // kill the process tree), which gives no chance for graceful shutdown.
-  // With shutdown_with_message: true, PM2 sends proc.send('shutdown') to
-  // the launcher, which relays it here via child.send({ type: 'shutdown' }).
-  // This is the ONLY reliable way to trigger graceful shutdown on Windows
-  // under PM2 — signal relay via child.kill(signal) does not work because
-  // Windows has no POSIX signal mechanism.
+  // The direct IPC message is the reliable graceful-shutdown path on Windows.
   process.on('message', (msg: unknown) => {
     if (msg === 'shutdown' || (typeof msg === 'object' && msg !== null && 'type' in msg && (msg as { type: string }).type === 'shutdown')) {
       console.log(`[daemon] IPC message received at ${new Date().toISOString()} (epoch ms: ${Date.now()})`);
@@ -758,31 +643,19 @@ async function main(): Promise<void> {
     }
   });
 
-  // Orphan guard: if the launcher dies without relaying a shutdown (PM2
-  // fell back to taskkill /F after kill_timeout, or the launcher itself
-  // crashed), the fork() IPC channel closes. Without this handler the
-  // daemon keeps running while holding .heidi-daemon.lock, and every PM2
-  // respawn fails 'another daemon is already running' forever — observed
-  // live 2026-09-21 (4 orphan lineages in one session, PM2 slot churning
-  // waiting_restart). IPC disconnect = launcher gone = shut down cleanly.
+  // If the PM2 IPC channel closes, its ownership is gone too.
   process.on('disconnect', () => {
-    console.log(`[daemon] IPC channel closed — launcher gone, shutting down as orphan at ${new Date().toISOString()}`);
+    console.log(`[daemon] PM2 IPC channel closed — shutting down at ${new Date().toISOString()}`);
     gracefulShutdown('IPC_DISCONNECT');
   });
 
-  // Belt-and-suspenders orphan guard: 'disconnect' alone is not
-  // sufficient on Windows — observed 2026-09-26: daemon pid survived a
-  // full PM2 launcher restart and kept running stale code for hours,
-  // still holding the lock so every new child exited immediately.
-  // Poll the parent pid each interval; if the launcher is gone and no
-  // shutdown is already underway, shut down. ppid===0/absent under
-  // double-fork or detached contexts is treated as "unknown", not death.
-  const launcherPid = process.ppid;
-  if (launcherPid > 1) {
+  // Belt-and-suspenders guard for a vanished PM2 supervisor.
+  const supervisorPid = process.ppid;
+  if (supervisorPid > 1) {
     const parentCheck = setInterval(() => {
       if (shuttingDown) { clearInterval(parentCheck); return; }
-      if (!isProcessAlive(launcherPid)) {
-        console.error(`[daemon] Launcher (pid ${launcherPid}) is gone — shutting down as orphan at ${new Date().toISOString()}`);
+      if (!isProcessAlive(supervisorPid)) {
+        console.error(`[daemon] Supervisor (pid ${supervisorPid}) is gone — shutting down at ${new Date().toISOString()}`);
         gracefulShutdown('PARENT_GONE');
         clearInterval(parentCheck);
       }
@@ -843,7 +716,7 @@ async function main(): Promise<void> {
     } catch (error) {
       console.error(`[daemon] Cycle failed: ${error instanceof Error ? error.message : 'unknown'}`);
     }
-    releaseLock();
+    await releaseOwnership();
     process.exit(0);
   }
 
