@@ -22,6 +22,7 @@ function declared(name, extra = {}) {
     max_restarts: extra.max_restarts != null ? extra.max_restarts : 10,
     exp_backoff_restart_delay: extra.exp_backoff_restart_delay != null ? extra.exp_backoff_restart_delay : 1000,
     kill_timeout: extra.kill_timeout != null ? extra.kill_timeout : 10000,
+    external: extra.external === true,
   };
 }
 
@@ -75,6 +76,28 @@ describe('auditDrift verdicts', () => {
     });
     expect(result.rows[0].verdict).toBe('STALE_CODE');
     expect(result.overall).toBe('DRIFT');
+  });
+
+  it('external binaries skip provenance but still drift on config', () => {
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-public-tunnel', { external: true, script: 'bin/ngrok.exe', args: 'http 3000' })],
+      running: [running('hydi-public-tunnel', { script: '/repo/bin/ngrok.exe', args: 'http 3000' })],
+      provenance: {},
+    });
+    expect(result.rows[0].verdict).toBe('OK');
+    expect(result.overall).toBe('OK');
+
+    const drifted = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-public-tunnel', { external: true, script: 'bin/ngrok.exe', args: 'http 3000' })],
+      running: [running('hydi-public-tunnel', { script: '/repo/bin/ngrok.exe', args: 'http 9999' })],
+      provenance: {},
+    });
+    expect(drifted.rows[0].verdict).toBe('CONFIG_DRIFT');
+    expect(drifted.overall).toBe('DRIFT');
   });
 
   it('an autopilot tick running but undeclared is UNDECLARED', () => {

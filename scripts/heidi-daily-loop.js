@@ -326,6 +326,7 @@ async function tick(deps = {}) {
 // ─── Runner ───────────────────────────────────────────────────────────────
 
 async function main() {
+  await require('../lib/runtime/provenance').recordProcessProvenance('hydi-daily-loop');
   log(`heidi-daily-loop starting (tick=${TICK_MS}ms, brief=${BRIEF_HOUR_CT}:00 CT, escalate after ${DEGRADED_ESCALATE_TICKS} degraded ticks)`);
   if (ONCE) {
     const s = await tick();

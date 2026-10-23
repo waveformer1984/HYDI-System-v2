@@ -583,6 +583,11 @@ module.exports = {
       // though it is the live webhook/mobile ingress. Declared so
       // `pm2 resurrect` restores it after reboot.
       name: 'hydi-public-tunnel',
+      // Runs the ngrok binary outside this repo — no repo-SHA provenance
+      // exists. external:true tells the drift audit to check presence and
+      // declared config only. A restart rotates the free-tier URL; the
+      // audit deliberately never restarts it.
+      external: true,
       script: path.join(process.env.LOCALAPPDATA || path.join(__dirname, '..', '..'), 'ngrok', 'ngrok.exe'),
       args: 'http 3000 --log=stdout',
       cwd: __dirname,
