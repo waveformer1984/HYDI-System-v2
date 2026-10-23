@@ -95,6 +95,9 @@ describe('HealthProvenanceChecker.checkModule: process-identity loophole', () =>
     checker.canConnect = jest.fn().mockResolvedValue(true);
     checker.findPidsOnPort = jest.fn().mockReturnValue(['1']);
     checker.getProcessInfo = jest.fn().mockReturnValue({ name: 'node.exe', cmdline: 'node --version' });
+    // Hermetic: without this stub the real ps/CIM probe runs against fake
+    // pid 1, and a probe error degrades the verdict to UNKNOWN (see Test B).
+    checker.getParentPid = jest.fn().mockReturnValue(null);
 
     const result = await checker.checkModule(PROTOFORGE_CORE);
     expect(result.state).toBe('UNAVAILABLE');
@@ -128,6 +131,7 @@ describe('HealthProvenanceChecker.checkModule: process-identity loophole', () =>
     checker.canConnect = jest.fn().mockResolvedValue(true);
     checker.findPidsOnPort = jest.fn().mockReturnValue(['555']);
     checker.getProcessInfo = jest.fn().mockReturnValue({ name: 'python.exe', cmdline: 'python -m http.server 8080' });
+    checker.getParentPid = jest.fn().mockReturnValue(null); // same hermeticity stub as Test B
     checker.httpGet = jest.fn().mockResolvedValue({ ok: true, statusCode: 200, body: '{"status":"ok"}' });
 
     const result = await checker.checkModule(legacyModule);
