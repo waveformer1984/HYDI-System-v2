@@ -130,11 +130,20 @@ describe('detectStaleBaseUrl', () => {
     const env = envWith({ NEXT_PUBLIC_APP_URL: 'https://flaky.ngrok-free.dev' });
     let up = false;
     const fetch = async () => (up ? { ok: true, status: 200 } : (() => { throw new Error('down'); })());
-    const s = new HumanActionService({ verifierDeps: { fetch, envValue: env.envValue } });
+    const s = new HumanActionService({
+      verifierDeps: {
+        fetch, envValue: env.envValue,
+        // Ops rules (runtime/cost/phone) mint actions whose verifiers run
+        // real PM2/ADB/cost commands — stubs keep the sweep off the live box.
+        collectAudit: async () => ({ overall: 'UNKNOWN', rows: [], counts: {} }),
+        runCommand: async () => ({ code: 1, stdout: '' }),
+        adbExec: async () => ({ ok: false, stdout: '' }),
+      },
+    });
     const r = await detectStaleBaseUrl(s, env, { fetch });
     expect(r.stale).toBe(true);
     up = true;
-    const out = await syncHumanActions(s, null, { env, staleCheck: { fetch }, verify: { throttleMs: 0 } });
+    const out = await syncHumanActions(s, null, { env, staleCheck: { fetch }, verify: { throttleMs: 0 }, resolve: { disabled: true } });
     const a = s.get(r.actionId);
     expect(a.status).toBe('RESOLVED');
     expect(a.resolution).toBe('auto_verified');

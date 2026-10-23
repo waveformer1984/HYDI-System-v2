@@ -538,6 +538,134 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Public ingress tunnel: ngrok http 3000. Previously ran undeclared
+      // (ad-hoc pm2 start) — the runtime audit flagged it UNDECLARED even
+      // though it is the live webhook/mobile ingress. Declared so
+      // `pm2 resurrect` restores it after reboot.
+      name: 'hydi-public-tunnel',
+      // Runs the ngrok binary outside this repo — no repo-SHA provenance
+      // exists. external:true tells the drift audit to check presence and
+      // declared config only. A restart rotates the free-tier URL; the
+      // audit deliberately never restarts it.
+      external: true,
+      script: path.join(process.env.LOCALAPPDATA || path.join(__dirname, '..', '..'), 'ngrok', 'ngrok.exe'),
+      args: 'http 3000 --log=stdout',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      // No max_restarts / exp_backoff_restart_delay / kill_timeout: this
+      // entry declares what PM2 actually runs (tunnel was started manually
+      // and is never restarted — a restart rotates the free-tier URL).
+      error_file: './logs/pm2-public-tunnel.err.log',
+      out_file: './logs/pm2-public-tunnel.out.log',
+      merge_logs: true,
+    },
+    {
+      // Daily cognitive loop (scripts/heidi-daily-loop.js). Previously an
+      // ad-hoc pm2 start — flagged UNDECLARED by the runtime audit.
+      name: 'hydi-daily-loop',
+      script: 'scripts/heidi-daily-loop.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-daily-loop.err.log',
+      out_file: './logs/pm2-daily-loop.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Legacy Heidi agent process (heidi-core/heidi-agent.js). Previously
+      // an ad-hoc pm2 start — flagged UNDECLARED by the runtime audit.
+      name: 'heidi-agent',
+      script: 'heidi-core/heidi-agent.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-heidi-agent.err.log',
+      out_file: './logs/pm2-heidi-agent.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Frank deploy watcher (scripts/frank-auto-deploy.js). Previously an
+      // ad-hoc pm2 start — flagged UNDECLARED by the runtime audit.
+      name: 'frank-auto-deploy',
+      script: 'scripts/frank-auto-deploy.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-frank-auto-deploy.err.log',
+      out_file: './logs/pm2-frank-auto-deploy.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Rezonate storefront app on :3001. Declared in boot.config.json
+      // (PR #409) as a PM2-supervised module; this entry is the PM2-side
+      // declaration the runtime audit compares against.
+      name: 'rezonate-app',
+      script: 'src/index.js',
+      cwd: path.join(__dirname, 'protoforge-applications', 'rezonate'),
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development', PORT: '3001' },
+      env_production: { NODE_ENV: 'production', PORT: '3001' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: path.join(__dirname, 'logs', 'pm2-rezonate-app.err.log'),
+      out_file: path.join(__dirname, 'logs', 'pm2-rezonate-app.out.log'),
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
       // Declared from LOCAL_CI.md:
       //   pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch --include-main --interval 10
       // Posts local-ci/* commit statuses. Stop it on a machine that should

@@ -22,6 +22,7 @@ function declared(name, extra = {}) {
     max_restarts: extra.max_restarts != null ? extra.max_restarts : 10,
     exp_backoff_restart_delay: extra.exp_backoff_restart_delay != null ? extra.exp_backoff_restart_delay : 1000,
     kill_timeout: extra.kill_timeout != null ? extra.kill_timeout : 10000,
+    external: extra.external === true,
   };
 }
 
@@ -75,6 +76,28 @@ describe('auditDrift verdicts', () => {
     });
     expect(result.rows[0].verdict).toBe('STALE_CODE');
     expect(result.overall).toBe('DRIFT');
+  });
+
+  it('external binaries skip provenance but still drift on config', () => {
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-public-tunnel', { external: true, script: 'bin/ngrok.exe', args: 'http 3000' })],
+      running: [running('hydi-public-tunnel', { script: '/repo/bin/ngrok.exe', args: 'http 3000' })],
+      provenance: {},
+    });
+    expect(result.rows[0].verdict).toBe('OK');
+    expect(result.overall).toBe('OK');
+
+    const drifted = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-public-tunnel', { external: true, script: 'bin/ngrok.exe', args: 'http 3000' })],
+      running: [running('hydi-public-tunnel', { script: '/repo/bin/ngrok.exe', args: 'http 9999' })],
+      provenance: {},
+    });
+    expect(drifted.rows[0].verdict).toBe('CONFIG_DRIFT');
+    expect(drifted.overall).toBe('DRIFT');
   });
 
   it('an autopilot tick running but undeclared is UNDECLARED', () => {
@@ -338,10 +361,36 @@ describe('ecosystem declarations for the long-running processes', () => {
     }
   });
 
-  it('does not declare the public tunnel or processes whose command line is not in git', () => {
-    expect(names).not.toContain('hydi-public-tunnel');
-    expect(names).not.toContain('hydi-daily-loop');
-    expect(names).not.toContain('rezonate-app');
+  it('declares every service PM2 is expected to keep alive, so resurrect restores it', () => {
+    // Ad-hoc `pm2 start` entries were previously left undeclared, which made
+    // the audit permanently UNDECLARED and meant a reboot restore depended
+    // only on `pm2 resurrect` state. The long-running services PM2 actually
+    // owns are now declared so a `pm2 delete all` + `pm2 start` rebuild is
+    // complete and auditable.
+    for (const expected of [
+      'hydi-public-tunnel',
+      'hydi-daily-loop',
+      'heidi-agent',
+      'frank-auto-deploy',
+      'rezonate-app',
+    ]) {
+      expect(names).toContain(expected);
+    }
     expect(names).not.toContain('job-executor-poller');
+  });
+
+  it('does not treat PM2 modules as undeclared apps', () => {
+    const running = normalizePm2List([{
+      name: 'pm2-logrotate',
+      pm2_env: { status: 'online', pm_exec_path: 'C:\\.pm2\\app.js', pmx_module: true },
+    }]);
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [],
+      running,
+      provenance: {},
+    });
+    expect(result.rows).toHaveLength(0);
   });
 });

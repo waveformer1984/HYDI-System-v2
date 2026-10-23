@@ -34,6 +34,10 @@ describe('ecosystem heidi-web-standalone declaration', () => {
   test('no other ecosystem entry claims port 3000', () => {
     for (const app of ecosystem.apps) {
       if (app.name === 'heidi-web-standalone') continue;
+      // External binaries (e.g. hydi-public-tunnel's ngrok) TARGET :3000 —
+      // they forward to it, they don't bind it. Only app-code entries can
+      // claim the port.
+      if (app.external) continue;
       const args = String(app.args || '');
       const env = app.env || {};
       const claimsPort =

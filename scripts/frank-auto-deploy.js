@@ -375,7 +375,7 @@ function startDeployLoop({
 }
 
 if (require.main === module) {
-  startDeployLoop();
+  require('../lib/runtime/provenance').recordProcessProvenance(APP_NAME).then(() => startDeployLoop());
 }
 
 module.exports = {
