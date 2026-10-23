@@ -607,7 +607,6 @@ module.exports = {
       error_file: './logs/pm2-public-tunnel.err.log',
       out_file: './logs/pm2-public-tunnel.out.log',
       merge_logs: true,
-      kill_timeout: 10000,
     },
     {
       // Daily cognitive loop (scripts/heidi-daily-loop.js). Previously an
