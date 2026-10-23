@@ -73,7 +73,13 @@ describe('MissionRunner', () => {
     const elapsed = Date.now() - t0;
 
     expect(d.dispatched).toBe(true);
-    expect(elapsed).toBeLessThan(200); // dispatch does not wait for execution
+    // Non-blocking proof: the 200ms registry execution is still in flight
+    // when dispatch resolves — inFlight is reserved synchronously before
+    // the claim/updateGoal awaits, so running===1 means dispatch did not
+    // wait for the work. A tight wall-clock bound flakes on loaded boxes
+    // (the claim awaits legitimately take event-loop time; observed 358ms).
+    expect(runner.stats().running).toBe(1);
+    expect(elapsed).toBeLessThan(2000); // sanity bound only
     await new Promise(r => setTimeout(r, 300));
     expect(runner.stats().running).toBe(0);
     expect(goals.updates.some(u => u.updates.status === 'completed')).toBe(true);
