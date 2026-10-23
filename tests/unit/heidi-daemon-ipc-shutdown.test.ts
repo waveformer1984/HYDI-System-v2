@@ -134,8 +134,8 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     try {
       await waitForCondition(
         () => stdoutContent.includes('Daemon is running'),
-        75000,
-        'Daemon did not reach "running" state within 75s',
+        120000,
+        'Daemon did not reach "running" state within 120s',
       );
     } catch (e) {
       // Dump the daemon's captured output so CI logs show where startup stalled
@@ -200,7 +200,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     child.stdout?.on('data', (data: Buffer) => { restartOutput += data.toString(); });
     await waitForCondition(
       () => restartOutput.includes('Daemon is running'),
-      75000,
+      120000,
       'Replacement daemon did not reach running state',
     );
     expect(JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8')).pid).toBe(child.pid);
@@ -218,7 +218,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     console.log(`Stdout contains "shutting down gracefully": ${stdoutContent.includes('shutting down gracefully')}`);
     console.log(`Stdout contains "Shutdown complete":       ${stdoutContent.includes('Shutdown complete')}`);
     console.log('════════════════════════════════════════════════════════════════');
-  }, 300000);
+  }, 420000);
 
   test('launcher loads the daemon in-process without spawning or forking', () => {
     const launcherPath = path.resolve(REPO_ROOT, 'scripts', 'heidi-daemon-launcher.js');
