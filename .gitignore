@@ -77,6 +77,7 @@ heidi-core.env.local
 
 # Generated runtime data & build info
 data/
+lead-forge/packs/
 *.tsbuildinfo
 tests/soak-test-report.json
 

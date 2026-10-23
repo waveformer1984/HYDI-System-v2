@@ -1,0 +1,15 @@
+{
+  "id": "auto-detailing",
+  "search_terms": ["auto detailing", "mobile car detailing", "ceramic coating"],
+  "business_categories": ["car_detailing", "car_wash"],
+  "osm_tags": [["shop", "car_repair"], ["amenity", "car_wash"], ["craft", "car_repair"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 12},
+    {"id": "review_count_5_250", "weight": 18},
+    {"id": "no_online_booking", "weight": 22},
+    {"id": "has_public_email", "weight": 12},
+    {"id": "mentions_mobile_service", "weight": 10}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Independent detailers need a steadier local booking pipeline and faster follow-up for high-margin coating work."
+}

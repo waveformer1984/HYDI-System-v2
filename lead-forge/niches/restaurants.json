@@ -1,0 +1,15 @@
+{
+  "id": "restaurants",
+  "search_terms": ["independent restaurant", "local restaurant", "family restaurant"],
+  "business_categories": ["restaurant"],
+  "osm_tags": [["amenity", "restaurant"], ["amenity", "cafe"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_20_500", "weight": 16},
+    {"id": "no_online_booking", "weight": 16},
+    {"id": "has_public_email", "weight": 12},
+    {"id": "mentions_catering", "weight": 14}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Independent restaurants need profitable direct demand for reservations, events, and catering without marketplace fees."
+}

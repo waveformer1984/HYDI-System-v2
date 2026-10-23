@@ -1,0 +1,15 @@
+{
+  "id": "roofing",
+  "search_terms": ["roofing contractor", "roof repair", "commercial roofer"],
+  "business_categories": ["roofing_contractor"],
+  "osm_tags": [["craft", "roofer"], ["shop", "trade"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_10_250", "weight": 18},
+    {"id": "no_online_booking", "weight": 18},
+    {"id": "has_public_email", "weight": 12},
+    {"id": "mentions_free_estimate", "weight": 14}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Roofers benefit from geographically tight lead lists that surface firms ready to improve estimate volume outside storm events."
+}

@@ -949,6 +949,18 @@ def _handle_command(msg):
     """Execute state-mutating commands. Returns result string or None if not a command."""
     t = msg.lower().strip()
 
+    lead_pack = re.match(r"(?i)^lead pack\s+([a-z0-9-]+)\s+(.+?)\s+(\d+)$", (msg or "").strip())
+    if lead_pack:
+        niche, city, count_text = lead_pack.groups()
+        niche = niche.lower()
+        count = int(count_text)
+        if count < 1 or count > 500:
+            return "Lead pack count must be between 1 and 500."
+        return _file_action_request(
+            f'build lead pack — niche {niche}; city "{city}"; radius 25 miles; '
+            f"count {count}; review-only, no delivery or outreach"
+        )
+
     if t.startswith(("delegate ", "assign ", "hand off ")):
         domains = []
         if any(word in t for word in ("revenue", "billing", "sales", "income")):
@@ -1094,6 +1106,8 @@ status / health      live fleet (read-only tool)
 board                last messages on #ops and #general (read-only)
 revenue              revenue summary, or unknown without a livemode source
 open prs             open PRs, when Frank has a read-only endpoint
+lead pack <niche> <city> <count>
+                     file a review-only Lead Forge request on #ops
 agents               agent mesh status
 start <name>         file an #ops request to start an agent
 stop <name>          file an #ops request to pause an agent

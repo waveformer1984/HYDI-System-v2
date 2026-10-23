@@ -1,0 +1,15 @@
+{
+  "id": "real-estate",
+  "search_terms": ["real estate agency", "independent realtor", "property management company"],
+  "business_categories": ["real_estate_agency", "property_management_company"],
+  "osm_tags": [["office", "estate_agent"], ["office", "property_management"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_5_200", "weight": 16},
+    {"id": "no_online_booking", "weight": 14},
+    {"id": "has_public_email", "weight": 14},
+    {"id": "mentions_free_consultation", "weight": 12}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Independent agencies need local seller and buyer conversations they can own instead of renting attention from portals."
+}

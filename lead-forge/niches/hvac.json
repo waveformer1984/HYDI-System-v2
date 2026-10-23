@@ -1,0 +1,15 @@
+{
+  "id": "hvac",
+  "search_terms": ["HVAC contractor", "air conditioning repair", "heating contractor"],
+  "business_categories": ["hvac_contractor", "air_conditioning_contractor"],
+  "osm_tags": [["craft", "hvac"], ["craft", "heating_engineer"], ["shop", "trade"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_10_300", "weight": 18},
+    {"id": "no_online_booking", "weight": 20},
+    {"id": "has_public_email", "weight": 12},
+    {"id": "mentions_emergency_service", "weight": 12}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "HVAC operators need qualified local demand between weather spikes and a reliable way to convert urgent service searches."
+}
