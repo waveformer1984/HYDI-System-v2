@@ -1,5 +1,10 @@
 'use strict';
 
+// Several tests here invoke the real api/health.js handler, which runs
+// live probes (fs, supabase timeouts) that exceed the default 15s bound
+// under load — honest integration-flavored timeout.
+jest.setTimeout(60000);
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
