@@ -16,6 +16,7 @@ const EventEmitter = require('events');
 const axios = require('axios');
 const LocalModelAdapter = require('./local-model-adapter');
 const OllamaClient = require('../../heidi-core/brain/ollama-client');
+const { paidApiKey } = require('../../lib/cost/paid-llm-gate.js');
 
 class HybridModelStack extends EventEmitter {
   constructor(config = {}) {
@@ -45,7 +46,7 @@ class HybridModelStack extends EventEmitter {
     this.externalModels = {
       openai: {
         baseURL: 'https://api.openai.com/v1',
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: paidApiKey('OPENAI_API_KEY'),
         models: {
           'gpt-4': { costPer1kTokens: 0.03, maxTokens: 4096 },
           'gpt-4-turbo': { costPer1kTokens: 0.01, maxTokens: 4096 },
@@ -55,7 +56,7 @@ class HybridModelStack extends EventEmitter {
       
       anthropic: {
         baseURL: 'https://api.anthropic.com/v1',
-        apiKey: process.env.ANTHROPIC_API_KEY,
+        apiKey: paidApiKey('ANTHROPIC_API_KEY'),
         models: {
           'claude-3-opus': { costPer1kTokens: 0.015, maxTokens: 4096 },
           'claude-3-sonnet': { costPer1kTokens: 0.003, maxTokens: 4096 },
@@ -65,7 +66,7 @@ class HybridModelStack extends EventEmitter {
       
       gemini: {
         baseURL: 'https://generativelanguage.googleapis.com/v1',
-        apiKey: process.env.GEMINI_API_KEY,
+        apiKey: paidApiKey('GEMINI_API_KEY'),
         models: {
           'gemini-pro': { costPer1kTokens: 0.0005, maxTokens: 4096 },
           'gemini-pro-vision': { costPer1kTokens: 0.0025, maxTokens: 4096 }

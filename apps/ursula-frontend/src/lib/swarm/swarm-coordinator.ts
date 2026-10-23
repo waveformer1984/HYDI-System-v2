@@ -6,8 +6,9 @@
 
 import { type TaskDAG, type SubTask } from './task-decomposer';
 import { getStreamConsumer } from '@/lib/queue/stream-consumer';
+import { paidApiKey } from '../paid-llm-gate';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const ANTHROPIC_API_KEY = paidApiKey('ANTHROPIC_API_KEY');
 
 export interface TaskResult {
   taskId: string;

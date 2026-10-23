@@ -8,10 +8,12 @@ const SelfHealingService = require('../../src/healing/SelfHealingService');
 describe('SelfHealingService', () => {
   let service;
   const savedApiKey = process.env.ANTHROPIC_API_KEY;
+  const savedGate = process.env.HYDI_ALLOW_PAID_LLM;
 
   beforeEach(() => {
     service = new SelfHealingService();
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.HYDI_ALLOW_PAID_LLM;
   });
 
   afterEach(() => {
@@ -19,6 +21,8 @@ describe('SelfHealingService', () => {
     // Restore original key state
     if (savedApiKey !== undefined) process.env.ANTHROPIC_API_KEY = savedApiKey;
     else delete process.env.ANTHROPIC_API_KEY;
+    if (savedGate !== undefined) process.env.HYDI_ALLOW_PAID_LLM = savedGate;
+    else delete process.env.HYDI_ALLOW_PAID_LLM;
     jest.clearAllMocks();
   });
 
@@ -32,6 +36,7 @@ describe('SelfHealingService', () => {
 
     test('returns null when Claude API returns a non-200 status', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
+      process.env.HYDI_ALLOW_PAID_LLM = 'true';
 
       const mockReq = { on: jest.fn(), write: jest.fn(), end: jest.fn() };
       const mockRes = { statusCode: 429, resume: jest.fn(), on: jest.fn() };
@@ -43,6 +48,7 @@ describe('SelfHealingService', () => {
 
     test('returns parsed body on 200', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
+      process.env.HYDI_ALLOW_PAID_LLM = 'true';
 
       const mockReq = { on: jest.fn(), write: jest.fn(), end: jest.fn() };
       const payload = JSON.stringify({ content: [{ text: 'restart the service' }] });
@@ -71,6 +77,7 @@ describe('SelfHealingService', () => {
 
     test('returns null when Claude API returns a non-200 status', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
+      process.env.HYDI_ALLOW_PAID_LLM = 'true';
 
       const mockReq = { on: jest.fn(), write: jest.fn(), end: jest.fn() };
       const mockRes = { statusCode: 500, resume: jest.fn(), on: jest.fn() };

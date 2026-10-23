@@ -4,6 +4,8 @@
  * into a directed acyclic graph (DAG) of typed sub-tasks.
  */
 
+import { paidApiKey } from '../paid-llm-gate';
+
 export interface SubTask {
   id: string;
   type: string;
@@ -46,7 +48,7 @@ Respond ONLY with valid JSON:
 }`;
 
 async function callClaude(userContent: string): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = paidApiKey('ANTHROPIC_API_KEY');
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

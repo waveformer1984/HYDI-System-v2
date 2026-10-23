@@ -8,6 +8,7 @@ import { openDb, audit } from './db.js';
 import { startScheduler, runInsights, rollupRecent } from './engine.js';
 import { execute, reject } from './gate.js';
 import { localDay } from './util.js';
+import { calibrationStats, latestReflection } from './calibrate.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -58,6 +59,8 @@ export function summary(db, cfg) {
     days,
     insights: db.prepare('SELECT * FROM insights ORDER BY id DESC LIMIT 20').all(),
     actions: db.prepare('SELECT * FROM actions ORDER BY id DESC LIMIT 30').all().map(a => ({ ...a, payload: JSON.parse(a.payload) })),
+    calibration: calibrationStats(db),
+    reflection: latestReflection(db),
     focusBlocks: db.prepare('SELECT * FROM focus_blocks WHERE end > ? ORDER BY start').all(Date.now()),
     digest: digestRow ? JSON.parse(digestRow.detail) : null
   };

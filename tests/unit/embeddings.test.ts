@@ -16,6 +16,7 @@ const EMBEDDING_ENV_KEYS = [
   'ENABLE_LOCAL_MODEL',
   'LOCAL_MODEL_URL',
   'OLLAMA_URL',
+  'HYDI_ALLOW_PAID_LLM',
 ];
 
 describe('lib/embeddings', () => {
@@ -84,7 +85,16 @@ describe('lib/embeddings', () => {
       process.env.EMBEDDING_PROVIDER = 'openai';
       process.env.OPENAI_API_KEY = 'sk-test';
       process.env.ENABLE_LOCAL_MODEL = 'true';
+      process.env.HYDI_ALLOW_PAID_LLM = 'true';
       expect(getEmbeddingProvider()).toBe('openai');
+    });
+
+    it('EMBEDDING_PROVIDER=openai + key still resolves null while HYDI_ALLOW_PAID_LLM is off', () => {
+      // The $0 switch: opting in to the paid provider AND holding a key is
+      // not enough — the spend switch must also be on.
+      process.env.EMBEDDING_PROVIDER = 'openai';
+      process.env.OPENAI_API_KEY = 'sk-test';
+      expect(getEmbeddingProvider()).toBeNull();
     });
   });
 
@@ -142,6 +152,7 @@ describe('lib/embeddings', () => {
     it('passes through an OpenAI 1536-dim vector unchanged — only via explicit opt-in', async () => {
       process.env.EMBEDDING_PROVIDER = 'openai';
       process.env.OPENAI_API_KEY = 'sk-test';
+      process.env.HYDI_ALLOW_PAID_LLM = 'true';
       const full = Array.from({ length: EMBEDDING_DIM }, () => 0.5);
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,

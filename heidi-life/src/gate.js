@@ -61,10 +61,11 @@ export function evaluate(db, cfg, action) {
 export function propose(db, cfg, insightId, action) {
   const v = evaluate(db, cfg, action);
   const status = v.verdict === 'AUTO-APPROVE' ? 'approved' : v.verdict === 'REVIEW' ? 'pending' : 'blocked';
+  const rawConfidence = action.rawConfidence ?? action.confidence;
   const { lastInsertRowid: id } = db.prepare(
-    'INSERT INTO actions (created, insight_id, type, payload, confidence, verdict, reason, status, executed) VALUES (?,?,?,?,?,?,?,?,NULL)'
-  ).run(Date.now(), insightId, action.type, JSON.stringify(action.payload), action.confidence, v.verdict, v.reason, status);
-  audit(db, 'gate', { id: Number(id), type: action.type, ...v });
+    'INSERT INTO actions (created, insight_id, type, payload, confidence, raw_confidence, verdict, reason, status, executed) VALUES (?,?,?,?,?,?,?,?,?,NULL)'
+  ).run(Date.now(), insightId, action.type, JSON.stringify(action.payload), action.confidence, rawConfidence, v.verdict, v.reason, status);
+  audit(db, 'gate', { id: Number(id), type: action.type, rawConfidence, confidence: action.confidence, ...v });
   if (status === 'approved') execute(db, cfg, Number(id));
   return { id: Number(id), ...v };
 }

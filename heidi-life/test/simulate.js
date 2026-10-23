@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { createServer } from '../src/server.js';
 import { refreshVisits } from '../src/places.js';
@@ -10,6 +11,7 @@ import { runInsights } from '../src/engine.js';
 import { parseIcs, expand } from '../src/sources/calendar.js';
 import { parseUsagestats } from '../src/sources/usage.js';
 import { localDay, addDays, dayStart, MIN, HOUR, DAY } from '../src/util.js';
+import { calibrationStats, writeReflection } from '../src/calibrate.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'heidi-life-'));
 const cfg = JSON.parse(fs.readFileSync(new URL('../config.example.json', import.meta.url)));
@@ -168,3 +170,54 @@ const icsBody = await fetch(`http://127.0.0.1:3473/calendar/heidi.ics?token=${cf
 const summaryLine = icsBody.split('\r\n').find(l => l.startsWith('SUMMARY:'));
 console.log('ICS escaping:', summaryLine === 'SUMMARY:Focus: A\\\\B\\, C\\; D\\nE' ? 'pass' : `FAIL ${summaryLine}`);
 srv2.close();
+
+// 13) calibration: Jordan's repeated rejections can only lower confidence.
+const beforeCalibration = calibrationStats(db);
+console.log('\nCALIBRATION BEFORE:', beforeCalibration.map(s => `${s.kind}=${s.multiplier.toFixed(2)}`).join(', ') || 'no decisions');
+assert.ok(beforeCalibration.every(s => s.multiplier === 1), 'fewer than five human decisions must not change a multiplier');
+
+function seedHumanDecisions(kind, status, count) {
+  const seedDay = addDays(today, -61);
+  const { lastInsertRowid: insightId } = db.prepare(
+    'INSERT INTO insights (day, kind, focus, text, confidence, created) VALUES (?,?,?,?,?,?)'
+  ).run(seedDay, kind, 'calibration test', 'seed decision', 0.9, Date.now());
+  const insert = db.prepare(
+    'INSERT INTO actions (created, insight_id, type, payload, confidence, raw_confidence, verdict, reason, status, executed) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  );
+  for (let i = 0; i < count; i++) {
+    insert.run(Date.now(), insightId, 'notify', '{}', 0.9, 0.9, 'REVIEW', 'seed decision', status, status === 'executed' ? Date.now() : null);
+  }
+  return Number(insightId);
+}
+
+const socialSeedId = seedHumanDecisions('social_screen', 'rejected', 10);
+seedHumanDecisions('sleep_short', 'executed', 10);
+const afterCalibration = calibrationStats(db);
+const socialStats = afterCalibration.find(s => s.kind === 'social_screen');
+const sleepStats = afterCalibration.find(s => s.kind === 'sleep_short');
+assert.ok(socialStats.multiplier < 1, 'social_screen multiplier should fall after repeated rejections');
+assert.equal(sleepStats.multiplier, 1, 'sleep_short multiplier should stay at 1.0 after approvals');
+assert.ok(afterCalibration.every(s => s.multiplier >= 0.5 && s.multiplier <= 1), 'every multiplier must stay in [0.5, 1.0]');
+
+// Remove only prior generated social insights so the real generation/gate path can propose it again.
+db.prepare('DELETE FROM insights WHERE kind = ? AND id != ?').run('social_screen', socialSeedId);
+const calibratedRun = await runInsights(db, cfg, today, { withDigest: false });
+const socialProposal = calibratedRun.find(result => result.kind === 'social_screen');
+assert.ok(socialProposal, 'social_screen should produce a calibrated proposal');
+assert.equal(socialProposal.gate.verdict, 'REVIEW', 'calibrated social_screen proposal must not auto-approve');
+assert.ok(socialProposal.action.confidence < socialProposal.action.rawConfidence, 'action confidence should be calibrated downward');
+const storedSocial = db.prepare('SELECT raw_confidence, confidence FROM actions WHERE id = ?').get(socialProposal.gate.id);
+assert.equal(storedSocial.raw_confidence, socialProposal.action.rawConfidence);
+assert.equal(storedSocial.confidence, socialProposal.action.confidence);
+
+const reflectionResult = await writeReflection(db, cfg);
+assert.equal(reflectionResult.written, true, 'weekly self-review should write a reflection');
+assert.equal((await writeReflection(db, cfg)).written, false, 'self-review should run only once for a local day');
+assert.equal(db.prepare('SELECT COUNT(*) n FROM reflections').get().n, 1);
+console.log('CALIBRATION AFTER:', afterCalibration
+  .filter(s => ['social_screen', 'sleep_short'].includes(s.kind))
+  .map(s => `${s.kind}: approved=${s.approved} rejected=${s.rejected} multiplier=${s.multiplier.toFixed(2)}`)
+  .join(' | '));
+console.log(`NEXT social_screen: raw=${socialProposal.action.rawConfidence.toFixed(2)} calibrated=${socialProposal.action.confidence.toFixed(2)} → ${socialProposal.gate.verdict}`);
+console.log(`SELF-REVIEW: ${reflectionResult.reflection.note}`);
+console.log('calibration assertions: all pass');

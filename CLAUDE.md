@@ -84,6 +84,21 @@ the DB was dead materializes on the next live pass. Mirror writes are
 fire-and-forget — they never gate the file store. Read the table as
 evidence, never as truth; `mirrored_at` shows how fresh each row is.
 
+#### Paid-model spend switch (`HYDI_ALLOW_PAID_LLM`)
+
+The operating constraint is $0. Every code path that can reach a paid model
+endpoint (Anthropic, OpenAI, Google AI) consults
+`lib/cost/paid-llm-gate.js` — `paidApiKey('<PROVIDER>_API_KEY')` — instead
+of reading the key directly. Unless `HYDI_ALLOW_PAID_LLM=true` is set, the
+gate returns `undefined` and the caller's existing "no key configured"
+fallback (local model, canned response, null) runs unchanged. A key being
+present is no longer consent to spend. `apps/ursula-frontend` builds
+separately and carries an identical copy at
+`apps/ursula-frontend/src/lib/paid-llm-gate.js` — keep them in sync.
+`npm run cost:audit` prints the switch state and the gated call sites;
+`npm run cost:audit -- --strict` fails if the switch is `true` or a real
+paid key is set.
+
 #### Live authority bounds (`heidi_decision_bounds`)
 
 The daemon's resolver cadence is the *unattended* path — and it now
