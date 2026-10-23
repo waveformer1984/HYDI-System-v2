@@ -338,10 +338,36 @@ describe('ecosystem declarations for the long-running processes', () => {
     }
   });
 
-  it('does not declare the public tunnel or processes whose command line is not in git', () => {
-    expect(names).not.toContain('hydi-public-tunnel');
-    expect(names).not.toContain('hydi-daily-loop');
-    expect(names).not.toContain('rezonate-app');
+  it('declares every service PM2 is expected to keep alive, so resurrect restores it', () => {
+    // Ad-hoc `pm2 start` entries were previously left undeclared, which made
+    // the audit permanently UNDECLARED and meant a reboot restore depended
+    // only on `pm2 resurrect` state. The long-running services PM2 actually
+    // owns are now declared so a `pm2 delete all` + `pm2 start` rebuild is
+    // complete and auditable.
+    for (const expected of [
+      'hydi-public-tunnel',
+      'hydi-daily-loop',
+      'heidi-agent',
+      'frank-auto-deploy',
+      'rezonate-app',
+    ]) {
+      expect(names).toContain(expected);
+    }
     expect(names).not.toContain('job-executor-poller');
+  });
+
+  it('does not treat PM2 modules as undeclared apps', () => {
+    const running = normalizePm2List([{
+      name: 'pm2-logrotate',
+      pm2_env: { status: 'online', pm_exec_path: 'C:\\.pm2\\app.js', pmx_module: true },
+    }]);
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [],
+      running,
+      provenance: {},
+    });
+    expect(result.rows).toHaveLength(0);
   });
 });
