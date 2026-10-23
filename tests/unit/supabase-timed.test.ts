@@ -40,13 +40,17 @@ describe('supabase-timed — deterministic fault injection', () => {
 
   test('while the circuit is open, requests fail fast without calling transport', async () => {
     let calls = 0;
-    const countingHang = () => { calls++; return hang(); };
-    const { fetch: f, state } = createTimedFetch(countingHang, { timeoutMs: 20, cbThreshold: 1 });
-    await expect(f('http://x/')).rejects.toBeInstanceOf(SupabaseTimeoutError);
+    const tripThenHang = () => {
+      calls++;
+      return calls === 1 ? failFast() : hang();
+    };
+    // timeoutMs is deliberately long: if the open circuit wrongly invoked
+    // the doomed transport, this call would settle as a ~3s SupabaseTimeoutError
+    // instead of the immediate SupabaseDegradedError the test expects.
+    const { fetch: f, state } = createTimedFetch(tripThenHang, { timeoutMs: 3000, cbThreshold: 1 });
+    await expect(f('http://x/')).rejects.toThrow('fetch failed');
     expect(state.circuit).toBe('open');
-    const t0 = Date.now();
     await expect(f('http://x/')).rejects.toBeInstanceOf(SupabaseDegradedError);
-    expect(Date.now() - t0).toBeLessThan(20); // instant — no doomed call
     expect(calls).toBe(1); // transport was not invoked again
   });
 
