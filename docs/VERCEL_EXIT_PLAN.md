@@ -64,6 +64,16 @@ Vercel dashboard → project `ursula-nine` → Settings → Environment Variable
 Also set `HYDI_ALLOW_PAID_LLM` — it is **absent = off**, which preserves the $0
 model-spend constraint on the worker.
 
+### Repo secrets for CI deploys
+
+`.github/workflows/deploy-cloudflare.yml` (manual `workflow_dispatch` only —
+nothing auto-deploys) needs exactly two **repo secrets** before it will run a
+deploy; without them it exits green with a `::notice::`:
+
+- `CLOUDFLARE_API_TOKEN` — Cloudflare dashboard → My Profile → API Tokens →
+  Create Token → "Edit Cloudflare Workers" template, scoped to this account.
+- `CLOUDFLARE_ACCOUNT_ID` — the hex id in `dash.cloudflare.com/<account-id>`.
+
 ## 4. Stripe webhook URL that must be updated
 
 Stripe Dashboard → Developers → Webhooks:
@@ -79,14 +89,29 @@ Stripe Dashboard → Developers → Webhooks:
 ## 5. Galactic Bytes storefront — code not in this repo
 
 `galacticbytes.vercel.app` is commercial (takes Stripe payments) so it cannot
-stay on Vercel Hobby — but its source is not here. To migrate it, needed:
+stay on Vercel Hobby — but its source is not here.
 
-- The storefront repo/source, or export from Vercel (Vercel dashboard → project
-  `galacticbytes` → Settings → Git, or `vercel pull` + `vercel build` with a
-  Vercel token on the project).
-- Its env-var name list (same procedure as §3) and its Stripe webhook endpoints.
-- If it is a static/Next.js storefront, the same OpenNext path applies; if it is
-  a plain static export, Cloudflare Pages `wrangler pages deploy` is even
+**History search (2026-10-23):** `git log --all -S galacticbytes` (and case-
+insensitive `-i` variants, `archive/`, all branches) finds only *references*,
+never deployable source: `test-galactic-bytes-payout.js`,
+`stripe-connect-admin-client.js`, `create-connect-account.js`,
+`create-test-connect.js`, `test_payout_flow.js`, `setup-payout-system.sql`,
+`COMMERCIAL_MODEL.md` — in every hit Galactic Bytes is a Stripe Connect
+sub-account name (`galactic_bytes` / `STRIPE_ACCOUNT_*` env vars), not an app.
+The storefront source is **not recoverable from this repo**.
+
+To migrate it, the owner must first export it from Vercel (only place the
+source may still exist):
+
+- Vercel dashboard → project `galacticbytes` → Settings → Git — if a Git repo
+  is connected, that repo is the source; clone it.
+- If no Git link: on a machine with the Vercel CLI and a token for the project,
+  `vercel pull galacticbytes` (or `vercel link` inside an empty dir, then
+  `vercel pull`) recovers the deployed project files + env-var names.
+- Vercel dashboard → project → Settings → Environment Variables — record the
+  env-var **names** (same procedure as §3) and Stripe webhook endpoints.
+- If it is a static/Next.js storefront, the same OpenNext path applies; if it
+  is a plain static export, Cloudflare Pages `wrangler pages deploy` is even
   simpler — decide after the source is available.
 
 ## 6. Cutover steps (owner actions, in order)
@@ -110,6 +135,10 @@ stay on Vercel Hobby — but its source is not here. To migrate it, needed:
    workers.dev hostname).
 9. Monitor 48h, then Vercel dashboard → each project → Settings → **Delete/Disable
    project** → cancel the paid plan.
+9a. Once Vercel is gone, set repo **variable** `VERCEL_RETIRED=true` (repo
+    Settings → Secrets and variables → Actions → Variables tab) — the
+    `Check Vercel environment` step in `health-monitor.yml` skips on it,
+    instead of failing forever against a dead account.
 10. After last Vercel deploy confirmed dead: PR to remove `lib/vercel/*`,
     `*-vercel-*` scripts, `vercel.modern.json`, and the `VERCEL_*` env entries.
 
