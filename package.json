@@ -100,7 +100,7 @@
     "dotenv": "^17.4.2",
     "express-rate-limit": "^8.6.1",
     "jsonwebtoken": "^9.0.3",
-    "next": "^16.4.0",
+    "next": "^16.4.1",
     "node-fetch": "^2.7.0",
     "nodemailer": "^10.0.10",
     "ollama": "^0.6.3",
@@ -147,6 +147,7 @@
     "minimatch@10.2.5": {
       "brace-expansion": "5.0.9"
     },
-    "sharp": "^0.35.0"
+    "sharp": "^0.35.0",
+    "ip-address": "^10.7.4"
   }
 }
