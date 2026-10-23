@@ -7,7 +7,34 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const PY = 'python';
+// Python interpreter: 'python' on Windows, 'python3' on most CI images.
+// REZONATE_PYTHON overrides both.
+function detectPython() {
+  for (const bin of ['python', 'python3']) {
+    try {
+      execFileSync(bin, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      return bin;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+const PY = process.env.REZONATE_PYTHON || detectPython();
+
+// The engine lazily imports numpy/soundfile/librosa — probe once up front so
+// machines without the audio stack report these tests as skipped, not failed.
+function engineDepsAvailable() {
+  if (!PY) return false;
+  try {
+    execFileSync(PY, ['-c', 'import numpy, soundfile, librosa'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const ENGINE_DEPS = engineDepsAvailable();
+const SKIP_REASON = 'requires python + numpy + soundfile + librosa (pip install numpy soundfile librosa)';
+const it = ENGINE_DEPS ? test : (name, fn) => test(name, { skip: SKIP_REASON }, fn);
+
 const ENGINE = path.join(__dirname, '..', '..', '..', 'rezonate', 'segment-swap.py');
 
 // ── minimal WAV writer (PCM16 stereo) ──────────────────────────────────
@@ -71,7 +98,7 @@ function runJson(args) {
 }
 const base = () => ['--stems-dir', stemsDir, '--catalog', catalogPath];
 
-test('segmentation: bar boundaries are BPM-aligned', () => {
+it('segmentation: bar boundaries are BPM-aligned', () => {
   setup();
   const m = runJson([...base(), '--stem', 'drums', '--bars', '4-8', '--plan']);
   assert.equal(m.segments.length, 5);
@@ -82,14 +109,14 @@ test('segmentation: bar boundaries are BPM-aligned', () => {
   assert.equal(m.meterAssumed, true);
 });
 
-test('segmentation: multi-bar chunks', () => {
+it('segmentation: multi-bar chunks', () => {
   setup();
   const m = runJson([...base(), '--stem', 'drums', '--bars', '1-8', '--segment-bars', '4', '--plan']);
   assert.equal(m.segments.length, 2);
   assert.equal(m.segments[0].endTime - m.segments[0].startTime, 8.0); // 4 bars @120bpm
 });
 
-test('ranking: matching drum loop beats unrelated pad', () => {
+it('ranking: matching drum loop beats unrelated pad', () => {
   setup();
   const m = runJson([...base(), '--stem', 'drums', '--bars', '2', '--samples', 'drum', '--plan']);
   const names = m.replacements.map(r => r.plannedSample);
@@ -98,7 +125,7 @@ test('ranking: matching drum loop beats unrelated pad', () => {
   assert.ok(!names.includes('unrelated_pad.wav'));
 });
 
-test('ranking: bpm compatibility favors exact tempo', () => {
+it('ranking: bpm compatibility favors exact tempo', () => {
   setup();
   // add a second drum sample at 118bpm — same query, worse bpm fit
   const s4 = path.join(dir, 'drumloop_118bpm.wav'); writeWav(s4, { seconds: 2, freq: 500 });
@@ -110,26 +137,26 @@ test('ranking: bpm compatibility favors exact tempo', () => {
   assert.ok(planned[0].includes('120bpm'), `expected 120bpm first, got ${planned[0]}`);
 });
 
-test('unknown bpm: refuses honestly instead of slicing blind', () => {
+it('unknown bpm: refuses honestly instead of slicing blind', () => {
   setup();
   fs.writeFileSync(path.join(stemsDir, 'track.json'), JSON.stringify({ name: 'x' }));
   assert.throws(() => run([...base(), '--stem', 'drums', '--bars', '1-2', '--samples', 'drum']),
     /bpm unknown|non-zero exit|Command failed/i);
 });
 
-test('invalid segment range rejected', () => {
+it('invalid segment range rejected', () => {
   setup();
   assert.throws(() => run([...base(), '--stem', 'drums', '--bars', '9-4']));
   assert.throws(() => run([...base(), '--stem', 'drums', '--bars', 'abc']));
 });
 
-test('missing sample match fails closed', () => {
+it('missing sample match fails closed', () => {
   setup();
   assert.throws(() => run([...base(), '--stem', 'drums', '--bars', '1', '--samples', 'zzznomatchzzz']),
     /no catalog samples|Command failed/i);
 });
 
-test('full render: output properties + surgical replacement + manifest', () => {
+it('full render: output properties + surgical replacement + manifest', () => {
   setup();
   const r = runJson([...base(), '--stem', 'drums', '--bars', '3-4', '--samples', 'drum', '--out-dir', path.join(dir, 'swap-out')]);
   const out = readWav(r.output);
@@ -157,7 +184,7 @@ test('full render: output properties + surgical replacement + manifest', () => {
   assert.equal(m.audio.sampleRate, 44100);
 });
 
-test('pitch: drum stem never pitch-shifts; key recorded honestly', () => {
+it('pitch: drum stem never pitch-shifts; key recorded honestly', () => {
   setup();
   const r = runJson([...base(), '--stem', 'drums', '--bars', '2', '--samples', 'drum', '--out-dir', path.join(dir, 'p')]);
   const m = JSON.parse(fs.readFileSync(r.manifest, 'utf8'));

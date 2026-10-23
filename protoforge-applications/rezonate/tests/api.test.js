@@ -121,8 +121,11 @@ describe('Resonate API', () => {
     const { server, port } = await listen(app);
 
     const fs = require('fs');
+    const os = require('os');
     const path = require('path');
-    const tmpDir = path.join(process.cwd(), 'tmp-test');
+    // Hermetic temp dir — writing under process.cwd() leaks artifacts and
+    // breaks when the suite runs from a different working directory.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rezonate-api-'));
     const tmpFile = path.join(tmpDir, 'vocal.wav');
     fs.mkdirSync(tmpDir, { recursive: true });
     fs.writeFileSync(tmpFile, 'fake audio');
@@ -150,7 +153,10 @@ describe('Resonate API', () => {
       assert.strictEqual(text, 'fake audio');
     } finally {
       server.close();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      // Windows: res.sendFile's read stream can still hold the file handle
+      // when cleanup runs — bounded retries absorb the race (the EPERM the
+      // workflow comment calls out).
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
