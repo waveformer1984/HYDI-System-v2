@@ -5,6 +5,9 @@ const { validateManifest, createManifest, loadManifest, discover } = require('..
 const { LifecycleEmitter } = require('../../protoforge/packages/application-manifest/src/lifecycle');
 const { generate } = require('../../protoforge/tools/create-app/src/generator');
 
+// getRuntimeInventory() runs real diagnostics probes; allow for a loaded box.
+jest.setTimeout(90000);
+
 describe('ProtoForge Application Factory', () => {
   test('validates a complete manifest', () => {
     const result = validateManifest(createManifest({
