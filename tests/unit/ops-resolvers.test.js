@@ -370,4 +370,32 @@ describe('ops verifiers', () => {
     expect(r.passed).toBe(false);
     expect(r.failureReason).toContain('PHONE_TAILNET_HOST');
   });
+
+  test('pm2-resurrect-observed requires a real reboot, not just a green audit', async () => {
+    const armedAt = '2026-10-23T04:00:00.000Z';
+    const armedMs = Date.parse(armedAt);
+    const okAudit = { collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }) };
+    // No reboot yet: uptime (7200s) exceeds elapsed since arming (3600s),
+    // so lastBoot < armedAt → PENDING, not a pass.
+    const noReboot = await runVerifier('pm2-resurrect-observed', { armedAt }, {
+      ...okAudit, now: () => armedMs + 3600e3, osUptime: () => 7200,
+    });
+    expect(noReboot.passed).toBe(false);
+    expect(noReboot.status).toBe('PENDING');
+    // Rebooted since arming + audit OK → VERIFIED.
+    const passed = await runVerifier('pm2-resurrect-observed', { armedAt }, {
+      ...okAudit, now: () => armedMs + 7200e3, osUptime: () => 1800,
+    });
+    expect(passed.passed).toBe(true);
+    // Rebooted but services didn't come back → FAILED.
+    const drift = await runVerifier('pm2-resurrect-observed', { armedAt }, {
+      collectAudit: async () => ({ overall: 'DRIFT', rows: [], counts: {} }),
+      now: () => armedMs + 7200e3, osUptime: () => 1800,
+    });
+    expect(drift.passed).toBe(false);
+    expect(drift.status).toBe('FAILED');
+    // Missing armedAt → fails honestly.
+    const unarmed = await runVerifier('pm2-resurrect-observed', {}, okAudit);
+    expect(unarmed.passed).toBe(false);
+  });
 });

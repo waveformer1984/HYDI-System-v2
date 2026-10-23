@@ -62,7 +62,10 @@ function buildSpecs(net) {
         'After logon, run `pm2 ls` — every ecosystem app should come back online within a minute',
         'Run `npm run runtime:audit` — expect overall OK',
       ],
-      verifier: { name: 'runtime-audit-clean', spec: {} },
+      // pm2-resurrect-observed requires an actual reboot since arming —
+      // runtime-audit-clean alone resolved this action falsely (a green
+      // audit needs no reboot). armedAt = seed time.
+      verifier: { name: 'pm2-resurrect-observed', spec: { armedAt: new Date().toISOString() } },
       expectedOutcome: 'After reboot+logon, runtime audit reports OK without manual pm2 starts',
       sourceMissionId: 'ops-runtime-persistence',
     },
