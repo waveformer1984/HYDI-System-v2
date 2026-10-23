@@ -135,3 +135,18 @@ pm2-state.json
 rezonate/swaps/
 rezonate/__pycache__/
 protoforge-applications/rezonate/generated/
+
+# Machine-local runtime state — never commit live memory, session, gate,
+# tripwire, or demonstration artifacts (Task: stop leaking WIP state)
+.heidi-memory.json
+.heidi-sessions.json
+.heidi-procedural-memory.json
+heidi-core/heidi-memory.json
+heidi-core/heidi-memory-snapshots.json
+gate-state.json
+phase*-gate-state.json
+tripwire-state.json
+heidi-report-*.txt
+HYDI_LIVE_DEMONSTRATION_LOG.txt
+HYDI_LIVE_DEMONSTRATION_RESULTS.json
+HYDI_LIVE_STATUS_REPORT.md
