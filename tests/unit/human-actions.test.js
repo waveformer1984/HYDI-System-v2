@@ -22,6 +22,17 @@ const { attachBlockerToGoal, resumeSatisfiedGoals, scanEscalatedGoals } = requir
 const { tryHumanActionAnswer } = require('../../lib/human-actions/heidi-answer');
 const { load, save } = require('../../lib/human-actions/store');
 
+// Ops rules (runtime/cost/phone) mint actions whose resolvers/verifiers run
+// real PM2/ADB/cost commands — these stubs fail them honestly and fast so
+// unit tests never touch the live box.
+const opsVerifierDeps = {
+  collectAudit: async () => ({ overall: 'UNKNOWN', rows: [], counts: {} }),
+  runCommand: async () => ({ code: 1, stdout: '' }),
+  adbExec: async () => ({ ok: false, stdout: '' }),
+  fetch: async () => { throw new Error('offline'); },
+};
+const okFetch = async () => ({ ok: true, status: 200, json: async () => ({ tunnels: [] }) });
+
 /** In-memory GoalSystem stand-in: same {getGoal, updateGoal, listGoals} surface. */
 function fakeGoals(seed = []) {
   const store = new Map(seed.map((g) => [g.goalId, { evidence: [], ...g }]));
@@ -272,7 +283,10 @@ describe('mission linkage', () => {
   test('syncHumanActions detects + links + resumes in one pass', async () => {
     const s = new HumanActionService({});
     const goals = fakeGoals([]);
-    const r = await syncHumanActions(s, goals);
+    const r = await syncHumanActions(s, goals, {
+      resolve: { disabled: true }, verify: { disabled: true },
+      staleCheck: { fetch: okFetch },
+    });
     expect(r.detection.checked).toBeGreaterThan(0);
     expect(r.goalScan).toBeTruthy();
     expect(r.resume).toBeTruthy();
@@ -308,16 +322,16 @@ describe('heidi answer', () => {
   });
 
   test('"I did it" re-runs verifiers instead of trusting the claim', async () => {
-    const s = new HumanActionService({});
+    const s = new HumanActionService({ verifierDeps: opsVerifierDeps });
     s.request({ blockerKey: 'test:claim', title: 'Set thing', verifier: { name: 'env-vars', spec: { envNames: ['HA_NEVER_SET_XYZ'] } } });
-    const a = await tryHumanActionAnswer('i did it', { service: s });
+    const a = await tryHumanActionAnswer('i did it', { service: s, resolve: { disabled: true }, verify: { disabled: true } });
     expect(a.text).toMatch(/still failing|manual-attestation/);
   });
 
   test('"check again" verifies and reports check rows', async () => {
-    const s = new HumanActionService({});
+    const s = new HumanActionService({ verifierDeps: opsVerifierDeps });
     s.request({ blockerKey: 'test:again', title: 'Set HA_AGAIN', verifier: { name: 'env-vars', spec: { envNames: ['HA_AGAIN_XYZ'] } } });
-    const a = await tryHumanActionAnswer('check again', { service: s });
+    const a = await tryHumanActionAnswer('check again', { service: s, resolve: { disabled: true }, verify: { disabled: true } });
     expect(a.text).toMatch(/still failing|Verification re-run/);
   });
 
@@ -478,7 +492,7 @@ describe('periodic verification sweep', () => {
   });
 
   test('sweep + resume: a cleared boundary releases the parked goal', async () => {
-    const s = new HumanActionService({});
+    const s = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const goals = fakeGoals([{ goalId: 'g-sweep', title: 'deploy', status: 'in_progress', context: {} }]);
     await attachBlockerToGoal(s, goals, {
       goalId: 'g-sweep', blockerKey: 'test:sweep-goal',
@@ -486,7 +500,10 @@ describe('periodic verification sweep', () => {
     });
     expect((await goals.getGoal('g-sweep')).status).toBe('escalated');
     process.env.HA_SWEEP_GOAL_VAR = '1';
-    const r = await syncHumanActions(s, goals, { verify: { throttleMs: 0 } });
+    const r = await syncHumanActions(s, goals, {
+      verify: { throttleMs: 0 }, resolve: { disabled: true },
+      staleCheck: { fetch: okFetch },
+    });
     delete process.env.HA_SWEEP_GOAL_VAR;
     expect(r.verify.resolved.length).toBe(1);
     expect(r.resume.resumed.length).toBe(1);

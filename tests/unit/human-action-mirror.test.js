@@ -16,6 +16,21 @@ const { HumanActionService } = require('../../lib/human-actions/service');
 const { syncHumanActions } = require('../../lib/human-actions/detector');
 const { mirrorActionRecord, mirrorAllActions } = require('../../lib/human-actions/mirror');
 
+// Ops rules (runtime/cost/phone) mint actions whose resolvers/verifiers run
+// real PM2/ADB/cost commands — stubs keep the sync sweep off the live box.
+const opsDeps = {
+  root: path.join(os.tmpdir(), 'ha-mirror-ops-root'),
+  collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }),
+  runPm2: async () => ({ ok: true, stdout: '' }),
+  runCommand: async () => ({ code: 0, stdout: '' }),
+  adbExec: async () => ({ ok: true, stdout: 'List of devices attached\n\n' }),
+};
+const opsVerifierDeps = {
+  collectAudit: async () => ({ overall: 'UNKNOWN', rows: [], counts: {} }),
+  runCommand: async () => ({ code: 1, stdout: '' }),
+  adbExec: async () => ({ ok: false, stdout: '' }),
+};
+
 let dir;
 let storeFile;
 
@@ -174,15 +189,15 @@ describe('mirrorAllActions — the offline catch-up', () => {
 
 describe('syncHumanActions reports the mirror pass', () => {
   it('pooled sync carries out.mirror; pool-less sync does not run it', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const pool = makePool();
     const env = { envNamePresent: () => false, envValue: () => undefined };
 
-    const pooled = await syncHumanActions(svc, null, { env, pool });
+    const pooled = await syncHumanActions(svc, null, { env, pool, resolverDeps: opsDeps });
     expect(pooled.mirror).toBeTruthy();
     expect(pooled.mirror.synced).toBeGreaterThanOrEqual(0);
 
-    const unpolled = await syncHumanActions(svc, null, { env });
+    const unpolled = await syncHumanActions(svc, null, { env, resolverDeps: opsDeps });
     expect(unpolled.mirror).toBeNull();
   });
 });

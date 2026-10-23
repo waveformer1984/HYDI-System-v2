@@ -38,7 +38,22 @@ const world = { env: {}, configWrites: [] };
 const envFor = () => ({
   envNamePresent: (n) => world.env[n] !== undefined,
   envValue: (n) => world.env[n],
+  // Ops rules (runtime/cost/phone) mint actions whose resolvers/verifiers run
+  // real PM2/ADB/cost commands — stubs keep the sweep off the live box. The
+  // same object doubles as HumanActionService verifierDeps.
+  collectAudit: async () => ({ overall: 'UNKNOWN', rows: [], counts: {} }),
+  runCommand: async () => ({ code: 1, stdout: '' }),
+  adbExec: async () => ({ ok: false, stdout: '' }),
 });
+// Resolver-side stubs — cost.audit persists state under deps.root, so that
+// points at a tmpdir rather than the checkout.
+const opsDeps = {
+  root: path.join(os.tmpdir(), 'ha-orch-ops-root'),
+  collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }),
+  runPm2: async () => ({ ok: true, stdout: '' }),
+  runCommand: async () => ({ code: 0, stdout: '' }),
+  adbExec: async () => ({ ok: true, stdout: 'List of devices attached\n\n' }),
+};
 const fakeGoals = (seed = []) => {
   const store = new Map(seed.map((g) => [g.goalId, { evidence: [], ...g }]));
   return {
@@ -229,7 +244,7 @@ describe('end-to-end orchestration proof', () => {
     const goals = fakeGoals([{ goalId: 'goal_sync', status: 'active', context: {} }]);
     const out = await syncHumanActions(s, goals, {
       env: envFor(), staleCheck: { confirmAttempts: 1 },
-      resolve: { throttleMs: 0, deps: { configPlane: { canAutoModify: () => false, set: () => ({ success: false }) } } },
+      resolve: { throttleMs: 0, deps: { configPlane: { canAutoModify: () => false, set: () => ({ success: false }) }, ...opsDeps } },
       verify: { throttleMs: 0 },
     });
     expect(out.detection).toBeTruthy();
@@ -238,7 +253,7 @@ describe('end-to-end orchestration proof', () => {
     expect(out.goalScan).toBeTruthy();
     // A second identical pass converges — no duplicated minted records.
     const n1 = load().actions.length;
-    await syncHumanActions(s, goals, { env: envFor(), staleCheck: { confirmAttempts: 1 }, resolve: { throttleMs: 0 }, verify: { throttleMs: 0 } });
+    await syncHumanActions(s, goals, { env: envFor(), staleCheck: { confirmAttempts: 1 }, resolve: { throttleMs: 0, deps: opsDeps }, verify: { throttleMs: 0 } });
     expect(load().actions.length).toBe(n1);
   });
 });

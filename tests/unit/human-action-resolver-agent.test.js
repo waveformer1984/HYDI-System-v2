@@ -93,12 +93,29 @@ function makePool() {
 
 const fakePlane = { canAutoModify: () => true, set: () => ({ success: true, verified: true }) };
 
+// Ops rules (runtime/cost/phone) mint actions whose resolvers/verifiers run
+// real PM2/ADB/cost commands — stubs keep every sweep off the live box.
+// cost.audit writes its durable state under deps.root, so that points at a
+// tmpdir rather than the checkout.
+const opsDeps = {
+  root: path.join(os.tmpdir(), 'ha-agent-ops-root'),
+  collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }),
+  runPm2: async () => ({ ok: true, stdout: '' }),
+  runCommand: async () => ({ code: 0, stdout: '' }),
+  adbExec: async () => ({ ok: true, stdout: 'List of devices attached\n\n' }),
+};
+const opsVerifierDeps = {
+  collectAudit: async () => ({ overall: 'UNKNOWN', rows: [], counts: {} }),
+  runCommand: async () => ({ code: 1, stdout: '' }),
+  adbExec: async () => ({ ok: false, stdout: '' }),
+};
+
 describe('resolver agent — governed deployment', () => {
   test('pool present → sweep runs inside a resolver mission (durable agent record)', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const pool = makePool();
     const out = await runHumanActionResolverAgent({
-      service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane },
+      service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane, ...opsDeps },
     });
     expect(out.agent).toBe(RESOLVER_AGENT_ID);
     expect(out.via).toBe('mission');
@@ -119,9 +136,9 @@ describe('resolver agent — governed deployment', () => {
   });
 
   test('mission dedupe: same hour → one coordinator mission, cadence still runs', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const pool = makePool();
-    const opts = { service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane } };
+    const opts = { service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane, ...opsDeps } };
     const first = await runHumanActionResolverAgent(opts);
     const second = await runHumanActionResolverAgent(opts);
     expect(second.missionId).toBe(first.missionId);
@@ -132,7 +149,7 @@ describe('resolver agent — governed deployment', () => {
 
   test('agent budget respected: at capacity → sweep runs inline, no new mission', async () => {
     process.env.HYDI_MAX_ACTIVE_AGENTS = '1';
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const pool = makePool();
     // Seed a RUNNING agent directly — a fresh heartbeat keeps it 'active'
     // under the supervisor's stale/fail classification, so the budget is full.
@@ -143,7 +160,7 @@ describe('resolver agent — governed deployment', () => {
       { id: 'r3', event_type: 'agent_heartbeat', division: 'agents', payload: { agentId: 'agent-busy', missionId: 'mission-busy', step: 'working' }, verdict: 'RECORDED', created_at: t },
     );
     const out = await runHumanActionResolverAgent({
-      service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane },
+      service: svc, pool, env: mkEnv(), resolverDeps: { configPlane: fakePlane, ...opsDeps },
     });
     expect(out.via).toBe('inline');
     expect(out.atCapacity).toBe(true);
@@ -153,9 +170,9 @@ describe('resolver agent — governed deployment', () => {
   });
 
   test('no pool → identical governed sweep inline, agent identity reported', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const out = await runHumanActionResolverAgent({
-      service: svc, env: mkEnv(), resolverDeps: { configPlane: fakePlane },
+      service: svc, env: mkEnv(), resolverDeps: { configPlane: fakePlane, ...opsDeps },
     });
     expect(out.via).toBe('inline');
     expect(out.agent).toBe(RESOLVER_AGENT_ID);
@@ -170,7 +187,7 @@ describe('resolver mission deployment per action (pool path)', () => {
   beforeAll(() => { process.env.HEIDI_ALLOW_EXEC = 'true'; });
   afterAll(() => { delete process.env.HEIDI_ALLOW_EXEC; });
   test('R0 resolver deploys as a deterministic resolver mission; repeat pass dedupes', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const pool = makePool();
     const a = svc.request({
       blockerKey: 'stripe:webhook-processing', type: 'config', title: 't',
@@ -178,7 +195,7 @@ describe('resolver mission deployment per action (pool path)', () => {
       verifier: { name: 'env-vars', spec: { envNames: ['__RESOLVER_TEST_NEVER_SET__'] } },
     }).action;
     const fakePlane = { canAutoModify: () => true, set: () => ({ success: true, verified: true }) };
-    const first = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane }, leaseHeld: true });
+    const first = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane, ...opsDeps }, leaseHeld: true });
     expect(first.attempted[0].outcome).toBe('completed');
     const missions = pool.events.filter((e) => e.event_type === 'agent_mission');
     expect(missions.length).toBe(1);
@@ -189,7 +206,7 @@ describe('resolver mission deployment per action (pool path)', () => {
     const got = svc.get(a.id);
     expect(got.resolver.attempts[0].missionId).toBe(missions[0].payload.missionId);
     // second pass (throttle cleared) → mission dedupe → deferred, no re-execution
-    const second = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane }, leaseHeld: true });
+    const second = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, pool, deps: { configPlane: fakePlane, ...opsDeps }, leaseHeld: true });
     expect(second.deferred.some((d) => d.reason === 'resolver mission already completed for this action')).toBe(true);
     expect(pool.events.filter((e) => e.event_type === 'agent_mission').length).toBe(1);
   });
@@ -197,7 +214,7 @@ describe('resolver mission deployment per action (pool path)', () => {
 
 describe('priority ordering', () => {
   test('revenue/production boundaries resolve before generic ones', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     const order = [];
     const fakePlane = {
       canAutoModify: () => true,
@@ -216,7 +233,7 @@ describe('priority ordering', () => {
       priority: 'high', boundary: { category: 'CREDENTIAL', externalSystem: 'stripe' },
       verifier: { name: 'manual', spec: {} },
     });
-    const out = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, deps: { configPlane: fakePlane } });
+    const out = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0, deps: { configPlane: fakePlane, ...opsDeps } });
     // both R2 (human) — but the order they appear proves deterministic sort:
     const idx = out.human.map((h) => svc.get(h.actionId).blockerKey);
     expect(idx.indexOf('stripe:live-credential')).toBeLessThan(idx.indexOf('other:generic'));
@@ -225,8 +242,8 @@ describe('priority ordering', () => {
 
 describe('inventory — the "no silent abandonment" audit', () => {
   test('every open action has exactly one disposition; unclassified = 0', async () => {
-    const svc = new HumanActionService();
-    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 } });
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
+    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 }, resolverDeps: opsDeps });
     const inv = inventoryBlockers({ service: svc, env: mkEnv() });
     expect(inv.actions.dispositions.UNCLASSIFIED).toBe(0);
     expect(inv.actions.duplicatesPrevented).toBe(true);
@@ -239,15 +256,15 @@ describe('inventory — the "no silent abandonment" audit', () => {
   });
 
   test('ASK chat reports the resolution breakdown — armed vs human-only', async () => {
-    const svc = new HumanActionService();
-    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 } });
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
+    await syncHumanActions(svc, null, { env: mkEnv(), resolve: { throttleMs: 0 }, resolverDeps: opsDeps });
     const ans = await tryHumanActionAnswer('what do you need from me', { service: svc });
     expect(ans.text).toMatch(/autonomous-resolver armed|awaiting human/);
     expect(ans.text).toContain('resolution:');
   });
 
   test('ASK chat never runs a mutation-capable resolver (read-path)', async () => {
-    const svc = new HumanActionService();
+    const svc = new HumanActionService({ verifierDeps: opsVerifierDeps });
     svc.request({
       blockerKey: 'stripe:webhook-processing', type: 'config', title: 't',
       boundary: { category: 'EXTERNAL_SERVICE' },
@@ -256,7 +273,7 @@ describe('inventory — the "no silent abandonment" audit', () => {
     const setCalls = [];
     await tryHumanActionAnswer('what is blocking revenue', {
       service: svc,
-      resolverDeps: { configPlane: { canAutoModify: () => true, set: (...a) => setCalls.push(a) } },
+      resolverDeps: { configPlane: { canAutoModify: () => true, set: (...a) => setCalls.push(a) }, ...opsDeps },
     });
     expect(setCalls.length).toBe(0);
   });
