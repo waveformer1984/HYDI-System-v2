@@ -14,6 +14,8 @@
  *   console.log(result.response, result.provider);
  */
 
+import { paidApiKey } from './paid-llm-gate';
+
 export type InferenceProvider = 'ollama' | 'openvino' | 'claude' | 'none';
 
 export interface InferenceResult {
@@ -96,7 +98,7 @@ async function tryClaude(
   system?: string,
   model = 'claude-3-5-haiku-20241022'
 ): Promise<InferenceResult | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = paidApiKey('ANTHROPIC_API_KEY');
   if (!apiKey || apiKey === 'your-anthropic-key' || apiKey.startsWith('your_')) return null;
 
   try {

@@ -32,6 +32,8 @@
  * handle.
  */
 
+import { paidApiKey } from './cost/paid-llm-gate';
+
 export const EMBEDDING_DIM = 1536;
 
 const OPENAI_EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
@@ -109,7 +111,7 @@ async function fetchWithDeadline(
  */
 export function getEmbeddingProvider(): EmbeddingProvider {
   const explicit = (process.env.EMBEDDING_PROVIDER || '').trim().toLowerCase();
-  if (explicit === 'openai') return process.env.OPENAI_API_KEY ? 'openai' : null;
+  if (explicit === 'openai') return paidApiKey('OPENAI_API_KEY') ? 'openai' : null;
   if (explicit === 'ollama') return 'ollama';
   if (explicit === 'none' || explicit === 'disabled' || explicit === 'off') return null;
 
@@ -127,7 +129,7 @@ function toEmbeddingDim(vector: number[]): number[] {
 }
 
 async function generateOpenAIEmbedding(input: string): Promise<number[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = paidApiKey('OPENAI_API_KEY');
   if (!apiKey) return null;
 
   const response = await fetchWithDeadline(
