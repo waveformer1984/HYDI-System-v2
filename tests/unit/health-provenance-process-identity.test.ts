@@ -95,6 +95,10 @@ describe('HealthProvenanceChecker.checkModule: process-identity loophole', () =>
     checker.canConnect = jest.fn().mockResolvedValue(true);
     checker.findPidsOnPort = jest.fn().mockReturnValue(['1']);
     checker.getProcessInfo = jest.fn().mockReturnValue({ name: 'node.exe', cmdline: 'node --version' });
+    // Hermetic: without this stub the real CIM/ps probe runs against PID 1
+    // on the host — a missing/permission-denied parent read yields 'error'
+    // => UNKNOWN instead of the deterministic UNAVAILABLE verdict.
+    checker.getParentPid = jest.fn().mockReturnValue(null);
 
     const result = await checker.checkModule(PROTOFORGE_CORE);
     expect(result.state).toBe('UNAVAILABLE');

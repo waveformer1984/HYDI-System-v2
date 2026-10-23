@@ -953,6 +953,7 @@ class HeidiAgent {
 
 // Start if run directly
 if (require.main === module) {
+  require('../lib/runtime/provenance').recordProcessProvenance('heidi-agent');
   const agent = new HeidiAgent();
 
   agent.initialize().then(() => {

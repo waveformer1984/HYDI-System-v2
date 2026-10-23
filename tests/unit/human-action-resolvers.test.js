@@ -297,9 +297,23 @@ describe('resolution sweep invariants', () => {
   });
 
   test('full sync wires resolve→verify→resume end-to-end', async () => {
-    const svc = new HumanActionService();
+    // Ops rules (runtime/cost/phone) run REAL external commands when their
+    // verifier/resolver deps aren't injected — this test asserts the sync
+    // wiring, not device state, so every world-reading seam is stubbed.
+    const svc = new HumanActionService({
+      verifierDeps: {
+        collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }),
+        runCommand: async () => ({ code: 0, stdout: '' }),
+        adbExec: async () => ({ ok: true, stdout: 'List of devices attached\n\n' }),
+      },
+    });
     const env = mkEnv({ WEBHOOK_PROCESSING_ENABLED: 'true' }); // boundary already clear
-    const out = await syncHumanActions(svc, null, { env, resolve: { throttleMs: 0 } });
+    const resolverDeps = {
+      runCommand: async () => ({ code: 0, stdout: '' }),
+      adbExec: async () => ({ ok: true, stdout: 'List of devices attached\n\n' }),
+      collectAudit: async () => ({ overall: 'OK', rows: [], counts: {} }),
+    };
+    const out = await syncHumanActions(svc, null, { env, resolve: { throttleMs: 0 }, resolverDeps });
     expect(out.resolve).toBeTruthy();
     // webhook-processing rule inactive (env set) → that action not requested;
     // other rules may legitimately materialize under a sparse env stub
