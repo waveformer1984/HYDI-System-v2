@@ -73,6 +73,7 @@ describe('isPublicPath', () => {
     '/api/revenue/jobs/job_1791683314701_068e95b7/delivery',
     '/api/revenue/jobs/job_1791683314701_068e95b7/download',
     '/services/checkpoint-audit', '/services/model-prep/success', '/pricing', '/billing',
+    '/api/galactic-bytes/checkout', '/galactic-bytes', '/galactic-bytes/success', '/galactic-bytes/cancel',
     '/_next/static/chunks/main.js', '/_next/data/abc/services/model-prep.json',
   ])('%s is public', (p) => expect(isPublicPath(p, env)).toBe(true));
 
