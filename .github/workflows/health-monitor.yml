@@ -69,7 +69,11 @@ jobs:
         npm install --no-save --no-audit --no-fund --ignore-scripts dotenv @supabase/supabase-js
         node test-critical-path.js
 
+    # Retired once Cloudflare cutover is verified: set repo variable
+    # VERCEL_RETIRED=true (Settings → Secrets and variables → Actions →
+    # Variables) and this step skips instead of failing on a dead account.
     - name: Check Vercel environment
+      if: vars.VERCEL_RETIRED != 'true'
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       run: |
