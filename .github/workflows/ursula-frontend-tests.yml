@@ -1,0 +1,45 @@
+name: Ursula Frontend Tests
+
+# apps/ursula-frontend has its own package.json + vitest suite that the root
+# jest config (tests/unit/**) never ran — the missing @testing-library/dom
+# peer went unnoticed because nothing exercised this suite in CI.
+
+on:
+  push:
+    branches: [clean-main]
+    paths:
+      - 'apps/ursula-frontend/**'
+      - '.github/workflows/ursula-frontend-tests.yml'
+  pull_request:
+    paths:
+      - 'apps/ursula-frontend/**'
+      - '.github/workflows/ursula-frontend-tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vitest:
+    name: Ursula frontend vitest suite
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/ursula-frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/ursula-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run vitest suite
+        run: npm test
