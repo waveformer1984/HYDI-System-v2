@@ -5,6 +5,9 @@ const { ApplicationRegistry } = require('../../protoforge/packages/application-r
 
 const PROTO_YI_DIR = path.join(process.cwd(), 'protoforge-applications', 'proto-yi');
 
+// certify() runs the app's real test suite + docs checks; allow for a loaded box.
+jest.setTimeout(120000);
+
 describe('Proto YI Certification', () => {
   test('passes full certification', async () => {
     const certifier = new Certifier({ requireTests: true, requireDocs: true, requirePolicy: false });
