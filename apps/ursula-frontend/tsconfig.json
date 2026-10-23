@@ -28,6 +28,9 @@
       ],
       "@repo/*": [
         "../../*"
+      ],
+      "@supabase/supabase-js": [
+        "./node_modules/@supabase/supabase-js"
       ]
     }
   },

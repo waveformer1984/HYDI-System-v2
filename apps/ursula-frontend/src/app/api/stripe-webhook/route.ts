@@ -7,9 +7,15 @@ import { ensureDeliveries, markOfferPaidFromWebhook } from '@/lib/revenue-engine
 import { getEventBus, getEventRecorder, setEventRecorder } from '@repo/lib/event-bus';
 import { publishCommercialEvent, adaptStripeConnectEvent } from '@repo/lib/commercial/ingress-adapter';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-05-27.dahlia',
-});
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2026-05-27.dahlia',
+    });
+  }
+  return stripeClient;
+}
 
 // Redis for idempotency tracking
 let redis: Redis | null = null;
@@ -235,7 +241,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         console.log('[WEBHOOK] Test mode - parsing event without signature verification');
         event = JSON.parse(body);
       } else {
-        event = stripe.webhooks.constructEvent(body, signature!, process.env.STRIPE_WEBHOOK_SECRET!);
+        event = getStripe().webhooks.constructEvent(body, signature!, process.env.STRIPE_WEBHOOK_SECRET!);
         console.log('[WEBHOOK] Event verified:', event.type);
         console.log('[WEBHOOK] Event ID:', event.id);
       }
