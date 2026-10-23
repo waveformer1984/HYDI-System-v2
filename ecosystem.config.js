@@ -599,10 +599,11 @@ module.exports = {
       watch: false,
       max_memory_restart: '200M',
       min_uptime: '10s',
-      max_restarts: 10,
       restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      // No max_restarts / exp_backoff_restart_delay / kill_timeout: this
+      // entry declares what PM2 actually runs (tunnel was started manually
+      // and is never restarted — a restart rotates the free-tier URL).
       error_file: './logs/pm2-public-tunnel.err.log',
       out_file: './logs/pm2-public-tunnel.out.log',
       merge_logs: true,
