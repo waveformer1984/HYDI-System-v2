@@ -26,14 +26,33 @@ function makeTracesFetch(traces: unknown[] = []) {
 // (Ollama :11434 → OpenVINO :11435 → Claude), so a plain sequential mock
 // feeds Anthropic-shaped JSON to the local providers and misfires.
 // Local providers are stubbed "down"; anthropic.com gets `claudeImpl`.
+// Hostname-exact URL matching — substring matching would also hit
+// lookalike hosts (CodeQL js/incomplete-url-substring-sanitization).
+function hostOf(input: unknown): { host: string; path: string } {
+  try {
+    const u = new URL(String((input as { url?: string })?.url ?? input));
+    return { host: u.hostname, path: u.pathname + u.search };
+  } catch {
+    return { host: '', path: '' };
+  }
+}
+
+function hostMatches(host: string, part: string): boolean {
+  return host === part || host.endsWith(`.${part}`) || host === part.split(':')[0];
+}
+
 function stubFetchByUrl(
   mockFetch: ReturnType<typeof vi.fn>,
   impls: Array<[urlPart: string, impl: () => Promise<unknown> | unknown]>
 ) {
   mockFetch.mockImplementation((input: unknown) => {
     const url = String((input as { url?: string })?.url ?? input);
+    const { host, path } = hostOf(input);
     for (const [part, impl] of impls) {
-      if (url.includes(part)) return typeof impl === 'function' ? (impl as () => Promise<unknown>)() : Promise.resolve(impl);
+      const hit = part.includes('/') ? path.includes(part) : hostMatches(host, part);
+      if (hit || (!host && url.includes(part))) {
+        return typeof impl === 'function' ? (impl as () => Promise<unknown>)() : Promise.resolve(impl);
+      }
     }
     return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
   });
@@ -42,7 +61,10 @@ function stubFetchByUrl(
 function anthropicCalls(mockFetch: ReturnType<typeof vi.fn>): string[] {
   return mockFetch.mock.calls
     .map((c) => String((c[0] as { url?: string })?.url ?? c[0]))
-    .filter((u) => u.includes('anthropic.com'));
+    .filter((u) => {
+      const { host } = hostOf(u);
+      return host === 'anthropic.com' || host.endsWith('.anthropic.com');
+    });
 }
 
 beforeEach(() => {
