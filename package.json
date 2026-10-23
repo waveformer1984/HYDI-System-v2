@@ -75,7 +75,8 @@
     "test:packages": "node --test protoforge/packages/*/tests/*.test.js",
     "test:unit": "npm test",
     "test:local": "jest --config jest.tier2.config.js",
-    "test:all": "npm run test:unit && npm run test:local"
+    "test:all": "npm run test:unit && npm run test:local",
+    "cost:audit": "node scripts/cost-audit.js"
   },
   "keywords": [
     "protoforge",
