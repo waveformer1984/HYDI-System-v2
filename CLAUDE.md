@@ -622,6 +622,13 @@ system kept running because the data plane had already been moved local.
 - Embeddings: Ollama `nomic-embed-text` (`EMBEDDING_PROVIDER=ollama`).
 - Data plane: local Supabase via Docker (`supabase start`) — Postgres +
   pgvector + PostgREST, self-hosted. **Docker Desktop must be running.**
+  Docker runs inside WSL2, so `%USERPROFILE%\.wslconfig` `memory=` must
+  leave room for the whole Supabase stack: keep it at 6GB or more (4GB
+  starved it on 2026-10-23). Docker's data lives in
+  `%LOCALAPPDATA%\Docker\wsl\disk\docker_data.vhdx` and needs free space on
+  C: to grow; with C: nearly full, Docker fails to start on every restart.
+  Supabase analytics (logflare/vector) is disabled in `supabase/config.toml`
+  to save RAM and disk.
 - Execution: `heidi-core`'s mission worker, health observer, and
   `ActionExecutor` never call out to any cloud service.
 
