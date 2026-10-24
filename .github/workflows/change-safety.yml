@@ -1,0 +1,29 @@
+name: Change Safety
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  change-safety:
+    name: Secrets, artifacts, and change size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check pull request changes
+        env:
+          CHANGE_SAFETY_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: >-
+          node scripts/check-change-safety.js
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
