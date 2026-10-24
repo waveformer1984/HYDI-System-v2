@@ -1531,10 +1531,14 @@ MANIFEST_JSON = json.dumps({
 })
 
 SW_JS = """\
-const C='hydi-v2';
+// Network-first: the phone must always get the page hydi.py serves now.
+// The old cache-first worker (cache 'hydi-v2') kept serving a stale page
+// forever, so dashboard fixes never reached the browser. The cache is only
+// an offline fallback. Bump C whenever this strategy changes.
+const C='hydi-v3-netfirst';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(['/','/manifest.json'])).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{if(e.request.url.includes('/api/'))return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{if(res.ok){const cl=res.clone();caches.open(C).then(c=>c.put(e.request,cl))}return res}).catch(()=>caches.match('/'))))});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||e.request.url.includes('/api/'))return;e.respondWith(fetch(e.request).then(res=>{if(res.ok){const cl=res.clone();caches.open(C).then(c=>c.put(e.request,cl))}return res}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/'))))});
 """
 
 # ── CLI ───────────────────────────────────────────────────
