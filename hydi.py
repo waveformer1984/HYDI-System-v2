@@ -293,6 +293,8 @@ def detect_ollama():
         _frank_note_failure()
         return None
 
+OLLAMA_REMOTE_CHAT_TIMEOUT = 120
+
 def ollama_chat(messages):
     """Call Ollama /api/chat. Returns reply string or None."""
     if not OLLAMA_MODEL:
@@ -301,6 +303,9 @@ def ollama_chat(messages):
         "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
+        # Keep the model loaded between messages so the next reply doesn't
+        # pay the cold-load cost again.
+        "keep_alive": "30m",
         "options": {"temperature": 0.7, "num_predict": 512},
     }).encode()
     req = Request(
@@ -308,8 +313,11 @@ def ollama_chat(messages):
         data=payload,
         headers={"Content-Type": "application/json"},
     )
+    # A remote model (Frank over the tailnet) may need to load into memory on
+    # the first request; give it room before falling back.
+    timeout = OLLAMA_REMOTE_CHAT_TIMEOUT if ollama_is_remote() else 60
     try:
-        with urlopen(req, timeout=60) as r:
+        with urlopen(req, timeout=timeout) as r:
             result = json.loads(r.read())
         return result.get("message", {}).get("content", "").strip()
     except Exception:
@@ -923,7 +931,7 @@ def hydi_reply_ai(msg, session_id="default"):
                 CHAT_HISTORY[session_id] = history[-MAX_HISTORY:]
             return ai
 
-    return _scripted_fallback(msg)
+    return _scripted_fallback(msg, ai_failed=ai_available)
 
 def _ai_aside(msg, session_id):
     """One optional line under a verbatim command result. The result is not sent to paraphrase."""
@@ -1027,8 +1035,12 @@ def _handle_command(msg):
     return None  # not a command
 
 
-def _scripted_fallback(msg):
-    """Keyword-based replies when Ollama is unavailable."""
+AI_NO_ANSWER = ("The AI model didn't answer this time (Frank's model may still be loading). "
+                "Try again in a minute.")
+NO_AI_BACKEND = "No AI model is reachable right now, so this is a basic scripted reply."
+
+def _scripted_fallback(msg, ai_failed=False):
+    """Keyword-based replies when no AI backend answered."""
     t = msg.lower()
 
     if any(w in t for w in ("status", "health", "how are")):
@@ -1095,7 +1107,7 @@ def _scripted_fallback(msg):
     return (
         f"Processing: \"{msg[:60]}{'...' if len(msg)>60 else ''}\"\n"
         f"{up} fleet services running. Type 'help' for commands.\n"
-        "(Tip: install Ollama for intelligent AI replies)"
+        f"({AI_NO_ANSWER if ai_failed else NO_AI_BACKEND})"
     )
 
 
