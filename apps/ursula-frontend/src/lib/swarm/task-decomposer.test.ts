@@ -21,6 +21,7 @@ function makeClaudeFetch(text: string, ok = true) {
 
 beforeEach(() => {
   vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test');
+  vi.stubEnv('HYDI_ALLOW_PAID_LLM', 'true');
   vi.stubGlobal('fetch', vi.fn());
 });
 
