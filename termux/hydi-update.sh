@@ -66,6 +66,61 @@ if ! git -C "$root" pull --ff-only origin clean-main; then
   finish_failed "git pull --ff-only failed; services were not restarted"
 fi
 
+# Self-heal HYDI_PHONE_READ_TOKEN via /api/phone/pair — never prints the token.
+# Re-pairs when the token is missing or the stored one earns a 401.
+pair_base() {
+  case $1 in
+    *://*) printf '%s' "$1" ;;
+    *:*) printf 'http://%s' "$1" ;;
+    *) printf 'http://%s:3000' "$1" ;;
+  esac
+}
+
+sync_phone_read_token() {
+  env_file="$HOME/.hydi/thin-client.env"
+  [ -f "$env_file" ] || return 0
+  # shellcheck disable=SC1090
+  set -a; . "$env_file"; set +a
+  human=${HYDI_BOARD_HUMAN_TOKEN:-}
+  hosts=${FRANK_HOSTS:-${FRANK_IP:-}}
+  if [ -z "$human" ] || [ -z "$hosts" ]; then
+    return 0
+  fi
+  tok=${HYDI_PHONE_READ_TOKEN:-}
+  need_pair=0
+  if [ -z "$tok" ]; then
+    need_pair=1
+  else
+    for h in $hosts; do
+      base=$(pair_base "$h")
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        -H "Authorization: Bearer $tok" "$base/api/phone/revenue-summary" 2>/dev/null) || code=000
+      if [ "$code" = "200" ]; then break; fi
+      if [ "$code" = "401" ]; then need_pair=1; fi
+    done
+  fi
+  if [ "$need_pair" -eq 0 ]; then
+    return 0
+  fi
+  for h in $hosts; do
+    base=$(pair_base "$h")
+    body=$(curl -sf --max-time 5 -H "Authorization: Bearer $human" "$base/api/phone/pair" 2>/dev/null) || continue
+    new=$(printf '%s' "$body" | sed -n 's/.*"token"[ ]*:[ ]*"\([^"]*\)".*/\1/p')
+    if [ -n "$new" ] && [ "$new" != "$body" ]; then
+      grep -v '^HYDI_PHONE_READ_TOKEN=' "$env_file" > "$env_file.new" 2>/dev/null || true
+      printf 'HYDI_PHONE_READ_TOKEN=%s\n' "$new" >> "$env_file.new"
+      chmod 600 "$env_file.new"
+      mv "$env_file.new" "$env_file"
+      printf 'phone read token synced via pair endpoint\n'
+      return 0
+    fi
+  done
+  printf 'note: could not pair for a fresh phone read token; continuing\n'
+  return 0
+}
+
+sync_phone_read_token
+
 if ! command -v sv >/dev/null 2>&1; then
   finish_failed "sv is unavailable (install termux-services)"
 fi
