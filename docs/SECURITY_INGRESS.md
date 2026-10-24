@@ -27,38 +27,37 @@ Without a gate, that tunnel publishes everything heidi-web serves.
 
 Tailscale Funnel uses the same `*.ts.net` host as tailnet serve, but its
 forwarded hop is a public IP, so Funnel traffic is treated as public too.
+Any `Tailscale-Funnel*` header also forces the public classification, even
+if every visible address is internal.
 
 **Limit.** A client that reaches port 3000 directly with no proxy in
 between (an open router port forward) could claim `Host: localhost`. Don't
 port-forward 3000. Put a public URL in front of heidi-web only through a
 proxy that sets `X-Forwarded-For`, such as ngrok or Cloudflare Tunnel.
 
-## Public allowlist (default)
+## Public allowlist (maximum)
 
-- Stripe webhooks: `/api/webhooks/stripe`, `/api/stripe-connect-webhook`,
-  `/api/billing/webhook`
-- Customer billing: `/api/billing/{catalog,checkout,account,portal,subscription,ai/complete}`
-  (not `/api/billing/admin/*`)
-- Customer jobs: `POST /api/revenue/jobs`, `/api/revenue/jobs/<id>`,
-  `/api/revenue/jobs/<id>/{delivery,download}` (not `approve` or `reconcile`)
-- Customer pages: `/services/*`, `/pricing`, `/billing`, `/success`,
-  `/cancel`, `/signup`
-- `/api/ping`, `/_next/*` build assets, `/favicon.ico`, `/robots.txt`
+- Galactic Bytes pages: `/galactic-bytes` and `/galactic-bytes/*`
+- Galactic Bytes Checkout: `/api/galactic-bytes/checkout`
+- Its signature-verified Stripe endpoint: `/api/billing/webhook`
+- `/_next/*` build assets, `/favicon.ico`, and `/robots.txt`
 
 Everything else is blocked from the outside, including `/`, `/heidi`,
-`/api/chat`, `/api/health`, status, devices, approvals, proposals, the
-revenue service switch and credentials.
+`/board`, `/api/chat`, `/api/phone/*`, `/api/mobile-ops/*`, billing admin,
+status, devices, approvals, proposals, the revenue service switch and
+credentials.
 
 ## Settings
 
 | Variable | Effect |
 |---|---|
-| `HYDI_PUBLIC_PATHS` | Replaces the allowlist. Comma-separated; an entry ending in `/` is a prefix, otherwise an exact path. |
+| `HYDI_PUBLIC_PATHS` | May narrow the hard-coded maximum allowlist. It cannot expose another path. |
 | `HYDI_TRUSTED_HOSTS` | Extra host names treated as internal, for example a LAN name. |
-| `HYDI_INGRESS_GATE=off` | Disables the gate. Not recommended. |
 
 ## Rules that go with it
 
-- No agent may make HYDI public. `protoforge:stable-public-url` is an owner
-  decision (R2), and the old Tailscale Funnel resolver is removed.
-- Never enable Tailscale Funnel on heidi-pc (`docs/TAILSCALE.md`).
+- Funnel is enabled or disabled only by a human running
+  `scripts/frank-funnel.ps1` (or its printed command). Nothing installs it as
+  an automatic startup task.
+- Funnel publishes the narrow Galactic Bytes surface, never HYDI operator
+  routes. Tailnet Serve remains the private access path.

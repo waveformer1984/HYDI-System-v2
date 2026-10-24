@@ -8,7 +8,8 @@ Set these in Frank's protected runtime environment; never commit their values:
 
 - `STRIPE_SECRET_KEY=sk_test_...` initially; replace with the live secret key only at go-live.
 - `BILLING_STRIPE_WEBHOOK_SECRET=whsec_...` from the webhook endpoint for the same Stripe mode.
-- `BILLING_APP_URL=https://<customer-facing-origin>` with no trailing slash.
+- `BILLING_APP_URL=https://heidi-pc.tailc50af2.ts.net` (the Tailscale Funnel
+  HTTPS origin, with no trailing slash).
 - `GALACTIC_BYTES_STRIPE_PRICE_ID_TEST=price_...` for the test product.
 - `GALACTIC_BYTES_STRIPE_PRICE_ID_LIVE=price_...` for the live product.
 - `HYDI_BOARD_TOKEN_PROTOFORGE` so failed-closed manual-delivery notices can reach Forge Board `#ops`.
@@ -19,13 +20,26 @@ Leave `ALLOW_LIVE_STRIPE` unset in test mode. The server refuses a live Stripe k
 ## Stripe Dashboard
 
 1. In **Test mode**, create a Galactic Bytes product and a one-time USD Price. Copy its `price_...` ID into `GALACTIC_BYTES_STRIPE_PRICE_ID_TEST`.
-2. Add `https://<customer-facing-origin>/api/billing/webhook` as a test webhook endpoint.
-3. Subscribe it to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.async_payment_failed`.
-4. Copy that endpoint's test signing secret into `BILLING_STRIPE_WEBHOOK_SECRET`.
-5. Build/restart the web app, visit `/galactic-bytes`, and complete a test purchase. Confirm one completed row in `checkout_sessions`, one processed row in `billing_webhook_events`, and one `NEW ORDER — deliver manually` post in Forge Board `#ops`.
-6. Switch the Dashboard to **Live mode**. Create the live product and a **$1.00 one-time USD Price** for the first controlled sale. Put its ID in `GALACTIC_BYTES_STRIPE_PRICE_ID_LIVE`.
-7. Create the same webhook endpoint in Live mode, select the same events, and manually replace `BILLING_STRIPE_WEBHOOK_SECRET` with its live signing secret.
-8. Jordan manually replaces `STRIPE_SECRET_KEY` with the live key and sets `ALLOW_LIVE_STRIPE=true`, then rebuilds/restarts the web app.
+2. Manually enable the HTTPS origin on Frank with
+   `powershell -ExecutionPolicy Bypass -File scripts\frank-funnel.ps1`.
+   The script runs `tailscale funnel --bg --https=443 http://127.0.0.1:3000`;
+   it is never installed as an automatic startup task.
+3. Add `https://heidi-pc.tailc50af2.ts.net/api/billing/webhook` as a test
+   webhook endpoint.
+4. Subscribe it to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.async_payment_failed`.
+5. Copy that endpoint's test signing secret into `BILLING_STRIPE_WEBHOOK_SECRET`.
+6. Build/restart the web app, visit
+   `https://heidi-pc.tailc50af2.ts.net/galactic-bytes`, and complete a test
+   purchase. Confirm one completed row in `checkout_sessions`, one processed
+   row in `billing_webhook_events`, and one `NEW ORDER — deliver manually`
+   post in Forge Board `#ops`.
+7. Switch the Dashboard to **Live mode**. Create the live product and a **$1.00 one-time USD Price** for the first controlled sale. Put its ID in `GALACTIC_BYTES_STRIPE_PRICE_ID_LIVE`.
+8. Create the same webhook endpoint in Live mode, select the same events, and manually replace `BILLING_STRIPE_WEBHOOK_SECRET` with its live signing secret.
+9. Jordan manually replaces `STRIPE_SECRET_KEY` with the live key and sets `ALLOW_LIVE_STRIPE=true`, then rebuilds/restarts the web app.
+
+Use `powershell -ExecutionPolicy Bypass -File scripts\frank-funnel.ps1 --off`
+to remove only the public HTTPS Funnel listener. This does not disable
+tailnet access.
 
 ## $1 live self-test
 

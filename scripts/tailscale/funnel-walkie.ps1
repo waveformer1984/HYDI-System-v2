@@ -10,13 +10,14 @@
     2. Checks the walkie server answers on http://127.0.0.1:8787/healthz.
        (Start it first; see apps\walkie\docs\QR_JOIN.md.)
     3. Runs `tailscale funnel --bg --https=8443 http://127.0.0.1:8787`.
-       Only :8443 becomes public. The 443 -> :3000 heidi-web serve and the
-       :8470 MCP serve stay tailnet-only, and this script refuses to continue
-       if Funnel is found on any port other than 8443.
+       Port :8443 and the separately approved Galactic Bytes Funnel on :443
+       are the only public listeners this script accepts. The :8470 MCP serve
+       stays tailnet-only.
     4. Prints the PUBLIC_BASE_URL to put in apps\walkie\server\.env.
 
-    Owner approved public exposure of the walkie backend (2026-10-13). Never
-    point Funnel at heidi-web (:3000) or the MCP server (:3470).
+    Owner approved public exposure of the walkie backend (2026-10-13) and the
+    ingress-gated Galactic Bytes surface on heidi-web (2026-10-24). Never point
+    Funnel at the MCP server (:3470).
 
 .PARAMETER Remove
     Turn the public 8443 Funnel off. Leaves every other serve alone.
@@ -78,7 +79,7 @@ $publicPorts = @()
 if ($status.AllowFunnel) {
     foreach ($p in $status.AllowFunnel.PSObject.Properties) { if ($p.Value) { $publicPorts += ($p.Name -split ':')[-1] } }
 }
-$unexpected = $publicPorts | Where-Object { $_ -ne "$FunnelPort" }
+$unexpected = $publicPorts | Where-Object { $_ -notin @("$FunnelPort", '443') }
 if ($unexpected) {
     & tailscale funnel --https=$FunnelPort off 2>$null
     throw "Funnel is also public on port(s) $($unexpected -join ', '). Turned :$FunnelPort back off. Fix with 'tailscale funnel status' before retrying."

@@ -1,6 +1,12 @@
 'use strict';
 
-const { decideIngress, isInternalIp, isPublicPath, classify } = require('../../lib/security/ingressGate');
+const {
+  decideIngress,
+  isInternalIp,
+  isPublicPath,
+  classify,
+  hasFunnelHeader,
+} = require('../../lib/security/ingressGate');
 
 const env = {};
 const NGROK = 'evelyne-unpreying-angrily.ngrok-free.dev';
@@ -46,6 +52,16 @@ describe('classify', () => {
     expect(classify({ host: 'heidi-pc.tailc50af2.ts.net', 'x-forwarded-for': '8.8.8.8' }, env).internal).toBe(false);
   });
 
+  test('an explicit Funnel header is external even when every visible hop is internal', () => {
+    const headers = {
+      host: 'localhost:3000',
+      'x-forwarded-for': '100.87.215.90',
+      'Tailscale-Funnel-Request': '1',
+    };
+    expect(hasFunnelHeader(headers)).toBe(true);
+    expect(classify(headers, env)).toMatchObject({ internal: false, reason: 'Tailscale Funnel request' });
+  });
+
   test('RFC 7239 Forwarded and X-Real-IP are honoured', () => {
     expect(classify({ host: 'localhost', forwarded: 'for=8.8.8.8;proto=https' }, env).internal).toBe(false);
     expect(classify({ host: 'localhost', forwarded: 'for="[2600:1700::1]"' }, env).internal).toBe(false);
@@ -67,38 +83,41 @@ describe('classify', () => {
 
 describe('isPublicPath', () => {
   test.each([
-    '/api/ping', '/api/webhooks/stripe', '/api/stripe-connect-webhook', '/api/billing/webhook',
-    '/api/billing/checkout', '/api/billing/catalog', '/api/revenue/jobs', '/api/revenue/jobs/',
-    '/api/revenue/jobs/job_1791683314701_068e95b7',
-    '/api/revenue/jobs/job_1791683314701_068e95b7/delivery',
-    '/api/revenue/jobs/job_1791683314701_068e95b7/download',
-    '/services/checkpoint-audit', '/services/model-prep/success', '/pricing', '/billing',
-    '/api/galactic-bytes/checkout', '/galactic-bytes', '/galactic-bytes/success', '/galactic-bytes/cancel',
-    '/_next/static/chunks/main.js', '/_next/data/abc/services/model-prep.json',
+    '/api/billing/webhook', '/api/galactic-bytes/checkout',
+    '/galactic-bytes', '/galactic-bytes/', '/galactic-bytes/success', '/galactic-bytes/cancel',
+    '/_next/static/chunks/main.js', '/_next/image', '/favicon.ico', '/robots.txt',
   ])('%s is public', (p) => expect(isPublicPath(p, env)).toBe(true));
 
   test.each([
     '/', '/heidi', '/api/chat', '/api/chat/route', '/api/health', '/api/devices', '/api/heartbeat',
     '/api/status/system', '/api/mobile-status', '/api/proposals', '/api/actions', '/api/coo',
+    '/api/board', '/api/phone/pair', '/api/phone/revenue-summary', '/api/mobile-ops/fabric',
     '/api/revenue/service-switch', '/api/revenue/first-sale-readiness',
+    '/api/ping', '/api/webhooks/stripe', '/api/stripe-connect-webhook',
+    '/api/billing/checkout', '/api/billing/catalog', '/api/revenue/jobs',
     '/api/revenue/jobs/job_1/approve', '/api/revenue/jobs/job_1/reconcile',
     '/api/billing/admin/revenue', '/api/heidi-mobile/session', '/api/secure-credential-input',
     '/billing-admin', '/ops', '/coo', '/console', '/hydi-chat.html', '/revenue-dashboard.html',
+    '/services/checkpoint-audit', '/services/model-prep/success', '/pricing', '/billing',
     '/services/../api/chat', '/services/%2e%2e/api/chat', '/api/revenue/jobs/a/../../chat',
     '/services//x', '/pricing.html',
   ])('%s is not public', (p) => expect(isPublicPath(p, env)).toBe(false));
 
-  test('HYDI_PUBLIC_PATHS replaces the default allowlist', () => {
-    const e = { HYDI_PUBLIC_PATHS: '/api/webhooks/stripe,/services/' };
-    expect(isPublicPath('/api/webhooks/stripe', e)).toBe(true);
-    expect(isPublicPath('/services/x', e)).toBe(true);
-    expect(isPublicPath('/api/revenue/jobs', e)).toBe(false);
-    expect(isPublicPath('/api/revenue/jobs/job_1', e)).toBe(false);
+  test('HYDI_PUBLIC_PATHS can narrow but never widen the hard-coded maximum', () => {
+    const e = { HYDI_PUBLIC_PATHS: '/api/billing/webhook,/api/chat' };
+    expect(isPublicPath('/api/billing/webhook', e)).toBe(true);
+    expect(isPublicPath('/api/chat', e)).toBe(false);
+    expect(isPublicPath('/galactic-bytes', e)).toBe(false);
   });
 });
 
 describe('decideIngress', () => {
   const pub = { host: NGROK, 'x-forwarded-for': '173.174.244.48' };
+  const funnel = {
+    host: 'heidi-pc.tailc50af2.ts.net',
+    'x-forwarded-for': '173.174.244.48',
+    'tailscale-funnel-request': '1',
+  };
 
   test('public request to an operator route is refused', () => {
     expect(decideIngress(req('/api/chat', pub), env)).toMatchObject({ allow: false, internal: false });
@@ -106,17 +125,49 @@ describe('decideIngress', () => {
     expect(decideIngress(req('/heidi', pub), env).allow).toBe(false);
   });
 
-  test('public request to a customer/Stripe route is allowed', () => {
-    expect(decideIngress(req('/api/webhooks/stripe', pub), env)).toMatchObject({ allow: true, internal: false });
-    expect(decideIngress(req('/services/checkpoint-audit', pub), env).allow).toBe(true);
+  test.each([
+    '/galactic-bytes',
+    '/galactic-bytes/success',
+    '/galactic-bytes/cancel',
+    '/api/galactic-bytes/checkout',
+    '/api/billing/webhook',
+    '/_next/static/chunks/main.js',
+    '/_next/image',
+    '/favicon.ico',
+    '/robots.txt',
+  ])('Funnel allows the Galactic Bytes public surface: %s', (path) => {
+    expect(decideIngress(req(path, funnel), env)).toMatchObject({ allow: true, internal: false });
   });
 
-  test('internal requests reach everything', () => {
-    expect(decideIngress(req('/api/chat', { host: 'localhost:3000' }), env)).toMatchObject({ allow: true, internal: true });
-    expect(decideIngress(req('/heidi', { host: 'heidi-pc.tailc50af2.ts.net', 'x-forwarded-for': '100.87.215.90' }), env).allow).toBe(true);
+  test.each([
+    '/', '/board', '/api/board', '/heidi', '/ops', '/api/chat',
+    '/api/phone/pair', '/api/phone/revenue-summary',
+    '/api/mobile-ops/fabric', '/api/mobile-ops/jobs', '/api/mobile-ops/run',
+    '/api/billing/admin/revenue', '/billing-admin', '/api/actions',
+    '/api/revenue/jobs', '/services/model-prep', '/api/health',
+  ])('Funnel denies private route even if it has a valid application token: %s', (path) => {
+    const headers = { ...funnel, authorization: 'Bearer valid-but-irrelevant' };
+    expect(decideIngress(req(path, headers), env)).toMatchObject({ allow: false, internal: false });
   });
 
-  test('HYDI_INGRESS_GATE=off disables the gate', () => {
-    expect(decideIngress(req('/api/chat', pub), { HYDI_INGRESS_GATE: 'off' }).allow).toBe(true);
+  test.each([
+    '/board', '/api/phone/pair', '/api/phone/revenue-summary',
+    '/api/mobile-ops/fabric', '/api/billing/admin/revenue', '/heidi',
+  ])('direct tailnet requests remain internal and allowed: %s', (path) => {
+    const tailnet = { host: 'heidi-pc.tailc50af2.ts.net', 'x-forwarded-for': '100.87.215.90' };
+    expect(decideIngress(req(path, tailnet), env)).toMatchObject({ allow: true, internal: true });
+  });
+
+  test('/api/phone/pair is refused when Funnel forwarded headers reach a loopback host', () => {
+    const headers = {
+      host: 'localhost:3000',
+      'x-forwarded-for': '100.87.215.90',
+      'tailscale-funnel': 'true',
+    };
+    expect(decideIngress(req('/api/phone/pair', headers), env)).toMatchObject({ allow: false, internal: false });
+  });
+
+  test('HYDI_INGRESS_GATE=off cannot expose a private route to public ingress', () => {
+    expect(decideIngress(req('/api/chat', pub), { HYDI_INGRESS_GATE: 'off' }).allow).toBe(false);
   });
 });
