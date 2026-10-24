@@ -9,7 +9,10 @@ const {
   LOCK_STALE_MS,
   acquireLock,
   cmdNeedsShell,
+  externalAppNames,
   lockIsStale,
+  NEVER_RESTART,
+  pm2AppNames,
   parseMergedPrTitles,
   readAlertState,
   runAutoDeploy,
@@ -147,6 +150,7 @@ describe('Frank auto-deploy', () => {
           { name: 'heidi-assessment-crew', pm2_env: { status: 'stopped' } },
           { name: 'heidi-errored', pm2_env: { status: 'errored' } },
           { name: APP_NAME, pm2_env: { status: 'online' } },
+          { name: 'hydi-public-tunnel', pm2_env: { status: 'online' } },
         ]));
       }
       if (key === 'pm2.cmd restart heidi-web heidi-mobile-chat heidi-core --update-env') return ok();
@@ -356,5 +360,52 @@ describe('Frank auto-deploy', () => {
       'ordinary commit\n\nbody\n\x1e' +
       'Merge pull request #11 from b\n\nSecond title\n\x1e',
     )).toEqual(['#10 First title', '#11 Second title']);
+  });
+});
+
+describe('Frank auto-deploy restart set', () => {
+  const jlist = (apps) => jest.fn(async () => ok(JSON.stringify(apps)));
+
+  it('never restarts the ngrok tunnel, even with no ecosystem config', async () => {
+    expect(NEVER_RESTART).toContain('hydi-public-tunnel');
+    const run = jlist([
+      { name: 'heidi-web', pm2_env: { status: 'online' } },
+      { name: 'hydi-public-tunnel', pm2_env: { status: 'online' } },
+    ]);
+    const names = await pm2AppNames(run, path.join(tmpDir(), 'missing-root'), 'linux');
+    expect(names).toEqual(['heidi-web']);
+  });
+
+  it('reads external:true apps from ecosystem.config.js and skips them', () => {
+    const loader = () => ({
+      apps: [
+        { name: 'heidi-web' },
+        { name: 'stripe-listener', external: true },
+        { name: 'other-binary', external: true },
+        { name: 'not-external', external: 'yes' },
+      ],
+    });
+    expect(externalAppNames('/repo', loader)).toEqual(['stripe-listener', 'other-binary']);
+  });
+
+  it('treats an unreadable ecosystem config as no extra externals', () => {
+    expect(externalAppNames('/repo', () => { throw new Error('boom'); })).toEqual([]);
+    expect(externalAppNames('/repo', () => null)).toEqual([]);
+  });
+
+  it('skips declared external apps alongside itself and stopped apps', async () => {
+    const run = jlist([
+      { name: 'heidi-web', pm2_env: { status: 'online' } },
+      { name: 'stripe-listener', pm2_env: { status: 'online' } },
+      { name: APP_NAME, pm2_env: { status: 'online' } },
+      { name: 'heidi-assessment-crew', pm2_env: { status: 'stopped' } },
+    ]);
+    const skip = new Set([APP_NAME, ...NEVER_RESTART, 'stripe-listener']);
+    expect(await pm2AppNames(run, '/repo', 'linux', skip)).toEqual(['heidi-web']);
+  });
+
+  it('the real ecosystem.config.js declares the tunnel as external', () => {
+    const root = path.resolve(__dirname, '..', '..');
+    expect(externalAppNames(root)).toContain('hydi-public-tunnel');
   });
 });

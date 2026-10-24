@@ -9,6 +9,25 @@ Set these in Frank's protected runtime environment; never commit their values:
 - `STRIPE_SECRET_KEY=sk_test_...` initially; replace with the live secret key only at go-live.
 - `BILLING_STRIPE_WEBHOOK_SECRET=whsec_...` from the webhook endpoint for the same Stripe mode.
 - `BILLING_APP_URL=https://<customer-facing-origin>` with no trailing slash.
+
+### The public origin (ngrok)
+
+The customer-facing origin is the ngrok tunnel PM2 runs as `hydi-public-tunnel`
+(`ngrok http 3000`, declared `external: true` in `ecosystem.config.js`). The
+ingress gate (`docs/SECURITY_INGRESS.md`) limits public traffic to the
+checkout pages, `/api/galactic-bytes/checkout` and the Stripe webhooks;
+everything else answers 404. Tailscale Funnel stays off for heidi-pc.
+
+A free ngrok URL changes whenever the tunnel restarts, which breaks the
+Stripe webhook and `BILLING_APP_URL`. Before go-live:
+
+1. In the ngrok dashboard, claim the account's free static domain.
+2. Point the PM2 entry at it: `args: 'http 3000 --url=https://<static-domain> --log=stdout'`,
+   then `pm2 delete hydi-public-tunnel && pm2 start ecosystem.config.js --only hydi-public-tunnel && pm2 save`.
+3. Use `https://<static-domain>` as the customer-facing origin below.
+
+`frank-auto-deploy` never restarts `hydi-public-tunnel` or any other
+`external: true` app, so deploys don't rotate the URL.
 - `GALACTIC_BYTES_STRIPE_PRICE_ID_TEST=price_...` for the test product.
 - `GALACTIC_BYTES_STRIPE_PRICE_ID_LIVE=price_...` for the live product.
 - `HYDI_BOARD_TOKEN_PROTOFORGE` so failed-closed manual-delivery notices can reach Forge Board `#ops`.
