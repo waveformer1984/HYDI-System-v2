@@ -144,16 +144,47 @@ function parseMergedPrTitles(raw) {
     }).filter(Boolean);
 }
 
-async function pm2AppNames(run, root, platform) {
+// Apps a deploy must never restart even when online. The ngrok tunnel is
+// external (no repo code to reload) and a restart rotates its free-tier
+// public URL, which breaks the Stripe webhook and BILLING_APP_URL.
+const NEVER_RESTART = Object.freeze(['hydi-public-tunnel']);
+
+function loadEcosystemFresh(file) {
+  delete require.cache[require.resolve(file)];
+  return require(file);
+}
+
+/**
+ * Names of apps declared `external: true` in ecosystem.config.js (binaries
+ * outside this repo — a deploy has nothing to reload in them). Read fresh
+ * after the pull so a newly declared external app is honoured. A config
+ * that can't be read yields only the built-in NEVER_RESTART list.
+ */
+function externalAppNames(root, loader = loadEcosystemFresh) {
+  try {
+    const config = loader(path.join(root, 'ecosystem.config.js'));
+    const apps = (config && Array.isArray(config.apps)) ? config.apps : [];
+    return apps.filter((app) => app && app.external === true && app.name).map((app) => app.name);
+  } catch {
+    return [];
+  }
+}
+
+function skippedApps(root, loader) {
+  return new Set([APP_NAME, ...NEVER_RESTART, ...externalAppNames(root, loader)]);
+}
+
+async function pm2AppNames(run, root, platform, skip = skippedApps(root)) {
   const pm2 = executable('pm2', platform);
   const result = await mustRun(run, pm2, ['jlist'], { cwd: root, timeout: 30_000 });
   let apps;
   try { apps = JSON.parse(result.stdout); } catch { throw new Error('pm2 jlist returned invalid JSON'); }
   // Restart only apps that are actually online: stopped one-shots (e.g. the
-  // cron-fired assessment crew) must not be resurrected, and this process
-  // must never restart itself.
+  // cron-fired assessment crew) must not be resurrected, this process must
+  // never restart itself, and external apps (the ngrok tunnel) are left
+  // alone.
   return [...new Set((apps || [])
-    .filter((app) => app && app.name && app.name !== APP_NAME && app.pm2_env && app.pm2_env.status === 'online')
+    .filter((app) => app && app.name && !skip.has(app.name) && app.pm2_env && app.pm2_env.status === 'online')
     .map((app) => app.name))];
 }
 
@@ -383,6 +414,9 @@ module.exports = {
   INTERVAL_MS,
   LOCK_STALE_MS,
   HEALTH_CHECKS,
+  NEVER_RESTART,
+  externalAppNames,
+  pm2AppNames,
   executable,
   cmdNeedsShell,
   pidAlive,
