@@ -102,7 +102,7 @@
     "jsonwebtoken": "^9.0.3",
     "next": "^16.4.1",
     "node-fetch": "^2.7.0",
-    "nodemailer": "^10.0.10",
+    "nodemailer": "^10.1.4",
     "ollama": "^0.6.3",
     "pg": "^8.23.1",
     "puppeteer-core": "^25.12.0",
