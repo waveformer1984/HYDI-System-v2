@@ -1,0 +1,15 @@
+{
+  "id": "med-spa",
+  "search_terms": ["medical spa", "aesthetic clinic", "laser skin clinic"],
+  "business_categories": ["spa", "skin_care_clinic"],
+  "osm_tags": [["leisure", "spa"], ["healthcare", "clinic"], ["shop", "beauty"]],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_10_300", "weight": 16},
+    {"id": "no_online_booking", "weight": 20},
+    {"id": "has_public_email", "weight": 12},
+    {"id": "mentions_consultation", "weight": 12}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Independent med spas need repeatable consultation demand for high-value treatments without relying only on social algorithms."
+}
