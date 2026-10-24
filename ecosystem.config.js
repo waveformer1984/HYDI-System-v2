@@ -422,6 +422,11 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         EXECUTION_FABRIC_PERSIST: 'postgres',
+        // Pinned explicitly: a pm2 daemon or shell-inherited HOSTNAME
+        // (e.g. Git Bash's HOSTNAME=DESKTOP-*) would otherwise redirect
+        // `next start` to bind that name instead of every interface.
+        HOSTNAME: '0.0.0.0',
+        PORT: '3000',
       },
       env_production: {
         NODE_ENV: 'production',
