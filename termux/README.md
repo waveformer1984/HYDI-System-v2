@@ -62,23 +62,17 @@ FRANK_HOSTS=192.168.86.178,100.118.182.126
 over when Wi-Fi is unavailable. `FRANK_IP` remains the single-host fallback
 when `FRANK_HOSTS` is unset.
 
-### Read-only revenue token
+### Automatic read-only revenue-token pairing
 
-After creating `HYDI_PHONE_READ_TOKEN` on Frank, transfer it directly to the
-phone (never through chat), then use a hidden prompt in Termux:
+Keep `HYDI_BOARD_HUMAN_TOKEN` and `FRANK_HOSTS` in the phone's mode-600
+`~/.hydi/thin-client.env`. `hydi-update` uses that existing human board token
+to request `HYDI_PHONE_READ_TOKEN` directly from the first reachable Frank
+address when the phone token is absent or rejected. It atomically replaces the
+token line, keeps the file mode at 600, and never prints either token.
 
-```bash
-mkdir -p ~/.hydi && chmod 700 ~/.hydi
-touch ~/.hydi/thin-client.env && chmod 600 ~/.hydi/thin-client.env
-read -rs -p "HYDI_PHONE_READ_TOKEN: " T; printf "\n"
-sed -i '/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\{0,1\}HYDI_PHONE_READ_TOKEN=/d' ~/.hydi/thin-client.env
-printf 'HYDI_PHONE_READ_TOKEN=%s\n' "$T" >> ~/.hydi/thin-client.env
-unset T
-sv restart hydi-daemon
-```
-
-The token grants only the livemode revenue-summary read on Frank. It is not a
-Stripe key and the phone never calls Stripe directly.
+Frank's pairing route accepts only direct loopback, Wi-Fi LAN, or Tailscale
+socket addresses. The token grants only the livemode revenue-summary read on
+Frank; it is not a Stripe key and the phone never calls Stripe directly.
 
 **Optional: thin-client chat node.** With `HYDI_UPSTREAM` set,
 `hydi-chat-server.js` relays `/api/health` and `/api/mobile-status` to the PC
