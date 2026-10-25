@@ -197,9 +197,10 @@ restarts, kills, or starts a process. Each row is one of:
 | Verdict | Meaning |
 |---|---|
 | OK | SHA matches HEAD, the tree is not dirty, and the live PM2 settings match the file |
-| STALE_CODE | SHA differs from HEAD, or `gitDirty` is true |
+| STALE_CODE | SHA differs from HEAD, or `gitDirty` is true (build-regenerated files like `next-env.d.ts` do not count — the deploy restores them) |
 | UNDECLARED | online under PM2, absent from `ecosystem.config.js` |
-| MISSING | declared, not online |
+| MISSING | declared, absent from PM2 entirely |
+| NOT_ONLINE | declared and present under PM2, but not `online`/`launching` (e.g. `waiting_restart` crash loop — check `pm2 logs <name> --err`) |
 | UNKNOWN_CODE | online, but no provenance file or `gitSha` is null |
 | CONFIG_DRIFT | live `max_restarts`, `exp_backoff_restart_delay`, `kill_timeout`, `script`, `args`, or `cwd` differ from the file |
 | UNKNOWN | `pm2 jlist` could not be read. This is not OK |
