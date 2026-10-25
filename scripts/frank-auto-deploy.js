@@ -419,6 +419,7 @@ function startDeployLoop({
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   require('../lib/runtime/provenance').recordProcessProvenance(APP_NAME).then(() => startDeployLoop());
 }
 
