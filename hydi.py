@@ -26,7 +26,8 @@ from urllib.error import URLError, HTTPError
 # KEY=VALUE lines from ~/.hydi/thin-client.env fill in env vars that are not
 # already set, so an explicit `export OLLAMA_URL=...` still wins. Holds
 # OLLAMA_URL, HYDI_UPSTREAM and, optionally, HYDI_PHONE_READ_TOKEN (read-only:
-# Frank accepts it only on GET /api/phone/revenue-summary). Keep it chmod 600.
+# Frank accepts it only on GET /api/phone/revenue-summary and
+# GET /api/phone/observe). Keep it chmod 600.
 def _load_thin_client_env(path=os.path.expanduser("~/.hydi/thin-client.env")):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -412,6 +413,98 @@ def _sv_status(name):
     except Exception:
         return None
 
+# ── Frank observation (GET /api/phone/observe) ─────────────
+# Frank assembles one snapshot from its own monitors (host, Docker, PM2,
+# Ollama, storage, daemon). The phone reads it with the read-only token and
+# caches it for a minute so the dashboard's polling doesn't hammer Frank.
+FRANK_OBSERVE_TTL = 60
+_FRANK_OBS = {"at": 0.0, "host": None, "snapshot": None, "reason": None}
+
+def _frank_observe(host, token):
+    """GET Frank's combined snapshot. Returns (snapshot, None) or (None, reason)."""
+    req = Request(f"http://{host}:3000/api/phone/observe",
+                  headers={"Authorization": "Bearer " + token})
+    try:
+        with urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as err:
+        return None, f"Frank answered {err.code}"
+    except (URLError, OSError, ValueError):
+        return None, "Frank observation unreachable"
+    snap = data.get("snapshot") if isinstance(data, dict) else None
+    if not isinstance(snap, dict) or snap.get("device") != "frank":
+        return None, "Frank returned no snapshot"
+    return snap, None
+
+def frank_observation(host, force=False):
+    token = os.environ.get("HYDI_PHONE_READ_TOKEN", "").strip()
+    if not token:
+        return None, NO_REVENUE_SOURCE
+    now = time.time()
+    if not force and _FRANK_OBS["host"] == host and now - _FRANK_OBS["at"] < FRANK_OBSERVE_TTL:
+        return _FRANK_OBS["snapshot"], _FRANK_OBS["reason"]
+    snap, reason = _frank_observe(host, token)
+    _FRANK_OBS.update({"at": now, "host": host, "snapshot": snap, "reason": reason})
+    return snap, reason
+
+def _frank_vitals(snap):
+    h = snap.get("host") or {}
+    parts = []
+    if h.get("cpuPct") is not None:
+        parts.append(f"CPU {h['cpuPct']}%")
+    if h.get("memFreeGb") is not None:
+        parts.append(f"RAM {h['memFreeGb']}/{h.get('memTotalGb')} GB free")
+    disk = h.get("diskC") or {}
+    if disk.get("freeGb") is not None:
+        parts.append(f"C: {disk['freeGb']}/{disk.get('totalGb')} GB free")
+    if h.get("uptimeHours") is not None:
+        parts.append(f"up {h['uptimeHours']}h")
+    return ", ".join(parts)
+
+def frank_health_card(host):
+    snap, reason = frank_observation(host)
+    card = {"id": "frank-health", "name": "Frank health", "icon": "🩺",
+            "role": "Host, Docker, PM2, storage, daemon", "fleet": True}
+    if snap is None:
+        card.update(status="idle", detail=f"not observed ({reason})")
+        return card
+    level = snap.get("level")
+    issues = snap.get("issues") or []
+    card["status"] = {"OK": "running", "WARN": "idle"}.get(level, "error")
+    lead = issues[0]["text"] if issues else _frank_vitals(snap)
+    card["detail"] = f"{level} · {lead}"[:120]
+    return card
+
+def tool_frank():
+    hosts = frank_candidates()
+    frank = frank_resolve() if hosts else None
+    if not frank:
+        return "Frank: unknown (" + ("Frank not reachable" if hosts else "Frank not configured") + ")."
+    snap, reason = frank_observation(frank, force=True)
+    if snap is None:
+        return f"Frank: unknown ({reason})."
+    issues = snap.get("issues") or []
+    lines = [f"Frank: {snap.get('level')}" + (f" ({len(issues)} issue{'s' if len(issues) != 1 else ''})" if issues else "")]
+    for i in issues[:8]:
+        lines.append(("  !! " if i.get("severity") == "crit" else "  !  ") + str(i.get("text")))
+    vitals = _frank_vitals(snap)
+    if vitals:
+        lines.append("Host: " + vitals)
+    pm2 = snap.get("pm2") or {}
+    if pm2:
+        lines.append(f"PM2: {pm2.get('online')}/{pm2.get('total')} online" if pm2.get("available") else "PM2: unreadable")
+    docker = snap.get("docker") or {}
+    if docker:
+        lines.append(f"Docker: {docker.get('running')}/{docker.get('total')} running" if docker.get("available") else "Docker: down or unreadable")
+    ollama = snap.get("ollama") or {}
+    if ollama:
+        lines.append("Ollama: " + ("up" if ollama.get("reachable") else "down"))
+    storage = snap.get("storage") or {}
+    if storage:
+        lines.append(f"Storage: {storage.get('level')}, {storage.get('freeGb')} GB free")
+    lines.append(f"Read {snap.get('at')}. Source: Frank's own monitors; nothing was changed.")
+    return "\n".join(lines)
+
 def fleet_status():
     """Real subsystem cards for the dashboard. Everything is probed."""
     items = []
@@ -426,6 +519,9 @@ def fleet_status():
                   ("all hosts unreachable" if hosts else "not configured"),
         "fleet": True,
     })
+
+    if frank:
+        items.append(frank_health_card(frank))
 
     if OLLAMA_MODEL:
         where = "remote" if ollama_is_remote() else "local"
@@ -721,6 +817,8 @@ def _tool_for(msg):
         return "board", tool_board(channels)
     if re.search(r"revenue|\bmrr\b|\bincome\b|\bsales\b|\bmoney\b", t):
         return "revenue", tool_revenue()
+    if re.search(r"\bfrank\b|\b(cpu|ram|disk|docker|gpu|pc|observe|observation|vitals)\b", t):
+        return "frank", tool_frank()
     if re.search(r"\bstatus\b|\bhealth\b|\bfleet\b|how are", t):
         return "fleet", tool_fleet()
     return None
@@ -1115,6 +1213,7 @@ HELP_TEXT = """\
 Hydi Commands:
 ──────────────────────────
 status / health      live fleet (read-only tool)
+frank / cpu / disk   Frank's host, Docker, PM2, storage (read-only tool)
 board                last messages on #ops and #general (read-only)
 revenue              revenue summary, or unknown without a livemode source
 open prs             open PRs, when Frank has a read-only endpoint

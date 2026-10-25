@@ -700,5 +700,31 @@ module.exports = {
       merge_logs: true,
       kill_timeout: 10000,
     },
+    {
+      // Frank observer (scripts/frank-observer.js, docs/FRANK_OBSERVATION.md).
+      // Long-lived 60s loop: guarantees a fresh observatory sample, writes
+      // the combined snapshot to .runtime/observation/frank.json, and posts
+      // #alerts when a critical issue holds for two passes. Read-only.
+      name: 'frank-observer',
+      script: 'scripts/frank-observer.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-frank-observer.err.log',
+      out_file: './logs/pm2-frank-observer.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
   ],
 };

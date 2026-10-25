@@ -48,3 +48,5 @@ Findings distinguish `MEASURED | DERIVED | HYPOTHESIS` and carry recommendation
 metadata: approval level (`none-needed | operator | owner`), rollback,
 success criteria, verification plan. The observer **recommends** — it never
 executes optimizations autonomously.
+
+The combined, always-fresh view built on this collector (PM2 `frank-observer`, phone card, `#alerts`) is described in `docs/FRANK_OBSERVATION.md`.
