@@ -360,6 +360,7 @@ function startGuardLoop({ pass = runStoragePass, intervalMs = INTERVAL_MS, setIn
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   if (process.argv.includes('--once')) {
     runStoragePass().then((s) => console.log(JSON.stringify(s, null, 2)));
   } else {

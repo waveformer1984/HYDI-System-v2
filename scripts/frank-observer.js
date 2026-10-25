@@ -141,6 +141,7 @@ function startObserverLoop({ pass = runObservationPass, intervalMs = INTERVAL_MS
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   if (process.argv.includes('--once')) {
     runObservationPass().then(({ snapshot }) => {
       console.log(require('../lib/observation/frank-snapshot').formatFrankSnapshot(snapshot));
