@@ -298,6 +298,62 @@ describe('Frank auto-deploy', () => {
     expect(readAlertState(alertStatePath)).toBeNull();
   });
 
+  it('blocks the deploy and alerts when free disk is under the minimum', async () => {
+    const runtime = tmpDir();
+    const calls = [];
+    const run = jest.fn(async (file, args) => {
+      calls.push(`${file} ${args.join(' ')}`);
+      const key = `${file} ${args.join(' ')}`;
+      if (key === 'git fetch origin clean-main') return ok();
+      if (key === 'git branch --show-current') return ok('clean-main\n');
+      if (key === 'git checkout -- next-env.d.ts') return ok();
+      if (key === 'git status --porcelain --untracked-files=no') return ok();
+      if (key === 'git rev-parse HEAD') return ok(`${OLD}\n`);
+      if (key === 'git rev-parse origin/clean-main') return ok(`${NEW}\n`);
+      if (key === `git merge-base --is-ancestor ${OLD} ${NEW}`) return ok();
+      throw new Error(`unexpected command: ${key}`);
+    });
+    const post = jest.fn(async () => ({ ok: true }));
+    const alertStatePath = path.join(runtime, 'alert.json');
+    const result = await runAutoDeploy({
+      root: '/repo',
+      run,
+      post,
+      acquireLock: () => jest.fn(),
+      alertStatePath,
+      freeDiskGB: async () => 4.2,
+    });
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toMatch(/low disk space: 4.2 GB/);
+    expect(calls.some((c) => c.startsWith('git merge --ff-only'))).toBe(false);
+    expect(post).toHaveBeenCalledWith('alerts', expect.stringContaining('low disk space'));
+    expect(readAlertState(alertStatePath)).toBe('low_disk');
+  });
+
+  it('deploys normally when free disk is above the minimum', async () => {
+    const run = baseGitRun({
+      'git rev-parse HEAD': ok(`${OLD}\n`),
+      'git rev-parse origin/clean-main': ok(`${NEW}\n`),
+      [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
+      [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok('\x1e'),
+      [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(),
+      'git merge --ff-only origin/clean-main': ok(),
+      'npm.cmd run build': ok(),
+      'pm2.cmd jlist': ok(JSON.stringify([{ name: 'heidi-web', pm2_env: { status: 'online' } }])),
+      'pm2.cmd restart heidi-web --update-env': ok(),
+    });
+    const result = await runAutoDeploy({
+      root: '/repo',
+      run,
+      post: jest.fn(async () => ({ ok: true })),
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(tmpDir(), 'alert.json'),
+      freeDiskGB: async () => 42,
+      probe: async (check) => ({ name: check.name, ok: true, status: 200, ms: 1 }),
+    });
+    expect(result.status).toBe('deployed');
+  });
+
   it('runs an immediate internal loop and never overlaps passes', async () => {
     let release;
     const first = new Promise((resolve) => { release = resolve; });
