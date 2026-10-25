@@ -76,7 +76,7 @@ describe('provision codes', () => {
     expect(rec.keys).toEqual(['HYDI_PHONE_READ_TOKEN']);
     rec.keys.push('STRIPE_SECRET_KEY');
     fs.writeFileSync(file, JSON.stringify(rec));
-    const out = redeemProvisionCode({ root, code, env: { ...ENV, STRIPE_SECRET_KEY: 'sk_live_x' }, now: NOW });
+    const out = redeemProvisionCode({ root, code, env: { ...ENV, STRIPE_SECRET_KEY: 'stripe-secret-not-for-phone' }, now: NOW });
     expect(out.keys).not.toHaveProperty('STRIPE_SECRET_KEY');
   });
 

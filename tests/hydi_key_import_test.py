@@ -37,7 +37,7 @@ class FakeFrank(BaseHTTPRequestHandler):
             "HYDI_BOARD_HUMAN_TOKEN": "human-secret",
             "HYDI_PHONE_READ_TOKEN": "read-secret",
             "FRANK_HOSTS": "127.0.0.1",
-            "STRIPE_SECRET_KEY": "sk_live_should_be_dropped",
+            "STRIPE_SECRET_KEY": "stripe-secret-should-be-dropped",
             "HYDI_EVIL": "x\nINJECTED=1",
         }, "missing": ["GROQ_API_KEY"]}).encode()
         self.send_response(200)
