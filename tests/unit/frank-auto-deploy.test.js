@@ -30,6 +30,51 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'frank-deploy-'));
 }
 
+/**
+ * In-memory stand-in for the deploy's directory operations. `dirs` holds the
+ * directories that exist; a staged build "produces" its markers when `run`
+ * sees the build command.
+ */
+function memFs(initial = []) {
+  const dirs = new Set(initial.map((p) => p.replace(/\\/g, '/')));
+  const norm = (p) => p.replace(/\\/g, '/');
+  const ops = [];
+  const api = {
+    dirs,
+    ops,
+    exists: (p) => dirs.has(norm(p)),
+    rm: (p) => {
+      const n = norm(p);
+      for (const d of [...dirs]) if (d === n || d.startsWith(`${n}/`)) dirs.delete(d);
+    },
+    mkdir: (p) => { dirs.add(norm(p)); },
+    rename: (a, b) => {
+      const from = norm(a);
+      const to = norm(b);
+      if (api.failRename && api.failRename(from, to)) {
+        ops.push(`rename-failed ${from} -> ${to}`);
+        throw new Error('EPERM');
+      }
+      if (!dirs.has(from)) throw new Error(`ENOENT ${from}`);
+      if (dirs.has(to)) throw new Error(`EEXIST ${to}`);
+      for (const d of [...dirs]) {
+        if (d === from || d.startsWith(`${from}/`)) {
+          dirs.delete(d);
+          dirs.add(to + d.slice(from.length));
+        }
+      }
+      ops.push(`rename ${from} -> ${to}`);
+    },
+    produceBuild(root) {
+      const r = norm(root);
+      dirs.add(`${r}/.next-staging`);
+      dirs.add(`${r}/.next-staging/BUILD_ID`);
+      dirs.add(`${r}/.next-staging/server/pages-manifest.json`);
+    },
+  };
+  return api;
+}
+
 function baseGitRun(overrides = {}) {
   return jest.fn(async (file, args) => {
     const key = `${file} ${args.join(' ')}`;
@@ -119,10 +164,13 @@ describe('Frank auto-deploy', () => {
     expect(run.mock.calls.some(([, args]) => args.join(' ') === 'status --porcelain')).toBe(false);
   });
 
-  it('rolls back after failed health and restarts only online PM2 apps', async () => {
+  it('rolls back after failed health by restoring the previous build — no rebuild — and restarts only online PM2 apps', async () => {
     let rolledBack = false;
     const calls = [];
-    const run = jest.fn(async (file, args) => {
+    const ROOT = 'C:/HYDI-System-v2';
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/cache`]);
+    let buildEnv = null;
+    const run = jest.fn(async (file, args, options = {}) => {
       calls.push([file, ...args]);
       const key = `${file} ${args.join(' ')}`;
       if (key === 'git fetch origin clean-main') return ok();
@@ -141,7 +189,11 @@ describe('Frank auto-deploy', () => {
         rolledBack = true;
         return ok();
       }
-      if (key === 'npm.cmd run build') return ok();
+      if (key === 'npm.cmd run build') {
+        buildEnv = options.env;
+        fsx.produceBuild(ROOT);
+        return ok();
+      }
       if (key === 'pm2.cmd jlist') {
         return ok(JSON.stringify([
           { name: 'heidi-web', pm2_env: { status: 'online' } },
@@ -159,15 +211,17 @@ describe('Frank auto-deploy', () => {
     const posts = [];
     let clock = 0;
     const result = await runAutoDeploy({
-      root: 'C:\\HYDI-System-v2',
+      root: ROOT,
       platform: 'win32',
       run,
+      fsx,
       post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
       acquireLock: () => jest.fn(),
       alertStatePath: path.join(tmpDir(), 'alert.json'),
       now: () => clock,
       sleep: async (ms) => { clock += ms; },
       diskPreflight: () => ({ ok: true, freeGb: 50, reason: 'ok' }),
+      memoryPreflight: () => ({ ok: true, freeGb: 4, reason: 'ok' }),
       healthTimeoutMs: 100,
       healthIntervalMs: 25,
       probe: async (check) => ({
@@ -179,9 +233,19 @@ describe('Frank auto-deploy', () => {
 
     expect(result.status).toBe('rolled_back');
     expect(calls).toContainEqual(['git', 'reset', '--hard', OLD]);
-    expect(calls.filter((call) => call.join(' ') === 'npm.cmd run build')).toHaveLength(2);
-    // Build-regenerated files are restored after the deploy build, the
-    // rollback build, and before the dirty check.
+    // One build, into the staging dir; the rollback renames, it never rebuilds.
+    expect(calls.filter((call) => call.join(' ') === 'npm.cmd run build')).toHaveLength(1);
+    expect(buildEnv.HYDI_NEXT_DIST_DIR).toBe('.next-staging');
+    expect(fsx.ops).toEqual([
+      `rename ${ROOT}/.next/cache -> ${ROOT}/.next-staging/cache`,
+      `rename ${ROOT}/.next -> ${ROOT}/.next-prev`,
+      `rename ${ROOT}/.next-staging -> ${ROOT}/.next`,
+      `rename ${ROOT}/.next -> ${ROOT}/.next-failed`,
+      `rename ${ROOT}/.next-prev -> ${ROOT}/.next`,
+    ]);
+    expect(fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+    // Build-regenerated files are restored after the deploy build, after the
+    // rollback, and before the dirty check.
     expect(calls.filter((call) => call.join(' ') === 'git checkout -- next-env.d.ts')).toHaveLength(3);
     const restarts = calls.filter((call) => call[0] === 'pm2.cmd' && call[1] === 'restart');
     expect(restarts).toHaveLength(2);
@@ -433,5 +497,144 @@ describe('Frank auto-deploy restart set', () => {
   it('the real ecosystem.config.js declares the tunnel as external', () => {
     const root = path.resolve(__dirname, '..', '..');
     expect(externalAppNames(root)).toContain('hydi-public-tunnel');
+  });
+});
+
+describe('Frank auto-deploy staged builds', () => {
+  const ROOT = 'C:/HYDI-System-v2';
+  const JLIST = JSON.stringify([
+    { name: 'heidi-web-standalone', pm2_env: { status: 'online' } },
+    { name: 'heidi-core', pm2_env: { status: 'online' } },
+  ]);
+
+  function harness({ build = 'ok', healthy = () => true, fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`]) } = {}) {
+    const calls = [];
+    const posts = [];
+    let clock = 0;
+    const run = jest.fn(async (file, args) => {
+      const key = `${file} ${args.join(' ')}`;
+      calls.push(key);
+      const base = {
+        'git fetch origin clean-main': ok(),
+        'git branch --show-current': ok('clean-main\n'),
+        'git checkout -- next-env.d.ts': ok(),
+        'git status --porcelain --untracked-files=no': ok(),
+        'git rev-parse HEAD': ok(`${OLD}\n`),
+        'git rev-parse origin/clean-main': ok(`${NEW}\n`),
+        [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
+        [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
+        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(),
+        'git merge --ff-only origin/clean-main': ok(),
+        [`git reset --hard ${OLD}`]: ok(),
+        'pm2.cmd jlist': ok(JLIST),
+        'pm2.cmd stop heidi-web-standalone': ok(),
+      };
+      if (key === 'npm.cmd run build') {
+        if (build === 'fail') return { code: 1, stdout: '', stderr: 'Error: Failed to collect page data for /push-setup' };
+        if (build === 'ok') fsx.produceBuild(ROOT);
+        return ok();
+      }
+      if (key.startsWith('pm2.cmd restart ')) return ok();
+      if (base[key]) return base[key];
+      throw new Error(`unexpected command: ${key}`);
+    });
+    const deploy = (extra = {}) => runAutoDeploy({
+      root: ROOT,
+      platform: 'win32',
+      run,
+      fsx,
+      post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(tmpDir(), 'alert.json'),
+      now: () => clock,
+      sleep: async (ms) => { clock += ms; },
+      diskPreflight: () => ({ ok: true, freeGb: 50, reason: 'ok' }),
+      memoryPreflight: () => ({ ok: true, freeGb: 4, reason: 'ok' }),
+      healthTimeoutMs: 50,
+      healthIntervalMs: 25,
+      probe: async (check) => ({ name: check.name, ok: healthy(), status: healthy() ? 200 : 0 }),
+      ...extra,
+    });
+    return { calls, posts, fsx, deploy };
+  }
+
+  it('deploys by swapping the finished build in and keeping the previous one', async () => {
+    const h = harness();
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/.next-prev/BUILD_ID`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/.next-staging`)).toBe(false);
+    expect(h.calls.filter((c) => c.startsWith('pm2.cmd restart'))).toHaveLength(1);
+  });
+
+  it('a failed build never touches the live site: no swap, no restart, no rebuild', async () => {
+    const h = harness({ build: 'fail' });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.calls.filter((c) => c === 'npm.cmd run build')).toHaveLength(1);
+    expect(h.calls.some((c) => c.startsWith('pm2.cmd restart'))).toBe(false);
+    expect(h.calls).toContain(`git reset --hard ${OLD}`);
+    expect(h.fsx.ops.some((op) => op.includes('-> C:/HYDI-System-v2/.next-prev'))).toBe(false);
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+    const alert = h.posts.find((p) => p.channel === 'alerts').body;
+    expect(alert).toContain('the live site was never touched');
+    expect(alert).toContain('Failed to collect page data for /push-setup');
+  });
+
+  it('an incomplete build (exit 0, missing BUILD_ID) is treated as failed', async () => {
+    const h = harness({ build: 'empty' });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.posts.find((p) => p.channel === 'alerts').body).toContain('build incomplete');
+    expect(h.calls.some((c) => c.startsWith('pm2.cmd restart'))).toBe(false);
+  });
+
+  it('when Windows refuses to rename the live build, stops the web app, retries, and starts it again', async () => {
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`]);
+    let refused = false;
+    fsx.failRename = (from) => {
+      if (!refused && from === `${ROOT}/.next`) { refused = true; return true; }
+      return false;
+    };
+    const h = harness({ fsx });
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.calls).toContain('pm2.cmd stop heidi-web-standalone');
+    const restart = h.calls.find((c) => c.startsWith('pm2.cmd restart'));
+    expect(restart).toContain('heidi-web-standalone');
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+  });
+
+  it('the first staged deploy has no previous build to restore, so rollback rebuilds', async () => {
+    const h = harness({ fsx: memFs([]), healthy: () => false });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.calls.filter((c) => c === 'npm.cmd run build')).toHaveLength(2);
+  });
+
+  it('waits instead of building when free RAM is below the floor', async () => {
+    const h = harness();
+    const result = await h.deploy({ memoryPreflight: () => ({ ok: false, freeGb: 0.3, reason: 'only 0.3 GB RAM free, needs 0.75 GB' }) });
+    expect(result).toEqual({ status: 'blocked', reason: 'low memory: only 0.3 GB RAM free, needs 0.75 GB' });
+    expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+    expect(h.posts[0].body).toContain('waiting: only 0.3 GB RAM free');
+  });
+
+  it('memoryPreflight reads free RAM against HYDI_DEPLOY_MIN_FREE_RAM_GB (default 0.75)', () => {
+    const { memoryPreflight } = require('../../scripts/frank-auto-deploy');
+    const GB = 1024 ** 3;
+    expect(memoryPreflight({}, () => 0.5 * GB)).toMatchObject({ ok: false });
+    expect(memoryPreflight({}, () => 2 * GB)).toMatchObject({ ok: true });
+    expect(memoryPreflight({ HYDI_DEPLOY_MIN_FREE_RAM_GB: '3' }, () => 2 * GB)).toMatchObject({ ok: false });
+  });
+
+  it('the build stamp lands in the staging dir the build wrote to', async () => {
+    const { stampBuild } = require('../../scripts/stamp-hydi-build');
+    const root = tmpDir();
+    const exec = (cmd, args, _o, cb) => { process.nextTick(() => cb(null, args.includes('HEAD') ? 'abc\n' : '')); return { on() {} }; };
+    await stampBuild({ root, env: { HYDI_NEXT_DIST_DIR: '.next-staging' }, execFile: exec, now: () => 0 });
+    expect(fs.existsSync(path.join(root, '.next-staging', 'hydi-build.json'))).toBe(true);
+    expect(fs.existsSync(path.join(root, '.next', 'hydi-build.json'))).toBe(false);
   });
 });

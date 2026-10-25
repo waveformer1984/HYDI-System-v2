@@ -83,6 +83,29 @@ change plus a weekly `#ops` report. Levels live in `lib/storage/disk.js`;
 and `local-ci` skips passes below `LOCAL_CI_MIN_FREE_GB` (8). It never
 touches Docker volumes or user files. See `docs/STORAGE_PROGRAM.md`.
 
+#### Auto-deploy (`frank-auto-deploy`)
+
+PM2 loop (5 min), fast-forward only. Preflights: clean `clean-main`, free
+disk ≥ `HYDI_DEPLOY_MIN_FREE_GB` (5), free RAM ≥
+`HYDI_DEPLOY_MIN_FREE_RAM_GB` (0.75). The Next build runs into
+`.next-staging` (`HYDI_NEXT_DIST_DIR`, read by `next.config.js` and
+`scripts/stamp-hydi-build.js`) while the live site keeps serving `.next`;
+an incomplete build (no `BUILD_ID`/`server/pages-manifest.json`) never goes
+live. A finished build is renamed into `.next` and the replaced one kept as
+`.next-prev`, so a failed health check rolls back by renaming — no rebuild
+(rebuilding under memory pressure is what wedged Frank on 2026-10-25). If
+Windows refuses the rename, it stops `heidi-web-standalone`, retries, and
+starts it again. Alerts go to `#alerts` once per distinct reason.
+
+#### Stray processes (`lib/observation/strays.js`)
+
+`frank-observer` also checks, every pass on Windows, for processes PM2 has
+lost track of: the owner of :3000 that isn't `heidi-web-standalone` or its
+child, the holder of the daemon lock that isn't `hydi-daemon`, or a
+`ProcessContainerFork` child of the PM2 daemon that PM2 doesn't list. Each
+is a CRIT issue (alerted after two passes) naming the pid and the
+`Stop-Process -Id <pid>` to run. It never stops anything itself.
+
 #### Human-action DB mirror (`human_action_mirror`)
 
 `data/human-actions.json` stays the authoritative store and the offline

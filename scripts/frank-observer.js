@@ -77,8 +77,17 @@ async function runObservationPass(overrides = {}) {
     collected = platform === 'win32' ? await collect(root) : { ok: false, skipped: 'collector is Windows-only' };
   }
 
-  const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)() });
+  // Processes PM2 lost track of (lib/observation/strays.js). null = could
+  // not be read this pass, which is not itself an issue.
+  let strays = null;
+  try {
+    const collectStrays = overrides.collectStrays || require('../lib/observation/strays').collectStrays;
+    strays = await collectStrays(root, { platform });
+  } catch { strays = null; }
+
+  const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)(), extraIssues: strays || [] });
   snapshot.collector = collected;
+  snapshot.straysChecked = strays !== null;
   try { writeJsonAtomic(path.join(outDir, 'frank.json'), snapshot); } catch { /* best effort */ }
 
   // seen: crit id -> consecutive passes; alerted: crit ids already posted.
