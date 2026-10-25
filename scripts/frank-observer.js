@@ -21,7 +21,6 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { buildFrankSnapshot } = require('../lib/observation/frank-snapshot');
-const { collectStrays } = require('../lib/observation/strays');
 
 const APP_NAME = 'frank-observer';
 const INTERVAL_MS = 60 * 1000;
@@ -82,7 +81,8 @@ async function runObservationPass(overrides = {}) {
   // not be read this pass, which is not itself an issue.
   let strays = null;
   try {
-    strays = await (overrides.collectStrays || collectStrays)(root, { platform });
+    const collectStrays = overrides.collectStrays || require('../lib/observation/strays').collectStrays;
+    strays = await collectStrays(root, { platform });
   } catch { strays = null; }
 
   const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)(), extraIssues: strays || [] });
