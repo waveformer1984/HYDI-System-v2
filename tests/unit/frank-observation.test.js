@@ -116,6 +116,9 @@ describe('frank-observer loop', () => {
       root,
       platform: 'win32',
       collect,
+      // The real collectStrays spawns powershell + `pm2 jlist` (20s each).
+      // These tests exercise the pass logic, not process enumeration.
+      collectStrays: async () => [],
       post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
     };
     return { root, posts, collect, opts };
