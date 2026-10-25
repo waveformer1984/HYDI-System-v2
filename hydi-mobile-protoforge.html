@@ -2021,6 +2021,13 @@ function openMenu() {
         <div class="sheet-action-sub">Add to home screen</div>
       </div>
     </div>
+    <div class="sheet-action" onclick="openKeyScanner()">
+      <span class="sheet-action-icon">🔑</span>
+      <div class="sheet-action-text">
+        <div>Scan key QR</div>
+        <div class="sheet-action-sub">Import phone keys from Frank's /phone/provision page</div>
+      </div>
+    </div>
     <div class="sheet-action" onclick="switchTab('stats');closeOverlay()">
       <span class="sheet-action-icon">📊</span>
       <div class="sheet-action-text">
@@ -2060,8 +2067,117 @@ function openSheet(title, actionsHtml) {
 }
 
 function closeOverlay(e) {
-  if (!e || e.target === document.getElementById('overlay'))
+  if (!e || e.target === document.getElementById('overlay')) {
     document.getElementById('overlay').classList.remove('show');
+    stopKeyScanner();
+  }
+}
+
+// ── KEY QR IMPORT ────────────────────────────────────────
+// Frank's /phone/provision page shows a QR with a one-time code (never a
+// key). This scans it and hands the text to this phone's hydi.py, which
+// redeems the code with Frank and stores the keys in ~/.hydi/thin-client.env.
+// Only key NAMES ever come back to this page. Camera access needs the page
+// opened at http://127.0.0.1:3006 (a secure context).
+const KQ = { stream: null, timer: null, busy: false };
+
+function stopKeyScanner() {
+  if (KQ.timer) { clearInterval(KQ.timer); KQ.timer = null; }
+  if (KQ.stream) { KQ.stream.getTracks().forEach(function (t) { t.stop(); }); KQ.stream = null; }
+}
+
+function kqSay(text) {
+  const el = document.getElementById('kqStatus');
+  if (el) el.textContent = text;
+}
+
+async function kqRefreshStatus() {
+  const box = document.getElementById('kqKeys');
+  if (!box) return;
+  try {
+    const res = await fetch(location.origin + '/api/keys/status', { cache: 'no-store' });
+    const data = await res.json();
+    if (!data.ok) { box.textContent = data.error || 'key status unavailable'; return; }
+    box.innerHTML = Object.keys(data.keys).map(function (k) {
+      return '<div>' + (data.keys[k] ? '✅ ' : '— ') + escHtml(k) + '</div>';
+    }).join('');
+  } catch (_) { box.textContent = 'key status unavailable'; }
+}
+
+async function kqImport(text) {
+  if (KQ.busy) return;
+  if (!/^hydi-provision:v1\?/.test(String(text || '').trim())) { kqSay('That QR is not a Hydi key code.'); return; }
+  KQ.busy = true;
+  stopKeyScanner();
+  kqSay('Code found — asking Frank…');
+  try {
+    const res = await fetch(location.origin + '/api/keys/provision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: String(text).trim() }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      kqSay('Saved: ' + data.set.join(', ') + (data.missing.length ? ' · not set on Frank: ' + data.missing.join(', ') : '') + (data.note ? ' · ' + data.note : ''));
+      toast('Keys imported', 'ok');
+      refreshFleet();
+    } else {
+      kqSay(data.error || 'Import failed');
+    }
+  } catch (_) {
+    kqSay('Could not reach this phone\'s Hydi server');
+  } finally {
+    KQ.busy = false;
+    kqRefreshStatus();
+  }
+}
+
+async function kqDetect(source) {
+  try {
+    const found = await KQ.detector.detect(source);
+    if (found && found.length) kqImport(found[0].rawValue);
+    return found && found.length;
+  } catch (_) { return 0; }
+}
+
+async function openKeyScanner() {
+  openSheet('Scan key QR', `
+    <div style="padding:4px 0">
+      <video id="kqVideo" playsinline muted style="width:100%;max-height:50vh;border-radius:12px;background:#000"></video>
+      <div id="kqStatus" style="margin:8px 0;font-size:14px">On Frank, open http://127.0.0.1:3000/phone/provision and tap Show QR.</div>
+      <label class="sheet-action" style="cursor:pointer">
+        <span class="sheet-action-icon">📷</span>
+        <div class="sheet-action-text"><div>Use a photo instead</div></div>
+        <input type="file" accept="image/*" capture="environment" id="kqFile" style="display:none">
+      </label>
+      <div id="kqKeys" style="margin-top:8px;font-size:13px;opacity:.85"></div>
+    </div>
+  `);
+  kqRefreshStatus();
+  if (!('BarcodeDetector' in window)) {
+    kqSay('This browser cannot read QR codes. Open the dashboard in Chrome.');
+    return;
+  }
+  KQ.detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+  document.getElementById('kqFile').addEventListener('change', async function (ev) {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const bitmap = await createImageBitmap(file);
+    if (!(await kqDetect(bitmap))) kqSay('No QR found in that photo.');
+  });
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    kqSay('Camera needs http://127.0.0.1:3006 — or use a photo.');
+    return;
+  }
+  try {
+    KQ.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('kqVideo');
+    video.srcObject = KQ.stream;
+    await video.play();
+    KQ.timer = setInterval(function () { if (!KQ.busy) kqDetect(video); }, 400);
+  } catch (_) {
+    kqSay('Camera blocked — allow it, or use a photo.');
+  }
 }
 
 // ── TOAST ─────────────────────────────────────────────────
