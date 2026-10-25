@@ -1,0 +1,4 @@
+# Vendored, unmodified third-party code. Findings there are upstream's and
+# fixing them would make the copy diverge from the published release.
+paths-ignore:
+  - lib/third_party/**
