@@ -23,9 +23,23 @@ def _token(sender):
     return os.environ.get(key, "")
 
 
+def _human_identity():
+    """Jordan's own board login, if this device holds it (the phone does)."""
+    token = os.environ.get("HYDI_BOARD_HUMAN_TOKEN", "").strip()
+    name = os.environ.get("HYDI_BOARD_HUMAN_NAME", "Jordan").strip() or "Jordan"
+    return (name, token) if token else (None, "")
+
+
 def post(channel, body, reply_to=None):
     sender = _sender()
     token = _token(sender)
+    if not token:
+        # No agent token on this device (the phone has none): post as Jordan
+        # with his own board login. The board checks that the token matches
+        # the sender, so this can never impersonate an agent.
+        human, human_token = _human_identity()
+        if human_token:
+            sender, token = human, human_token
     if not token:
         return {"ok": False, "skipped": True, "error": "board auth not configured"}
     base = os.environ.get("HYDI_BOARD_URL", "").strip().rstrip("/")
