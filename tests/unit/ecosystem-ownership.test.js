@@ -87,3 +87,16 @@ describe('recovery still resolves the PM2 owner', () => {
     expect(pm2NameFor('heidi-web')).toBe('heidi-web-standalone');
   });
 });
+
+describe('hydi-daemon memory restart ceiling', () => {
+  // A memory restart races the IPC graceful shutdown on Windows and leaks an
+  // untracked daemon (2026-10-24). The ceiling must sit well above the
+  // daemon's normal ~900MB peak.
+  test('max_memory_restart is at least 1.5GB', () => {
+    const entry = ecosystem.apps.find((a) => a.name === 'hydi-daemon');
+    const m = /^(\d+)([MG])$/.exec(String(entry.max_memory_restart));
+    expect(m).not.toBeNull();
+    const mb = Number(m[1]) * (m[2] === 'G' ? 1024 : 1);
+    expect(mb).toBeGreaterThanOrEqual(1536);
+  });
+});

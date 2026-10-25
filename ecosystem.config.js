@@ -161,7 +161,15 @@ module.exports = {
       shutdown_with_message: true,
       autorestart: true,
       watch: false,
-      max_memory_restart: '500M',
+      // Was 500M. The daemon's RSS normally swings ~40-900MB between GCs, so
+      // PM2 kept memory-restarting it (3,700+ restarts by 2026-10-24). On
+      // Windows each memory restart races the graceful IPC shutdown: PM2
+      // starts the replacement, then reads the old process's late exit as
+      // the new one dying, forgets the replacement, and spawns another that
+      // finds the lock held and exits 1 — an untracked daemon plus an
+      // endless restart loop. Keep this well above normal peak; a real leak
+      // still gets caught.
+      max_memory_restart: '1536M',
       min_uptime: '30s',
       max_restarts: 10,
       restart_delay: 5000,
