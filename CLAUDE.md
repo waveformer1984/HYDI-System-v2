@@ -150,6 +150,19 @@ recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
 daemon exists and is failing. PM2 "online" is process liveness — the status
 file is what the loop actually did. Don't read PM2 alone as health.
 
+#### Frank observation (`frank-observer`)
+
+PM2 loop (60s, read-only) that keeps `.observatory/current.json` fresh by
+running `scripts/observatory/collect.ps1 -Once` when the sample is older
+than 75s, combines it with the storage guard and daemon status files into
+one snapshot (`lib/observation/frank-snapshot.js`, level OK/WARN/CRIT; a
+missing or stale monitor is CRIT, never healthy), writes
+`.runtime/observation/frank.json`, and posts `#alerts` when a critical
+issue holds for two passes. `GET /api/phone/observe` serves the snapshot
+to `HYDI_PHONE_READ_TOKEN` (shared check in `lib/phone/read-auth.js`).
+Phone Hydi shows it as a "Frank health" card and chat tool; Heidi answers
+`REQUEST @Heidi: frank status`. See `docs/FRANK_OBSERVATION.md`.
+
 #### Runtime provenance (which code is running)
 
 PM2 "online" does not say which commit is in memory. Three failures followed

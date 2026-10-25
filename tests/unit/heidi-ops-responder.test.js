@@ -72,6 +72,9 @@ describe('parseRequest / triage', () => {
     expect(triage('pm2 list please')).toEqual({ kind: 'read', tool: 'fleet' });
     expect(triage('check health')).toEqual({ kind: 'read', tool: 'health' });
     expect(triage('how much disk space is left')).toEqual({ kind: 'read', tool: 'disk' });
+    expect(triage('frank status')).toEqual({ kind: 'read', tool: 'frank' });
+    expect(triage('how is cpu and memory on the pc')).toEqual({ kind: 'read', tool: 'frank' });
+    expect(triage('restart docker')).toEqual(expect.objectContaining({ kind: 'approval' }));
     expect(triage('git status')).toEqual({ kind: 'read', tool: 'git' });
     expect(triage('show git log')).toEqual({ kind: 'read', tool: 'git' });
     expect(triage('run the assessment crew')).toEqual({ kind: 'read', tool: 'assessment' });
