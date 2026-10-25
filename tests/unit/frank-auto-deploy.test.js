@@ -387,6 +387,54 @@ describe('Frank auto-deploy', () => {
       'Merge pull request #11 from b\n\nSecond title\n\x1e',
     )).toEqual(['#10 First title', '#11 Second title']);
   });
+
+  it('reports a failed board post to stderr instead of failing silently', async () => {
+    // 2026-10-24: a missing HYDI_BOARD_TOKEN_HYDI_DAEMON made every post
+    // return skipped, so the alert state file was never written and the
+    // block stayed invisible for ~8h. The failure must reach the err log.
+    const runtime = tmpDir();
+    const run = baseGitRun({
+      'git status --porcelain --untracked-files=no': ok(' M lib/file.js\n'),
+    });
+    const post = jest.fn(async () => ({ ok: false, skipped: true, error: 'board auth not configured' }));
+    const log = jest.fn();
+    const result = await runAutoDeploy({
+      root: '/repo',
+      run,
+      post,
+      log,
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(runtime, 'alert.json'),
+    });
+    expect(result).toEqual({ status: 'blocked', reason: 'working tree is dirty' });
+    expect(log).toHaveBeenCalledWith(
+      '[frank-auto-deploy] board post to #alerts failed: board auth not configured',
+    );
+    expect(fs.existsSync(path.join(runtime, 'alert.json'))).toBe(false);
+  });
+
+  it('logs each distinct blocked reason once across deploy-loop ticks', async () => {
+    const log = jest.fn();
+    const results = [
+      { status: 'blocked', reason: 'working tree is dirty' },
+      { status: 'blocked', reason: 'working tree is dirty' },
+      { status: 'blocked', reason: 'low disk: only 1 GB free' },
+      { status: 'blocked', reason: 'working tree is dirty' },
+    ];
+    const deploy = jest.fn(async () => results.shift() || { status: 'noop' });
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const { tick } = startDeployLoop({ deploy, setIntervalFn: () => 0, log });
+    await flush(); // let the initial void tick() finish
+    for (let i = 0; i < 3; i += 1) {
+      await tick();
+      await flush();
+    }
+    expect(deploy).toHaveBeenCalledTimes(4);
+    const lines = log.mock.calls.map((call) => call[0]);
+    expect(lines.filter((l) => l === '[frank-auto-deploy] blocked: working tree is dirty')).toHaveLength(1);
+    expect(lines.filter((l) => l === '[frank-auto-deploy] blocked: low disk: only 1 GB free')).toHaveLength(1);
+    expect(lines).toHaveLength(2);
+  });
 });
 
 describe('Frank auto-deploy restart set', () => {

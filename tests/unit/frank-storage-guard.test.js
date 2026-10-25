@@ -172,6 +172,20 @@ describe('frank storage guard status, alerts and reports', () => {
     expect(h.posts.filter((p) => p.channel === 'alerts')).toHaveLength(2);
   });
 
+  it('reports a failed board post to stderr instead of failing silently', async () => {
+    const h = harness({ freeGb: 3 });
+    const log = jest.fn();
+    const opts = {
+      ...h.opts,
+      log,
+      post: async () => ({ ok: false, skipped: true, error: 'board auth not configured' }),
+    };
+    await guard.runStoragePass(opts);
+    expect(log).toHaveBeenCalledWith(
+      '[frank-storage-guard] board post to #alerts failed: board auth not configured',
+    );
+  });
+
   it('posts the weekly report once per 7 days', async () => {
     const h = harness({ freeGb: 60 });
     let t = Date.now();

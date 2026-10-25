@@ -26,6 +26,7 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const disk = require('../lib/storage/disk');
+const board = require('../lib/forge-board/sdk');
 
 const APP_NAME = 'frank-storage-guard';
 const INTERVAL_MS = 15 * 60 * 1000;
@@ -273,7 +274,8 @@ async function runStoragePass(overrides = {}) {
   const run = overrides.run || execResult;
   const tmpdir = overrides.tmpdir || os.tmpdir();
   const measure = overrides.measure || (() => disk.measure(disk.defaultVolume(root)));
-  const post = overrides.post || ((channel, body) => require('../lib/forge-board/sdk').post(channel, body, null, { sender: 'hydi-daemon' }));
+  const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
+  const log = overrides.log || ((message) => console.error(message));
   const dir = overrides.storageDir || path.join(root, '.runtime', 'storage');
   const statusPath = path.join(dir, 'status.json');
   const statePath = path.join(dir, 'state.json');
@@ -314,6 +316,17 @@ async function runStoragePass(overrides = {}) {
   };
   try { writeJsonAtomic(statusPath, status); } catch { /* best effort */ }
 
+  // A rejected board post must never be silent: one stderr line with the
+  // board's own error text (never the token) so the PM2 err log shows why
+  // #alerts stayed quiet.
+  const postToBoard = async (channel, body) => {
+    const sent = await post(channel, body);
+    if (!postSucceeded(sent)) {
+      log(`[${APP_NAME}] board post to #${channel} failed: ${board.postFailureReason(sent)}`);
+    }
+    return sent;
+  };
+
   // Alert once per distinct condition; post a recovery once when it clears.
   let alertKey = null;
   if (disk.severity(level) >= disk.severity('LOW')) alertKey = level;
@@ -321,19 +334,19 @@ async function runStoragePass(overrides = {}) {
 
   let posted = null;
   if (alertKey && state.alertKey !== alertKey) {
-    if (postSucceeded(await post('alerts', alertText(status)))) {
+    if (postSucceeded(await postToBoard('alerts', alertText(status)))) {
       state.alertKey = alertKey;
       posted = alertKey;
     }
   } else if (!alertKey && state.alertKey) {
-    if (postSucceeded(await post('alerts', `Frank storage recovered: ${level}, ${status.freeGb} GB free. Deploys and local CI resume.`))) {
+    if (postSucceeded(await postToBoard('alerts', `Frank storage recovered: ${level}, ${status.freeGb} GB free. Deploys and local CI resume.`))) {
       delete state.alertKey;
       posted = 'RECOVERED';
     }
   }
 
   if (after && (!state.lastReportAt || now - state.lastReportAt >= REPORT_EVERY_MS)) {
-    if (postSucceeded(await post('ops', reportText(status, history, now)))) state.lastReportAt = now;
+    if (postSucceeded(await postToBoard('ops', reportText(status, history, now)))) state.lastReportAt = now;
   }
   try { writeJsonAtomic(statePath, state); } catch { /* best effort */ }
 

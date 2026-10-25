@@ -259,6 +259,7 @@ async function runAutoDeploy(overrides = {}) {
   const run = overrides.run || execResult;
   const now = overrides.now || (() => Date.now());
   const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
+  const log = overrides.log || ((message) => console.error(message));
   const lockPath = overrides.lockPath || path.join(root, '.runtime', 'frank-auto-deploy.lock');
   const lock = (overrides.acquireLock || acquireLock)(lockPath);
   if (!lock) return { status: 'lock_held' };
@@ -270,12 +271,23 @@ async function runAutoDeploy(overrides = {}) {
   let lockChanged = false;
   let prTitles = [];
 
+  // A rejected board post must never be silent: one stderr line with the
+  // board's own error text (never the token) so the PM2 err log shows why
+  // #alerts stayed quiet.
+  const postToBoard = async (channel, body) => {
+    const sent = await post(channel, body);
+    if (!postSucceeded(sent)) {
+      log(`[${APP_NAME}] board post to #${channel} failed: ${board.postFailureReason(sent)}`);
+    }
+    return sent;
+  };
+
   // Alert once per distinct blocked/failed reason. The last reason persists
   // in .runtime so the long-lived loop does not spam #alerts every interval.
   const alertStatePath = overrides.alertStatePath || path.join(root, '.runtime', 'frank-auto-deploy-alert.json');
   const alert = async (reason, text) => {
     if (readAlertState(alertStatePath) === reason) return;
-    const sent = await post('alerts', text);
+    const sent = await postToBoard('alerts', text);
     if (postSucceeded(sent)) writeAlertState(alertStatePath, reason);
   };
   const healthOptions = {
@@ -347,7 +359,7 @@ async function runAutoDeploy(overrides = {}) {
           `rollback:${newCommit}`,
           `Frank auto-deploy rolled back ${newCommit.slice(0, 8)} to ${oldCommit.slice(0, 8)}; failing check: ${failing}. Rollback health: ${healthText(rollbackHealth)}.`,
         );
-        await post('ops', [
+        await postToBoard('ops', [
           `Frank deploy rolled back: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}→${oldCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Failed health: ${healthText(health)}`,
@@ -356,7 +368,7 @@ async function runAutoDeploy(overrides = {}) {
         ].join('\n'));
         result = { status: 'rolled_back', oldCommit, newCommit, health, rollbackHealth };
       } else {
-        await post('ops', [
+        await postToBoard('ops', [
           `Frank deployed: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Health: ${healthText(health)}`,
@@ -386,7 +398,7 @@ async function runAutoDeploy(overrides = {}) {
 
   // A successful pass clears any standing blocked/failed alert — post once.
   if ((result.status === 'noop' || result.status === 'deployed') && readAlertState(alertStatePath) !== null) {
-    const sent = await post('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
+    const sent = await postToBoard('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
     if (postSucceeded(sent)) clearAlertState(alertStatePath);
   }
   return result;
@@ -399,6 +411,9 @@ function startDeployLoop({
   log = (message) => console.error(message),
 } = {}) {
   let inFlight = false;
+  // 'blocked' is a steady state, not an event: log each distinct reason
+  // once, so a day-long block leaves one readable line instead of a flood.
+  const loggedBlockedReasons = new Set();
   const tick = async () => {
     if (inFlight) return;
     inFlight = true;
@@ -406,6 +421,12 @@ function startDeployLoop({
       const result = await deploy();
       if (result.status === 'failed' || result.status === 'rollback_failed') {
         log(`[${APP_NAME}] ${result.status}: ${result.reason || ''}`);
+      } else if (result.status === 'blocked') {
+        const reason = result.reason || 'unknown';
+        if (!loggedBlockedReasons.has(reason)) {
+          loggedBlockedReasons.add(reason);
+          log(`[${APP_NAME}] blocked: ${reason}`);
+        }
       }
     } catch (error) {
       log(`[${APP_NAME}] unhandled error: ${error instanceof Error ? error.message : error}`);

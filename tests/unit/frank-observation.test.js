@@ -191,6 +191,20 @@ describe('frank-observer loop', () => {
     expect(h.posts).toHaveLength(2);
   });
 
+  it('reports a failed board post to stderr instead of failing silently', async () => {
+    // Without a board token every post is skipped; the err log is the only
+    // place that can explain why #alerts stayed quiet.
+    const h = harness({ '.observatory/current.json': sample({ pm2: { available: true, processes: [{ name: 'x', status: 'errored' }] } }) });
+    const log = jest.fn();
+    const post = jest.fn(async () => ({ ok: false, skipped: true, error: 'board auth not configured' }));
+    await observer.runObservationPass({ ...h.opts, post, log, now: () => NOW });
+    await observer.runObservationPass({ ...h.opts, post, log, now: () => NOW + 60 * 1000 });
+    expect(post).toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      '[frank-observer] board post to #alerts failed: board auth not configured',
+    );
+  });
+
   it('is declared in ecosystem.config.js as a long-lived loop', () => {
     const entry = require('../../ecosystem.config.js').apps.find((a) => a.name === observer.APP_NAME);
     expect(entry).toMatchObject({ script: 'scripts/frank-observer.js', autorestart: true });
