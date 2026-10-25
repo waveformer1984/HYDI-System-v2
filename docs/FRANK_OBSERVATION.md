@@ -54,3 +54,18 @@ node scripts/frank-observer.js --once   # prints the snapshot
 
 The phone needs `HYDI_PHONE_READ_TOKEN` (the same token revenue uses);
 `hydi-update` already fills it in through pairing.
+
+## Stray processes
+
+PM2 on Windows has repeatedly lost track of processes it started: daemon
+copies that kept the daemon lock, and a Next server that held port 3000 for
+9 hours while PM2's own copy crash-looped. `lib/observation/strays.js` runs
+each observer pass on Frank and raises a CRIT issue (alerted after two
+passes) for:
+
+- the process listening on :3000, when it isn't `heidi-web-standalone` or one of its children;
+- the process holding `.heidi-daemon.lock`, when it isn't `hydi-daemon`;
+- any `ProcessContainerFork` child of the PM2 daemon that PM2 no longer lists.
+
+The alert names the pid and the command to stop it (`Stop-Process -Id <pid>`).
+The observer never stops anything itself.

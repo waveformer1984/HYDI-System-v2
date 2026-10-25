@@ -28,7 +28,9 @@ async function stampBuild(opts = {}) {
     stampedAt,
     source: identity.source,
   };
-  const dir = path.join(root, '.next');
+  // frank-auto-deploy builds into a staging dir (HYDI_NEXT_DIST_DIR) and
+  // renames it to .next afterwards; stamp wherever the build actually went.
+  const dir = path.join(root, (opts.env || process.env).HYDI_NEXT_DIST_DIR || '.next');
   fsImpl.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, 'hydi-build.json');
   const tmp = `${target}.tmp-${process.pid}`;
