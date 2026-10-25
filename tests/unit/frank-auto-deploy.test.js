@@ -167,6 +167,7 @@ describe('Frank auto-deploy', () => {
       alertStatePath: path.join(tmpDir(), 'alert.json'),
       now: () => clock,
       sleep: async (ms) => { clock += ms; },
+      diskPreflight: () => ({ ok: true, freeGb: 50, reason: 'ok' }),
       healthTimeoutMs: 100,
       healthIntervalMs: 25,
       probe: async (check) => ({
@@ -191,6 +192,31 @@ describe('Frank auto-deploy', () => {
     expect(posts.find((item) => item.channel === 'alerts').body).toContain('failing check: heidi-mobile');
     expect(posts.find((item) => item.channel === 'ops').body).toContain(`${OLD.slice(0, 8)}→${NEW.slice(0, 8)}→${OLD.slice(0, 8)}`);
     expect(posts.find((item) => item.channel === 'ops').body).toContain('#390 Isolate board senders');
+  });
+
+  it('pauses before merging or building when the disk is below the deploy floor', async () => {
+    const run = baseGitRun({ [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok() });
+    const posts = [];
+    const preflight = jest.fn(() => ({ ok: false, freeGb: 1.2, reason: 'only 1.2 GB free, needs 5 GB' }));
+    const result = await runAutoDeploy({
+      root: tmpDir(),
+      platform: 'win32',
+      run,
+      post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(tmpDir(), 'alert.json'),
+      diskPreflight: preflight,
+      env: {},
+    });
+
+    expect(result).toEqual({ status: 'blocked', reason: 'low disk: only 1.2 GB free, needs 5 GB' });
+    expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ minFreeGb: 5 }));
+    const commands = run.mock.calls.map(([file, args]) => `${file} ${args.join(' ')}`);
+    expect(commands).not.toContain('git merge --ff-only origin/clean-main');
+    expect(commands.some((c) => c.includes('run build'))).toBe(false);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].channel).toBe('alerts');
+    expect(posts[0].body).toContain('paused: only 1.2 GB free');
   });
 
   it('does nothing when the lock is already held', async () => {

@@ -281,7 +281,18 @@ async function testCommit(ctx, sha) {
   }
 }
 
-async function watchOnce(ctx) {
+/** npm ci + the suites need several GB; on a nearly full disk skip rather than fail and fill it further. */
+function diskGate(check = require('../lib/storage/disk')) {
+  const minFreeGb = check.gateFloors(process.env).localCiGb;
+  return check.preflight({ minFreeGb, volume: check.defaultVolume(path.resolve(__dirname, '..')) });
+}
+
+async function watchOnce(ctx, gate = diskGate) {
+  const space = gate();
+  if (!space.ok) {
+    console.log(`[local-ci] skipping this pass: ${space.reason} (docs/STORAGE_PROGRAM.md)`);
+    return;
+  }
   if (ctx.includeMain) {
     git(['fetch', 'origin', MAIN_BRANCH], ctx.repoRoot);
     const sha = git(['rev-parse', '--verify', `origin/${MAIN_BRANCH}^{commit}`], ctx.repoRoot);
@@ -348,6 +359,8 @@ async function main() {
     sha = git(['rev-parse', '--verify', `${opts.target}^{commit}`], repoRoot);
   }
 
+  const space = diskGate();
+  if (!space.ok) throw new Error(`not enough disk to run: ${space.reason}`);
   const results = await testCommit(ctx, sha);
   const failed = results.filter((r) => !r.ok);
   console.log(failed.length ? `[local-ci] ${failed.length} check(s) failed` : '[local-ci] all checks passed');
@@ -365,4 +378,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CHECKS, REPO, MAIN_BRANCH, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };
+module.exports = { CHECKS, REPO, MAIN_BRANCH, diskGate, watchOnce, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };

@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const board = require('../lib/forge-board/sdk');
+const disk = require('../lib/storage/disk');
 
 const APP_NAME = 'frank-auto-deploy';
 const INTERVAL_MS = 5 * 60 * 1000;
@@ -308,6 +309,18 @@ async function runAutoDeploy(overrides = {}) {
           await alert(reason, `Frank auto-deploy stopped: ${reason}. Nothing changed.`);
           result = { status: 'blocked', reason };
         }
+      }
+    }
+
+    if (!result) {
+      // A build on a nearly full disk fails halfway and forces a rollback;
+      // refuse up front instead. Fails closed when free space is unreadable.
+      const minFreeGb = disk.gateFloors(overrides.env || process.env).deployGb;
+      const space = (overrides.diskPreflight || disk.preflight)({ minFreeGb, volume: disk.defaultVolume(root) });
+      if (!space.ok) {
+        const reason = `low disk: ${space.reason}`;
+        await alert('low_disk', `Frank auto-deploy paused: ${space.reason}. Nothing changed. It resumes on its own once space is freed (docs/STORAGE_PROGRAM.md).`);
+        result = { status: 'blocked', reason };
       }
     }
 

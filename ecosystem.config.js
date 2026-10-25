@@ -646,6 +646,32 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Storage guard (scripts/frank-storage-guard.js, docs/STORAGE_PROGRAM.md).
+      // Long-lived loop with its own 15-minute interval: measures free
+      // space, clears only regenerable caches in tiers, writes
+      // .runtime/storage/status.json, alerts #alerts on level changes.
+      name: 'frank-storage-guard',
+      script: 'scripts/frank-storage-guard.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development' },
+      env_production: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-frank-storage-guard.err.log',
+      out_file: './logs/pm2-frank-storage-guard.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
       // Rezonate storefront app on :3001. Declared in boot.config.json
       // (PR #409) as a PM2-supervised module; this entry is the PM2-side
       // declaration the runtime audit compares against.
