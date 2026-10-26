@@ -2104,9 +2104,24 @@ async function kqRefreshStatus() {
   } catch (_) { box.textContent = 'key status unavailable'; }
 }
 
+// A scanned/pasted full code, or the 32-character short code typed in
+// (spaces and dashes ignored). hydi.py does the real validation.
+function kqLooksLikeCode(text) {
+  const t = String(text || '').trim();
+  if (/^hydi-provision:v1\?/.test(t)) return true;
+  return /^[A-Z2-7]{32}$/.test(t.replace(/[\s-]/g, '').toUpperCase());
+}
+
+function kqPaste() {
+  const box = document.getElementById('kqPaste');
+  const text = box ? box.value : '';
+  if (box) box.value = '';
+  kqImport(text);
+}
+
 async function kqImport(text) {
   if (KQ.busy) return;
-  if (!/^hydi-provision:v1\?/.test(String(text || '').trim())) { kqSay('That QR is not a Hydi key code.'); return; }
+  if (!kqLooksLikeCode(text)) { kqSay('That is not a Hydi key code.'); return; }
   KQ.busy = true;
   stopKeyScanner();
   kqSay('Code found — asking Frank…');
@@ -2144,7 +2159,13 @@ async function openKeyScanner() {
   openSheet('Scan key QR', `
     <div style="padding:4px 0">
       <video id="kqVideo" playsinline muted style="width:100%;max-height:50vh;border-radius:12px;background:#000"></video>
-      <div id="kqStatus" style="margin:8px 0;font-size:14px">On Frank, open http://127.0.0.1:3000/phone/provision and tap Show QR.</div>
+      <div id="kqStatus" style="margin:8px 0;font-size:14px">On Frank, open http://127.0.0.1:3000/phone/provision and tap Show code.</div>
+      <div style="display:flex;gap:8px;margin:8px 0">
+        <input id="kqPaste" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+          placeholder="Paste code (or type the short code)"
+          style="flex:1;min-width:0;padding:10px;border-radius:10px;border:1px solid #333;background:#111;color:#eee;font-size:14px">
+        <button type="button" id="kqPasteBtn" style="padding:10px 14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-glow);color:var(--accent);font-weight:600">Import</button>
+      </div>
       <label class="sheet-action" style="cursor:pointer">
         <span class="sheet-action-icon">📷</span>
         <div class="sheet-action-text"><div>Use a photo instead</div></div>
@@ -2154,8 +2175,10 @@ async function openKeyScanner() {
     </div>
   `);
   kqRefreshStatus();
+  document.getElementById('kqPasteBtn').addEventListener('click', kqPaste);
+  document.getElementById('kqPaste').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') kqPaste(); });
   if (!('BarcodeDetector' in window)) {
-    kqSay('This browser cannot read QR codes. Open the dashboard in Chrome.');
+    kqSay('This browser cannot read QR codes — paste or type the code instead.');
     return;
   }
   KQ.detector = new window.BarcodeDetector({ formats: ['qr_code'] });

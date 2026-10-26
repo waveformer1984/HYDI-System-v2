@@ -19,6 +19,7 @@ for k in ("HYDI_BOARD_HUMAN_TOKEN", "HYDI_PHONE_READ_TOKEN", "FRANK_HOSTS"):
 import hydi  # noqa: E402
 
 CODE = "A" * 32
+CODE2 = "B" * 32  # redeemed through the paste path
 REDEEMS = []
 
 
@@ -31,7 +32,7 @@ class FakeFrank(BaseHTTPRequestHandler):
         REDEEMS.append(body["code"])
         if self.path != "/api/phone/provision/redeem":
             self.send_response(404); self.end_headers(); return
-        if body["code"] != CODE or len(REDEEMS) > 1:
+        if body["code"] not in (CODE, CODE2) or REDEEMS.count(body["code"]) > 1:
             self.send_response(400); self.end_headers(); self.wfile.write(b'{"ok":false}'); return
         out = json.dumps({"ok": True, "keys": {
             "HYDI_BOARD_HUMAN_TOKEN": "human-secret",
@@ -97,6 +98,32 @@ def main():
     before = len(REDEEMS)
     assert hydi.provision_from_payload("WIFI:S:home;;", env_path=env_path)["ok"] is False
     assert len(REDEEMS) == before
+
+    # pasted input: the full payload passes through unchanged
+    assert hydi.normalize_provision_input(f"  {payload}\n") == payload
+    # a bare code (any case, dashes/spaces) goes to the Frank hosts the phone knows
+    grouped = "-".join(CODE2[i:i + 4] for i in range(0, 32, 4)).lower()
+    assert hydi.normalize_provision_input(grouped, hosts=["100.118.182.126", "192.168.86.178"], port=3000) == \
+        f"hydi-provision:v1?c={CODE2}&h=100.118.182.126,192.168.86.178&p=3000"
+    # ...but not without one, and nothing that isn't a code is accepted
+    for bad, hosts in ((CODE2, []), ("A" * 31, ["127.0.0.1"]), ("A" * 31 + "1", ["127.0.0.1"]),
+                       ("hydi-provision:v1?c=short&h=1.2.3.4&p=3000", ["127.0.0.1"]),
+                       ("https://evil.example/", ["127.0.0.1"]), ("", ["127.0.0.1"])):
+        try:
+            hydi.normalize_provision_input(bad, hosts=hosts, port=3000)
+            raise AssertionError(f"accepted {bad!r}")
+        except ValueError:
+            pass
+    before = len(REDEEMS)
+    assert hydi.provision_from_payload("not a code", env_path=env_path)["ok"] is False
+    assert len(REDEEMS) == before
+
+    # full flow from a pasted bare code, using FRANK_HOSTS written by the first import
+    os.environ["FRANK_HOSTS"] = "127.0.0.1"
+    os.environ["FRANK_WEB_PORT"] = str(port)
+    pasted = hydi.provision_from_payload(" ".join(CODE2[i:i + 8] for i in range(0, 32, 8)), env_path=env_path)
+    assert pasted["ok"], pasted
+    assert REDEEMS[-1] == CODE2
 
     # loopback guard used by both endpoints
     assert hydi._is_loopback("127.0.0.1") and hydi._is_loopback("::1")

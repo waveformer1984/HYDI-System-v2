@@ -528,6 +528,31 @@ def parse_provision_payload(text):
         raise ValueError("not a Hydi key QR")
     return m.group(1), hosts, port
 
+_BARE_CODE_RE = re.compile(r"^[A-Z2-7]{32}$")
+
+def normalize_provision_input(text, hosts=None, port=None):
+    """Scan or paste -> canonical payload. Raises ValueError for anything else.
+
+    Accepts the full QR payload, or just the 32-character code (spaces and
+    dashes ignored, any case) typed or pasted from Frank's page. A bare code
+    is sent to the Frank addresses this phone already knows (FRANK_HOSTS),
+    because without an address there is nobody to redeem it with.
+    """
+    raw = (text or "").strip()
+    if raw.lower().startswith("hydi-provision:"):
+        parse_provision_payload(raw)
+        return raw
+    bare = re.sub(r"[\s-]", "", raw).upper()
+    if not _BARE_CODE_RE.match(bare):
+        raise ValueError("not a Hydi key code")
+    known = frank_candidates() if hosts is None else hosts
+    if not known:
+        raise ValueError("this phone doesn't know Frank's address yet — paste the whole code (Copy code on Frank)")
+    port = int(port or os.environ.get("FRANK_WEB_PORT", "3000"))
+    payload = f"hydi-provision:v1?c={bare}&h={','.join(known[:4])}&p={port}"
+    parse_provision_payload(payload)
+    return payload
+
 def redeem_provision(code, hosts, port, timeout=8):
     """Try each Frank address in order. Returns (keys, missing, None) or (None, None, reason)."""
     reason = "Frank not reachable"
@@ -585,7 +610,7 @@ def keys_status():
 def provision_from_payload(text, env_path=None):
     """Scan result -> keys written. Returns a dict safe to show (names only)."""
     try:
-        code, hosts, port = parse_provision_payload(text)
+        code, hosts, port = parse_provision_payload(normalize_provision_input(text))
     except ValueError as err:
         return {"ok": False, "error": str(err)}
     keys, missing, reason = redeem_provision(code, hosts, port)
