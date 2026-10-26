@@ -133,6 +133,10 @@ describe('route handlers', () => {
     await codeHandler(root)(req({ headers: { 'x-hydi-provision': '1' } }), issued);
     expect(issued.code).toBe(200);
     expect(issued.body.svg).toMatch(/^<svg/);
+    // Text forms of the same one-time code, for Copy code / typing it in.
+    expect(issued.body.payload).toMatch(/^hydi-provision:v1\?c=[A-Z2-7]{32}&h=[^&]+&p=3000$/);
+    expect(issued.body.payload).toContain(`c=${issued.body.code}&`);
+    expect(issued.body.code).toBe(newCode(() => FIXED));
     expect(issued.body.keys).toEqual(['HYDI_BOARD_HUMAN_TOKEN', 'HYDI_PHONE_READ_TOKEN']);
     expect(JSON.stringify(issued.body)).not.toContain('secret');
 
