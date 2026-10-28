@@ -140,9 +140,30 @@ app.get('/api/health', async (req, res) => {
     res.json(status);
 });
 
+// Conversations + memory, relayed to Heidi Core (which owns the data and
+// enforces auth). Loopback calls need no secret; HEIDI_SECRET is sent when set.
+async function relayCore(method, corePath, res, body) {
+    try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (process.env.HEIDI_SECRET) headers['x-heidi-secret'] = process.env.HEIDI_SECRET;
+        const r = await fetch(`${HEIDI_CORE_URL}${corePath}`, {
+            method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(15000),
+        });
+        const text = await r.text();
+        res.status(r.status).type('application/json').send(text || '{}');
+    } catch (e) {
+        res.status(503).json({ error: `Heidi Core unreachable: ${e.message}` });
+    }
+}
+const qs = (q) => { const s = new URLSearchParams(Object.entries(q || {}).filter(([, v]) => typeof v === 'string')).toString(); return s ? `?${s}` : ''; };
+app.get('/api/conversations', (req, res) => relayCore('GET', `/conversations${qs(req.query)}`, res));
+app.post('/api/conversations', (req, res) => relayCore('POST', '/conversations', res, req.body || {}));
+app.get('/api/conversations/:id/messages', (req, res) => relayCore('GET', `/conversations/${encodeURIComponent(req.params.id)}/messages${qs(req.query)}`, res));
+app.get('/api/memory/status', (req, res) => relayCore('GET', `/memory/status${qs(req.query)}`, res));
+
 // SSE streaming chat
 app.post('/api/chat', async (req, res) => {
-    const { message, model, provider } = req.body;
+    const { message, model, provider, conversation_id: conversationId, request_id: requestId } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -175,7 +196,12 @@ app.post('/api/chat', async (req, res) => {
                 const r = await fetch(`${HEIDI_CORE_URL}${corePath}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ input: message, options: model ? { model } : {} }),
+                    body: JSON.stringify({
+                        input: message,
+                        options: model ? { model } : {},
+                        conversation_id: conversationId || undefined,
+                        request_id: requestId || undefined,
+                    }),
                     signal: AbortSignal.timeout(180000)
                 });
                 if (!r.ok || !r.body) continue;
@@ -194,6 +220,11 @@ app.post('/api/chat', async (req, res) => {
                         if (!line) continue;
                         try {
                             const d = JSON.parse(line.slice(6));
+                            if (d.conversation_not_found) {
+                                // Heidi refused an unknown conversation: tell the UI, don't
+                                // quietly fall through to a memory-less model.
+                                return finish({ provider: 'heidi-core', error: d.error, conversation_not_found: true });
+                            }
                             if (d.t && d.model !== 'fallback') send({ t: d.t });
                             if (d.done) meta = d;
                         } catch {}
@@ -204,7 +235,11 @@ app.post('/api/chat', async (req, res) => {
                         provider: `heidi-core`,
                         model: meta.model,
                         confidence: meta.confidence,
-                        tools_used: meta.tools_used
+                        tools_used: meta.tools_used,
+                        conversation_id: meta.conversation_id,
+                        persistence: meta.persistence,
+                        context_sources: meta.context_sources,
+                        memories_saved: meta.memories_saved
                     });
                 }
             } catch (e) {
@@ -218,7 +253,7 @@ app.post('/api/chat', async (req, res) => {
     if (provider !== 'lmstudio') {
         try {
             await streamOllama(message, selectedModel, systemPrompt, send);
-            return finish({ provider: 'ollama' });
+            return finish({ provider: 'ollama', persistence: { saved: false, error: 'Heidi Core is unreachable — this reply came straight from the model and was not saved to memory' } });
         } catch (e) {
             console.log('[Chat] Ollama unavailable:', e.message);
         }
