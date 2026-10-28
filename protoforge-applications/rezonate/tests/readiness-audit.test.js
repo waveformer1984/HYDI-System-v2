@@ -25,12 +25,22 @@ describe('Readiness audit', () => {
     assert.ok(r.ok && r.counts);
   });
 
-  it('memory probe writes and reads back an isolated note', async () => {
+  it('GET run() writes nothing — repeated calls create no notes', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aud-'));
     const audit = createAudit({ repository: repo(), engine: okEngine, copilot: createCopilot({ repository: repo(), dataDir: dir }), diskFreeGb: () => 40, freeMemBytes: () => 8e9 });
-    const r = await audit.run();
-    const m = r.checks.copilot.find((c) => c.id === 'copilot.memory');
-    assert.equal(m.status, 'PASS', m.evidence);
+    await audit.run();
+    await audit.run();
+    await audit.run();
+    const m = (await audit.run()).checks.copilot.find((c) => c.id === 'copilot.memory');
+    assert.equal(m.status, 'NOT_TESTED', 'read-only audit must report persistence as NOT_TESTED, not PASS');
+    assert.ok(!fs.existsSync(path.join(dir, 'copilot', 'audit-probe.jsonl')), 'three GET runs created a note file');
+  });
+
+  it('POST probe writes and reads back an isolated note', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aud-'));
+    const audit = createAudit({ repository: repo(), engine: okEngine, copilot: createCopilot({ repository: repo(), dataDir: dir }), diskFreeGb: () => 40, freeMemBytes: () => 8e9 });
+    const p = await audit.probe();
+    assert.equal(p.status, 'PASS', p.evidence);
     const file = path.join(dir, 'copilot', 'audit-probe.jsonl');
     assert.ok(fs.existsSync(file));
     assert.match(fs.readFileSync(file, 'utf8'), /audit-readiness-probe/);

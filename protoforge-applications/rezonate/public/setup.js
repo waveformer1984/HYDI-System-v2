@@ -53,7 +53,12 @@
     S.done.project = p.id; save(S);
   }
 
-  function audio() {
+  async function audio() {
+    // Resource gate is evaluated NOW — a fresh audit, not the stale
+    // report from an earlier screen. Rendering waits for real headroom.
+    $('audwarn').textContent = 're-checking resources…';
+    const r = await api('/audit');
+    report = r.report || report;
     const mem = report && report.checks.resources.find((c) => c.id === 'resource.memory');
     const disk = report && report.checks.resources.find((c) => c.id === 'resource.disk');
     $('aud').innerHTML = [
