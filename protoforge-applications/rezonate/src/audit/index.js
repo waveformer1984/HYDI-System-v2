@@ -17,23 +17,45 @@ const RAM_WARN_GB = 2;
 const RAM_BLOCK_GB = 1;
 
 function createAudit({ repository, engine, copilot, config = {}, execFileText, diskFreeGb, freeMemBytes, now = () => new Date() } = {}) {
-  const _disk = diskFreeGb || ((drive = 'C:') => {
+  const _disk = diskFreeGb || (() => {
     try {
-      const out = require('child_process').execFileSync('powershell.exe', ['-NoProfile', '-Command', `(Get-PSDrive ${drive.replace(':', '')}).Free`], { encoding: 'utf8', timeout: 8000 });
-      const n = Number(String(out).trim()) / 1e9;
-      return Number.isFinite(n) ? n : null;
+      const st = fs.statfsSync(path.join(__dirname, '..', '..', '..', '..'));
+      return (st.bavail * st.bsize) / 1e9;
     } catch { return null; }
   });
   const _mem = freeMemBytes || (() => {
     try { return os.freemem(); } catch { return null; }
   });
 
+  // Engine health comes from the provider's own health() — async, and
+  // the same surface /health and /engine/status report. Falls back to
+  // isAvailable() when the provider surface is absent.
+  async function engineHealth() {
+    if (!engine) return null;
+    try {
+      if (engine.audioProvider && engine.audioProvider.health) return await engine.audioProvider.health();
+      if (engine.isAvailable) return { available: await engine.isAvailable() };
+    } catch { return null; }
+    return null;
+  }
+
+  function gitSha() {
+    if (config.gitSha) return config.gitSha;
+    try {
+      const p = JSON.parse(fs.readFileSync(
+        config.provenancePath || path.join(__dirname, '..', '..', '..', '..', '.runtime', 'provenance', 'rezonate-app.json'), 'utf8'));
+      return p.gitSha || null;
+    } catch { return null; }
+  }
+
   async function serviceHealth(app) {
     const checks = [];
     checks.push({ id: 'service.process', status: repository ? 'PASS' : 'FAIL', evidence: repository ? 'repository bound' : 'no repository' });
-    checks.push({ id: 'service.engine', status: engine && engine.status && engine.status().available ? 'PASS' : 'FAIL',
-      evidence: engine && engine.status ? JSON.stringify(engine.status()) : 'no engine' });
-    checks.push({ id: 'service.version', status: config.gitSha ? 'PASS' : 'NOT_TESTED', evidence: config.gitSha || 'no stamp injected' });
+    const eh = await engineHealth();
+    checks.push({ id: 'service.engine', status: eh && eh.available ? 'PASS' : 'FAIL',
+      evidence: eh ? `available=${eh.available}` : 'engine health unreadable' });
+    const sha = gitSha();
+    checks.push({ id: 'service.version', status: sha ? 'PASS' : 'NOT_TESTED', evidence: sha ? `gitSha ${sha.slice(0, 8)}` : 'no stamp injected' });
     checks.push({ id: 'service.remix_page', status: app ? 'PASS' : 'NOT_TESTED', evidence: app ? 'served by this process' : 'not probed' });
     return checks;
   }
@@ -50,11 +72,14 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
       checks.push({ id: 'copilot.context', status: c && typeof c === 'object' ? 'PASS' : 'FAIL', evidence: `assets=${(c.assets || []).length}` });
     } catch (e) { checks.push({ id: 'copilot.context', status: 'FAIL', evidence: String(e.message || e) }); }
     try {
-      const note = `audit-readiness-probe ${now().toISOString()}`;
-      await copilot.remember('audit-probe', note);
       const m = await copilot.memory('audit-probe');
-      const found = (m.entries || []).some((e) => e.note === note);
-      checks.push({ id: 'copilot.memory', status: found ? 'PASS' : 'FAIL', evidence: found ? 'probe note round-tripped' : 'probe note missing' });
+      checks.push({
+        id: 'copilot.memory',
+        status: m && Array.isArray(m.entries) ? 'NOT_TESTED' : 'FAIL',
+        evidence: m && Array.isArray(m.entries)
+          ? 'read ok; write-persistence is exercised only by POST /audit/probe'
+          : 'memory read malformed',
+      });
     } catch (e) { checks.push({ id: 'copilot.memory', status: 'FAIL', evidence: String(e.message || e) }); }
     try {
       const g = await copilot.suggest('deliberately-missing-project');
@@ -74,7 +99,7 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
   }
 
   async function engineChecks() {
-    const st = engine && engine.status ? engine.status() : {};
+    const st = (await engineHealth()) || {};
     const enginePath = st.path || (config.enginePath || null);
     let stemsDir = null;
     try {
@@ -82,8 +107,8 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
       stemsDir = fs.readdirSync(path.join(root, 'stems')).filter(Boolean).slice(0, 5);
     } catch { /* optional */ }
     return [
-      { id: 'engine.local', status: st.audioProvider === 'local' && st.cloudDependency === false ? 'PASS' : 'FAIL', evidence: `provider=${st.audioProvider} cloud=${st.cloudDependency}` },
-      { id: 'engine.model', status: st.modelAvailable ? 'PASS' : 'BLOCKED', evidence: st.modelAvailable ? 'local model present' : 'model unavailable' },
+      { id: 'engine.local', status: st.provider === 'local' && st.cloudDependency === false ? 'PASS' : 'FAIL', evidence: `provider=${st.provider} cloud=${st.cloudDependency}` },
+      { id: 'engine.model', status: st.modelAvailable ? 'PASS' : 'BLOCKED', evidence: st.modelAvailable ? 'local model present' : (st.reason || 'model unavailable') },
       { id: 'engine.stems_cache', status: stemsDir && stemsDir.length ? 'PASS' : 'NOT_TESTED', evidence: stemsDir && stemsDir.length ? `cached: ${stemsDir.join(', ')}` : 'no cached stems found' },
     ];
   }
@@ -95,7 +120,8 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
     return [
       { id: 'tablet.listen', status: 'PASS', evidence: `serving on port ${config.port || 3001}` },
       { id: 'tablet.tailnet', status: 'BLOCKED', evidence: 'verify http://100.118.182.126:3001 from the tablet on the tailnet — cannot be probed from Frank' },
-      { id: 'tablet.pwa', status: 'NOT_TESTED', evidence: 'manifest present? check /manifest.webmanifest' },
+      { id: 'tablet.pwa', status: fs.existsSync(path.join(__dirname, '..', '..', 'public', 'manifest.webmanifest')) ? 'PASS' : 'FAIL',
+        evidence: fs.existsSync(path.join(__dirname, '..', '..', 'public', 'manifest.webmanifest')) ? 'manifest present' : 'manifest.webmanifest missing' },
     ];
   }
 
@@ -127,7 +153,21 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
     return { ok: true, overall, counts, at: now().toISOString(), version: config.gitSha || null, checks: groups };
   }
 
-  return { run, DISK_WARN_GB, DISK_BLOCK_GB, RAM_WARN_GB, RAM_BLOCK_GB };
+  // The only check allowed to write — explicitly triggered via POST.
+  // A uniquely identifiable, safely isolated probe note proves write+read
+  // persistence without touching real creative memory.
+  async function probe() {
+    if (!copilot || !copilot.remember || !copilot.memory) return { ok: false, status: 'FAIL', evidence: 'no copilot bound' };
+    const note = `audit-readiness-probe ${now().toISOString()}`;
+    try {
+      await copilot.remember('audit-probe', note);
+      const m = await copilot.memory('audit-probe');
+      const found = (m.entries || []).some((e) => e.note === note);
+      return { ok: true, status: found ? 'PASS' : 'FAIL', evidence: found ? 'probe note written and read back' : 'probe note missing after write' };
+    } catch (e) { return { ok: false, status: 'FAIL', evidence: String(e.message || e) }; }
+  }
+
+  return { run, probe, DISK_WARN_GB, DISK_BLOCK_GB, RAM_WARN_GB, RAM_BLOCK_GB };
 }
 
 module.exports = { createAudit };
