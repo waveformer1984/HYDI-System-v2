@@ -50,6 +50,20 @@
       </form>
     </section>
 
+    <section id="copilot-card" class="card">
+      <h2>Co-Pilot</h2>
+      <div id="copilot-context" class="note">Reading project state…</div>
+      <div id="copilot-suggestions"></div>
+      <details>
+        <summary>Session notes</summary>
+        <form id="copilot-note-form">
+          <input id="copilot-note" type="text" placeholder="e.g. keep the drums busier in verse 2" />
+          <button type="submit">Remember</button>
+        </form>
+        <ul id="copilot-memory"></ul>
+      </details>
+    </section>
+
     <section id="preview-card" class="card" hidden>
       <h2>Matched samples</h2>
       <div id="preview-body"></div>
@@ -63,5 +77,6 @@
 
   <footer><small>Resonate Remix · deterministic segment-swap engine</small></footer>
   <script src="remix.js"></script>
+  <script src="copilot.js"></script>
 </body>
 </html>
