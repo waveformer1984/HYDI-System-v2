@@ -75,8 +75,9 @@ pm2 save
 #### Storage guard (`frank-storage-guard`)
 
 PM2 loop (15 min) that measures free space on the repo's volume, clears
-only regenerable caches in tiers (OK → orphaned local-ci worktrees; LOW →
-npm/.next/Docker build cache; CRITICAL → dangling images, `pm2 flush`),
+only regenerable caches in tiers (OK → orphaned local-ci worktrees;
+WATCH → `%TEMP%` entries untouched for 2+ days; LOW → npm/.next/Docker
+build cache; CRITICAL → dangling images, `pm2 flush`),
 writes `.runtime/storage/status.json`, and posts `#alerts` once per level
 change plus a weekly `#ops` report. Levels live in `lib/storage/disk.js`;
 `frank-auto-deploy` refuses to build below `HYDI_DEPLOY_MIN_FREE_GB` (5)
