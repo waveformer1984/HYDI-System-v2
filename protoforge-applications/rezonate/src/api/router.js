@@ -387,8 +387,12 @@ function createApi(repository, config = {}) {
   }));
 
   // ── Readiness audit — read-only system check for the setup wizard ──
+  // GET writes nothing. The persistence probe is an explicit POST.
   app.get('/audit', h(async (req, res) => {
     send(res, { report: await audit.run() });
+  }));
+  app.post('/audit/probe', h(async (req, res) => {
+    send(res, { probe: await audit.probe() });
   }));
 
   app.get('/engine/status', h(async (req, res) => {

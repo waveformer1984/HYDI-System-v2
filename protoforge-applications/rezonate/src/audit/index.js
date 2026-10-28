@@ -50,11 +50,14 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
       checks.push({ id: 'copilot.context', status: c && typeof c === 'object' ? 'PASS' : 'FAIL', evidence: `assets=${(c.assets || []).length}` });
     } catch (e) { checks.push({ id: 'copilot.context', status: 'FAIL', evidence: String(e.message || e) }); }
     try {
-      const note = `audit-readiness-probe ${now().toISOString()}`;
-      await copilot.remember('audit-probe', note);
       const m = await copilot.memory('audit-probe');
-      const found = (m.entries || []).some((e) => e.note === note);
-      checks.push({ id: 'copilot.memory', status: found ? 'PASS' : 'FAIL', evidence: found ? 'probe note round-tripped' : 'probe note missing' });
+      checks.push({
+        id: 'copilot.memory',
+        status: m && Array.isArray(m.entries) ? 'NOT_TESTED' : 'FAIL',
+        evidence: m && Array.isArray(m.entries)
+          ? 'read ok; write-persistence is exercised only by POST /audit/probe'
+          : 'memory read malformed',
+      });
     } catch (e) { checks.push({ id: 'copilot.memory', status: 'FAIL', evidence: String(e.message || e) }); }
     try {
       const g = await copilot.suggest('deliberately-missing-project');
@@ -127,7 +130,21 @@ function createAudit({ repository, engine, copilot, config = {}, execFileText, d
     return { ok: true, overall, counts, at: now().toISOString(), version: config.gitSha || null, checks: groups };
   }
 
-  return { run, DISK_WARN_GB, DISK_BLOCK_GB, RAM_WARN_GB, RAM_BLOCK_GB };
+  // The only check allowed to write — explicitly triggered via POST.
+  // A uniquely identifiable, safely isolated probe note proves write+read
+  // persistence without touching real creative memory.
+  async function probe() {
+    if (!copilot || !copilot.remember || !copilot.memory) return { ok: false, status: 'FAIL', evidence: 'no copilot bound' };
+    const note = `audit-readiness-probe ${now().toISOString()}`;
+    try {
+      await copilot.remember('audit-probe', note);
+      const m = await copilot.memory('audit-probe');
+      const found = (m.entries || []).some((e) => e.note === note);
+      return { ok: true, status: found ? 'PASS' : 'FAIL', evidence: found ? 'probe note written and read back' : 'probe note missing after write' };
+    } catch (e) { return { ok: false, status: 'FAIL', evidence: String(e.message || e) }; }
+  }
+
+  return { run, probe, DISK_WARN_GB, DISK_BLOCK_GB, RAM_WARN_GB, RAM_BLOCK_GB };
 }
 
 module.exports = { createAudit };
