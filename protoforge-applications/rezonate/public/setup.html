@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <title>Resonate — Setup</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .step{display:none}.step.on{display:block}
+    .dots span{display:inline-block;width:.65em;height:.65em;border-radius:50%;background:#334;margin-right:.4em}
+    .dots span.on{background:#7cf}
+    .st-PASS{color:#7f7}.st-FAIL{color:#f77}.st-BLOCKED,.st-NOT_TESTED{color:#fc7}
+    button.big{min-height:48px;min-width:140px;font-size:1rem;padding:.7rem 1.1rem;margin:.3rem .3rem .3rem 0}
+    .chk{border:1px solid #334;border-radius:8px;padding:.55rem .7rem;margin:.4rem 0;font-size:.9rem}
+    .chk small{color:#9ab;display:block}
+    .prog{font-size:.85rem;color:#9ab;margin:.5rem 0}
+  </style>
+</head>
+<body>
+<header class="hero"><h1>Resonate Setup</h1><p class="tagline">Verify the system before making music.</p></header>
+<main>
+  <div class="dots" id="dots" aria-label="progress"></div>
+
+  <section class="card step on" data-step="0">
+    <h2>1 · Welcome</h2>
+    <p>Your <strong>laptop</strong> runs the audio engine — it's the studio. This <strong>tablet</strong> is the control surface. Heavy work (stem separation, rendering) may take minutes and runs on the laptop, not here.</p>
+    <p>This wizard checks the installation first. Nothing changes your music until you approve it.</p>
+    <button class="big" onclick="W.next()">Start check</button>
+  </section>
+
+  <section class="card step" data-step="1">
+    <h2>2 · System check</h2>
+    <p class="prog">Reads disk, memory, and engine status from the running app — nothing is modified.</p>
+    <div id="sys"></div>
+    <button class="big" onclick="W.sys()">Run system check</button>
+    <button class="big" onclick="W.next()">Continue</button>
+  </section>
+
+  <section class="card step" data-step="2">
+    <h2>3 · Network connection</h2>
+    <p>The laptop and this tablet must be on the same <strong>Tailscale</strong> tailnet. From the tablet, open:</p>
+    <div class="chk"><strong>http://100.118.182.126:3001/setup.html</strong><small>tailnet address of Frank — Rezonate listens on port 3001</small></div>
+    <p class="prog">If this page already loaded on the tablet over that address, the link works. Tablet-side connectivity can't be verified from the laptop — it reports <span class="st-BLOCKED">BLOCKED</span> until you confirm it on the device.</p>
+    <div id="net"></div>
+    <button class="big" onclick="W.next()">Continue</button>
+  </section>
+
+  <section class="card step" data-step="3">
+    <h2>4 · Co-Pilot check</h2>
+    <p class="prog">Exercises suggestions, project context, and a saved-note round trip. One harmless test note is written and read back.</p>
+    <div id="cop"></div>
+    <button class="big" onclick="W.cop()">Test co-pilot</button>
+    <button class="big" onclick="W.next()">Continue</button>
+  </section>
+
+  <section class="card step" data-step="4">
+    <h2>5 · Project check</h2>
+    <p class="prog">Pick a project — only real metadata is shown. If nothing exists yet, that's reported, not faked.</p>
+    <div id="proj"></div>
+    <button class="big" onclick="W.proj()">List projects</button>
+    <button class="big" onclick="W.next()">Continue</button>
+  </section>
+
+  <section class="card step" data-step="5">
+    <h2>6 · Audio test</h2>
+    <p class="prog">A real render would re-mix a few bars from your cached stems (e.g. Bad Decision Club, ~80 s on this machine). The source file is never overwritten — output lands in <code>swaps/</code>.</p>
+    <div id="aud"></div>
+    <div id="audctl" hidden>
+      <p id="audwarn"></p>
+      <button class="big" id="audgo" onclick="W.audio()">Run audio test</button>
+    </div>
+    <button class="big" onclick="W.next()">Finish setup</button>
+  </section>
+
+  <section class="card step" data-step="6">
+    <h2>7 · Done</h2>
+    <div id="final"></div>
+    <button class="big" onclick="location.href='/remix.html'">Open the studio</button>
+  </section>
+</main>
+<script src="setup.js"></script>
+</body>
+</html>

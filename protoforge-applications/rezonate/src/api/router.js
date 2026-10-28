@@ -38,6 +38,9 @@ function createApi(repository, config = {}) {
   const { createCopilot } = require('../copilot');
   const copilot = config.copilot || createCopilot({ repository, engine, dataDir: config.dataDir });
 
+  const { createAudit } = require('../audit');
+  const audit = config.audit || createAudit({ repository, engine, copilot, config });
+
   // ── Static product UI ─────────────────────────────────────────────
   app.use(express.static(require('path').join(__dirname, '..', '..', 'public')));
 
@@ -381,6 +384,11 @@ function createApi(repository, config = {}) {
   }));
   app.get('/copilot/memory', h(async (req, res) => {
     send(res, await copilot.memory(req.query.projectId || null));
+  }));
+
+  // ── Readiness audit — read-only system check for the setup wizard ──
+  app.get('/audit', h(async (req, res) => {
+    send(res, { report: await audit.run() });
   }));
 
   app.get('/engine/status', h(async (req, res) => {
