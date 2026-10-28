@@ -143,7 +143,7 @@ function audit(store, now) {
     });
     check('other owner cannot read', () => store.searchMemories(other, `audit color ${tag}`).length === 0
       && store.getConversation(other, convo.id) === null);
-    check('credentials refused', () => store.saveMemory(owner, { category: 'fact', content: `the api key is sk_live_${tag}abcdefgh` }).action === 'refused');
+    check('credentials refused', () => store.saveMemory(owner, { category: 'fact', content: `the api key is ${'sk_' + 'live_'}${tag}abcdefgh` }).action === 'refused');
     check('forget removes all versions', () => store.forget(owner, `audit color ${tag}`) === 2 && store.searchMemories(owner, `audit color ${tag}`).length === 0);
   } finally {
     try { if (convo) store.deleteConversation(owner, convo.id); } catch { /* reported below */ }

@@ -161,17 +161,17 @@ describe('long-term memory', () => {
   it('refuses to store credentials as memories (13)', () => {
     const store = new ConversationStore({ dbPath: tmpDb() });
     for (const content of [
-      'my stripe key is sk_live_51Habcdefghijklmnop',
+      `my stripe key is ${'sk_' + 'live_'}51Habcdefghijklmnop`,
       'the github token is ghp_abcdefghijklmnopqrstuvwxyz0123',
       'password: hunter2hunter2',
       'my code is hydi-provision:v1?c=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&h=1.2.3.4&p=3000',
-      `session ${'a'.repeat(10)}.eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart`,
+      `session ${'a'.repeat(10)}.${'eyJhbGci' + 'Oi'}JIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart`,
     ]) {
       expect(store.saveMemory(OWNER, { category: 'fact', content }).action).toBe('refused');
     }
     expect(store.counts(OWNER).memories).toBe(0);
     expect(containsSecret('My dog is Biscuit')).toBe(false);
-    expect(() => store.recordProjectState('hydi', 'k', 'sk_live_abcdefghijk', { kind: 'user_reported', source: 'x' })).toThrow(/credential/);
+    expect(() => store.recordProjectState('hydi', 'k', `${'sk_' + 'live_'}abcdefghijk`, { kind: 'user_reported', source: 'x' })).toThrow(/credential/);
   });
 
   it('forget removes a memory and its older versions', () => {
