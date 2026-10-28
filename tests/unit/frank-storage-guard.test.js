@@ -163,11 +163,13 @@ describe('frank storage guard cleanup', () => {
 
   it('treats a folder too big to walk as in use', () => {
     const dir = tmpDir();
-    const now = Date.now();
     for (let i = 0; i < 5; i += 1) fs.writeFileSync(path.join(dir, `f${i}`), 'x');
+    const now = Date.now();
     age(dir, 3 * 24 * HOUR, now);
     expect(guard.newestMtime(dir, 3)).toBe(Infinity);
-    expect(guard.newestMtime(dir)).toBeLessThanOrEqual(now);
+    // mtimeMs has sub-ms precision; compare against a fresh clock, not the
+    // floored `now` captured before the files were written.
+    expect(guard.newestMtime(dir)).toBeLessThanOrEqual(Date.now());
   });
 
   it('leaves .next/cache alone while a deploy holds its lock', async () => {
