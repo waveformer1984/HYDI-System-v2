@@ -31,13 +31,17 @@ Override with `HYDI_DISK_WATCH_GB`, `HYDI_DISK_LOW_GB`,
 
 ## What the guard cleans
 
-Everything below is regenerated on demand. The guard never touches your
-files, Docker volumes, images a container uses, the Recycle Bin, or the
-Docker disk image itself.
+Everything below is regenerated on demand or is throwaway temp data. The
+guard never touches your files, Docker volumes, images a container uses,
+the Recycle Bin, or the Docker disk image itself.
+
+The WATCH tier exists because of 2026-10-27: 8.6 GB of old `%TEMP%` files
+took C: to 0.6 GB free while every other tier had nothing left to clear.
 
 | From level | Removes |
 |---|---|
 | OK | local-ci worktrees a crashed run left in `%TEMP%` (`hydi-ci-<sha>-*`, > 6h old); local-ci logs > 14 days; `git worktree prune` |
+| WATCH | Anything at the top of `%TEMP%` whose newest content is 2+ days old (Windows only). Links/junctions are never followed or removed, virtual disks (`*.vhdx`, e.g. WSL's swap) are kept, files in use are skipped, and a folder too large to walk counts as in use |
 | LOW | `npm cache clean --force`; `.next/cache` (skipped while a deploy holds its lock); `docker builder prune` (build cache only) |
 | CRITICAL | `docker image prune` (untagged, unused images only); `pm2 flush` |
 
