@@ -23,11 +23,18 @@ function _memoryFile(dataDir, projectId) {
 function createCopilot({ repository, engine, dataDir, now = () => new Date() } = {}) {
   const dir = dataDir || (repository && repository.dataDir) || '.';
 
+  // Repository methods are synchronous today, may be async later — accept
+  // either, and degrade to empty context when the store is unreadable.
+  async function _safe(fn, fallback) {
+    try { return await Promise.resolve(fn()).catch(() => fallback); }
+    catch { return fallback; }
+  }
+
   async function context(projectId) {
-    const project = projectId && repository ? await repository.getProject(projectId).catch(() => null) : null;
-    const tracks = repository && projectId ? await repository.listTracks(projectId).catch(() => []) : [];
-    const assets = repository ? await repository.listAssets(projectId).catch(() => []) : [];
-    const jobs = repository ? await repository.listProcessingJobs().catch(() => []) : [];
+    const project = projectId && repository ? await _safe(() => repository.getProject(projectId), null) : null;
+    const tracks = repository && projectId ? await _safe(() => repository.listTracks(projectId), []) : [];
+    const assets = repository ? await _safe(() => repository.listAssets(projectId), []) : [];
+    const jobs = repository ? await _safe(() => repository.listProcessingJobs(), []) : [];
     return { project, tracks, assets, jobs, engineStatus: engine && engine.status ? engine.status() : null, at: now().toISOString() };
   }
 
