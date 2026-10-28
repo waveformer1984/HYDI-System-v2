@@ -14,7 +14,7 @@ function repo(projects = []) {
     listTracks: () => [], listAssets: () => [], listProcessingJobs: () => [],
   };
 }
-const okEngine = { status: () => ({ available: true, audioProvider: 'local', cloudDependency: false, modelAvailable: true }) };
+const okEngine = { audioProvider: { health: async () => ({ available: true, provider: 'local', cloudDependency: false, modelAvailable: true }) } };
 
 describe('Readiness audit', () => {
   it('reports only PASS/FAIL/BLOCKED/NOT_TESTED and aggregates', async () => {
