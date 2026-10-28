@@ -260,6 +260,13 @@ describe('memory commands and diagnostics (17)', () => {
     expect(parseMemoryCommand('/memory search kiln outlet')).toEqual({ cmd: 'search', arg: 'kiln outlet' });
     expect(parseMemoryCommand('memory project hydi refresh')).toEqual({ cmd: 'project', arg: 'hydi refresh' });
     expect(parseMemoryCommand('what is in memory?')).toBeNull();
+    expect(parseMemoryCommand('memory of my dog')).toBeNull();
+    expect(parseMemoryCommand('memoryless')).toBeNull();
+    expect(parseMemoryCommand('  MEMORY   Recent  ')).toEqual({ cmd: 'recent', arg: '' });
+    // Linear on pathological input (CodeQL js/polynomial-redos).
+    const t0 = Date.now();
+    expect(parseMemoryCommand(`memory${' '.repeat(100000)}x`)).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(200);
   });
 
   it('status reports the real conversation, sources and store state', async () => {

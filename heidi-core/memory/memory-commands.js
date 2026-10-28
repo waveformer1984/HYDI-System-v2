@@ -13,10 +13,23 @@
 const crypto = require('crypto');
 const { refreshProject, describeProject, needsRefresh, ageText, PROJECTS } = require('./project-state');
 
+const COMMANDS = ['status', 'search', 'recent', 'project', 'audit', 'forget'];
+
+// Plain string handling, not one big regex: chat input is user-controlled,
+// and a pattern with adjacent optional whitespace runs is quadratic on
+// "memory" followed by many spaces (CodeQL js/polynomial-redos).
 function parseMemoryCommand(input) {
-  const m = /^\s*\/?memory(?:\s+(status|search|recent|project|audit|forget)\b\s*(.*))?\s*$/i.exec(String(input || ''));
-  if (!m) return null;
-  return { cmd: (m[1] || 'status').toLowerCase(), arg: (m[2] || '').trim() };
+  const t = String(input || '').trim();
+  const head = t.startsWith('/') ? t.slice(1) : t;
+  if (head.slice(0, 6).toLowerCase() !== 'memory') return null;
+  const rest = head.slice(6);
+  if (rest && !/^\s/.test(rest)) return null; // "memoryless", not a command
+  const body = rest.trim();
+  if (!body) return { cmd: 'status', arg: '' };
+  const space = body.search(/\s/);
+  const word = (space === -1 ? body : body.slice(0, space)).toLowerCase();
+  if (!COMMANDS.includes(word)) return null;
+  return { cmd: word, arg: space === -1 ? '' : body.slice(space).trim() };
 }
 
 function fmtMemory(m) {
