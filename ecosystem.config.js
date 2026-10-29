@@ -145,7 +145,13 @@ module.exports = {
       name: 'hydi-daemon',
       // The JS entry registers tsx and loads the TypeScript daemon in-process.
       // PM2 owns this exact PID; no daemon child can survive a PM2 restart.
+      // require('tsx/cjs') hooks require() only — every `await import('../lib/...')`
+      // of an extensionless .ts file (CredentialRunbookRegistry,
+      // ExternalCapabilityAcquisitionEngine, delegated-operator, the
+      // CognitiveCore lazy imports) failed ERR_MODULE_NOT_FOUND inside the
+      // daemon. `--import tsx` hooks the ESM loader too, so both paths work.
       script: 'scripts/heidi-daemon-launcher.js',
+      node_args: '--import tsx',
       args: '--no-stabilization',
       cwd: __dirname,
       instances: 1,

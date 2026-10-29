@@ -28,6 +28,7 @@
  */
 
 import { Pool, QueryResultRow } from 'pg';
+import { devPatchEnabled, revenueAdvanceEnabled, shouldAutoApplyPatch, GATE_DEV_PATCH_DISABLED, GATE_REVENUE_ADVANCE_DISABLED } from './executor-env-gates';
 import { HeidiIdentityModel, HeidiIdentity, AutonomyLevel } from './HeidiIdentity';
 import { GoalSystem, Goal, GoalStatus } from './GoalSystem';
 import { WorldModel, WorldEntity } from './WorldModel';
@@ -1083,6 +1084,22 @@ export class CognitiveCore {
     // boundary (live authorization, customer identity, Stripe presence) is
     // enforced inside RevenueRuntime, never bypassed.
     this.wireExecutor('revenue.advance_offer', async (params) => {
+      if (!revenueAdvanceEnabled()) {
+        await this.pool.query(
+          `INSERT INTO heidi_events (event_type, division, verdict, payload, created_at) VALUES ('action_refused', 'agents', $1, $2, now()) RETURNING id`,
+          [GATE_REVENUE_ADVANCE_DISABLED, JSON.stringify({ capabilityId: 'revenue.advance_offer', offerId: params?.offerId ?? null, reason: 'HEIDI_ALLOW_REVENUE_ADVANCE is not true' })],
+        ).catch(() => { });
+        return {
+          capabilityId: 'revenue.advance_offer',
+          executed: false,
+          outcome: 'skipped' as const,
+          result: { transitions: [] },
+          error: `${GATE_REVENUE_ADVANCE_DISABLED}: HEIDI_ALLOW_REVENUE_ADVANCE must be exactly 'true'`,
+          evidence: [],
+          verified: false,
+          verificationDetails: 'Refused by env gate - no checkout session attempted',
+        };
+      }
       try {
         const { RevenueRuntime } = await import('./RevenueRuntime');
         const { getJobManager } = await import('../revenue/JobManager');
@@ -1835,6 +1852,13 @@ export class CognitiveCore {
     // typecheck, commits once, and persists evidence. Never pushes,
     // never expands scope, never touches protected files.
     this.wireExecutor('ops.dev_patch', async (params) => {
+      if (!devPatchEnabled()) {
+        await this.pool.query(
+          `INSERT INTO heidi_events (event_type, division, verdict, payload, created_at) VALUES ('action_refused', 'agents', $1, $2, now()) RETURNING id`,
+          [GATE_DEV_PATCH_DISABLED, JSON.stringify({ capabilityId: 'ops.dev_patch', missionId: params?.missionId ?? params?.goalId ?? null, reason: 'HEIDI_ALLOW_DEV_PATCH is not true' })],
+        ).catch(() => { });
+        return this.failResult('ops.dev_patch', `${GATE_DEV_PATCH_DISABLED}: HEIDI_ALLOW_DEV_PATCH must be exactly 'true'`);
+      }
       const { applyBoundedPatch } = await import('./DevPatchExecutor');
       const mission = {
         missionId: String(params?.missionId ?? params?.goalId ?? 'adhoc'),
@@ -2232,7 +2256,8 @@ export class CognitiveCore {
       }
       const proposal = await authorPatchProposal(finding);
       let execution: unknown = null;
-      if (proposal.confidence === 'HIGH') {
+      const autoApply = shouldAutoApplyPatch(proposal.confidence);
+      if (autoApply) {
         const { applyBoundedPatch } = await import('./DevPatchExecutor');
         execution = await applyBoundedPatch({
           missionId: proposal.missionId,
@@ -2242,6 +2267,12 @@ export class CognitiveCore {
         });
       } else {
         // Not safe to apply — escalate the proposal as a human action.
+        if (proposal.confidence === 'HIGH' && !devPatchEnabled()) {
+          await this.pool.query(
+            `INSERT INTO heidi_events (event_type, division, verdict, payload, created_at) VALUES ('action_refused', 'agents', $1, $2, now()) RETURNING id`,
+            [GATE_DEV_PATCH_DISABLED, JSON.stringify({ capabilityId: 'ops.dev_author', proposalId: proposal.proposalId, reason: 'HIGH-confidence auto-apply refused: HEIDI_ALLOW_DEV_PATCH is not true' })],
+          ).catch(() => { });
+        }
         await this.pool.query(
           `INSERT INTO human_intervention_requests (objective, status, context, created_at)
            VALUES ($1, 'pending', $2, now())`,

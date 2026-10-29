@@ -25,6 +25,7 @@
 
 import { createHash } from 'crypto';
 import type { Pool } from 'pg';
+import { GATE_DEV_PATCH_DISABLED } from './executor-env-gates';
 import { collectReconciliation, type ReconcileDeps } from './DeploymentReconciliation';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -1125,6 +1126,12 @@ export const TEAM_HANDLERS: RoleHandlers = {
         commitMessage: String(mission.params?.commitMessage ?? `builder: ${mission.objective.slice(0, 60)}`),
         verify: Array.isArray(mission.params?.verify) ? mission.params.verify as string[] : [],
       });
+      if (res.reason === GATE_DEV_PATCH_DISABLED) {
+        await pool.query(
+          `INSERT INTO heidi_events (event_type, division, verdict, payload, created_at) VALUES ('action_refused', 'agents', $1, $2, now()) RETURNING id`,
+          [GATE_DEV_PATCH_DISABLED, JSON.stringify({ capabilityId: 'builder:dev_patch', missionId: mission.missionId, reason: 'HEIDI_ALLOW_DEV_PATCH is not true' })],
+        ).catch(() => { });
+      }
       await post('heidi', res.ok ? 'RESULT' : 'FAILURE', `patch ${res.status}: ${res.reason ?? res.commitSha ?? ''}`, res);
       if (!res.ok) throw new Error(`patch ${res.status}: ${res.reason ?? 'failed'}`);
       return { result: { patchStatus: res.status, commitSha: res.commitSha, filesChanged: res.filesChanged }, evidence: res.evidence.map(e => ({ step: e })) };
