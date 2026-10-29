@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 (package.json): the v3 `@tailwind base/components/utilities`
+   directives are ignored by v4, so no utility class (flex, gap-*, px-*, …)
+   was ever generated and every page rendered unstyled. @config keeps the
+   existing tailwind.config.ts (content paths, theme colors) in effect. */
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 :root {
   --bg-titlebar: #323233;
@@ -40,20 +43,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* In Tailwind v4 utilities live in a cascade layer, so any unlayered rule
+   beats them: an unlayered `* { padding: 0 }` would erase every padding
+   class. Base rules therefore go in @layer base. */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-html,
-body {
-  height: 100%;
-  overflow: auto;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
-  scroll-behavior: smooth;
+  html,
+  body {
+    height: 100%;
+    overflow: auto;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  /* next/font defines --font-geist-sans on <body> (layout.tsx), so it must be
+     read there: resolved at :root it is undefined and the page fell back to
+     the browser's serif. If the font can't load, html's stack still applies. */
+  body {
+    font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
 }
 
 /* Scrollbar styling to match VS Code */
