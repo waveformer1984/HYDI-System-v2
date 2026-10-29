@@ -76,6 +76,19 @@ app.use((req, res, next) => {
 // Device login (lib/mobile-chat/local-auth.js). Off unless HEIDI_MOBILE_TOKEN
 // is set; then every /api route except health/pair needs a paired device.
 const mobileAuth = require('./lib/mobile-chat/local-auth').createLocalAuth();
+// Every /api request is rate-limited per client address BEFORE the login
+// check, so the bearer/cookie comparison can't be hammered. Generous enough
+// for the page's polling; /api/pair has its own tighter 10/min limit.
+const { rateLimit } = require('express-rate-limit');
+app.use('/api', rateLimit({
+    windowMs: 60 * 1000,
+    limit: Number(process.env.HEIDI_MOBILE_RATE_LIMIT) || 300,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    // Forwarded traffic (tailscale serve) is limited by socket address; the
+    // header itself is never trusted, so silence the library's warning.
+    validate: { xForwardedForHeader: false },
+}));
 app.use(mobileAuth.middleware);
 app.post('/api/pair', (req, res) => mobileAuth.pair(req, res));
 

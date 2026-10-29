@@ -119,6 +119,8 @@ describe('launch-heidi-mobile.js with HEIDI_MOBILE_TOKEN', () => {
       expect(after.status).toBe(503);
       // This machine itself needs no login.
       expect((await fetch(`${base}/api/conversations`)).status).toBe(503);
+      // /api is rate-limited per client before the login check.
+      expect(after.headers.get('ratelimit-policy')).toMatch(/300;w=60/);
     } finally {
       child.kill();
     }
