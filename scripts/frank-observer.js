@@ -92,27 +92,6 @@ async function runObservationPass(overrides = {}) {
   snapshot.straysChecked = strays !== null;
   try { writeJsonAtomic(path.join(outDir, 'frank.json'), snapshot); } catch { /* best effort */ }
 
-  // fix-list v1 — read-only ranked report of what is wrong. Adds no
-  // process and no always-on memory: it rides this same pass. Any
-  // failure here must never break the observation pass. The collector's
-  // probes can take seconds, so tests opt in via overrides.fixList;
-  // under jest it skips by default (NODE_ENV=test).
-  const wantFixList = overrides.fixList !== undefined ? overrides.fixList : process.env.NODE_ENV !== 'test';
-  if (wantFixList) try {
-    const t0 = Date.now();
-    const mod = require('../lib/observation/fix-list-collector');
-    const { buildFixList } = require('../lib/observation/fix-list');
-    if (typeof mod.collectFixListInputs !== 'function') throw new Error('fix-list collector module did not load');
-    const inputs = await mod.collectFixListInputs(root, { snapshot });
-    fixList = buildFixList({ ...inputs, now: Date.now() });
-    const dir = path.join(root, '.runtime', 'fixlist');
-    fs.mkdirSync(dir, { recursive: true });
-    writeJsonAtomic(path.join(dir, 'current.json'), fixList);
-    log(`[${APP_NAME}] fix-list: ${fixList.items.length} item(s) in ${Date.now() - t0}ms`);
-  } catch (e) {
-    log(`[${APP_NAME}] fix-list step failed: ${e && e.message ? e.message : 'unknown'}`);
-  }
-
   // seen: crit id -> consecutive passes; alerted: crit ids already posted.
   const state = readJson(statePath, { seen: {}, alerted: {} });
   state.seen = state.seen || {};
@@ -157,6 +136,61 @@ async function runObservationPass(overrides = {}) {
     }
   }
   try { writeJsonAtomic(statePath, state); } catch { /* best effort */ }
+
+  // fix-list v1 - read-only ranked report of what is wrong. Runs AFTER
+  // alerting so a slow collector never delays an #alerts post. Adds no
+  // process and no always-on memory: it rides this same pass. The
+  // collector's probes can take seconds, so the whole step is bounded by
+  // FIX_LIST_TIMEOUT_MS (default 15s): on timeout current.json is
+  // replaced by a single UNKNOWN 'fixlist_timeout' item rather than a
+  // stale list pretending to be fresh. Tests opt in via overrides.fixList
+  // (jest skips by default, NODE_ENV=test); overrides.fixListInputs and
+  // overrides.fixListTimeoutMs inject the collector and the bound.
+  const wantFixList = overrides.fixList !== undefined ? overrides.fixList : process.env.NODE_ENV !== 'test';
+  if (wantFixList) {
+    const t0 = Date.now();
+    const timeoutMs = overrides.fixListTimeoutMs ?? (Number(process.env.FIX_LIST_TIMEOUT_MS) || 15000);
+    try {
+      const mod = require('../lib/observation/fix-list-collector');
+      const { buildFixList } = require('../lib/observation/fix-list');
+      const collect = overrides.fixListInputs || mod.collectFixListInputs;
+      if (typeof collect !== 'function') throw new Error('fix-list collector module did not load');
+      const timeoutErr = new Error(`fix-list collect timed out after ${timeoutMs}ms`);
+      timeoutErr.fixListTimeout = true;
+      const inputs = await Promise.race([
+        Promise.resolve(collect(root, { snapshot })),
+        new Promise((_, rej) => setTimeout(() => rej(timeoutErr), timeoutMs)),
+      ]);
+      const fixList = buildFixList({ ...inputs, now: Date.now() });
+      const dir = path.join(root, '.runtime', 'fixlist');
+      fs.mkdirSync(dir, { recursive: true });
+      writeJsonAtomic(path.join(dir, 'current.json'), fixList);
+      log(`[${APP_NAME}] fix-list: ${fixList.items.length} item(s) in ${Date.now() - t0}ms`);
+    } catch (e) {
+      const msg = e && e.message ? e.message : 'unknown';
+      if (e && e.fixListTimeout) {
+        const timeoutList = {
+          generatedAt: new Date().toISOString(),
+          counts: { UNKNOWN: 1 },
+          items: [{
+            id: 'fixlist-timeout', kind: 'fixlist_timeout', subject: 'collect',
+            level: 'UNKNOWN', detail: msg,
+            evidence: [{ error: msg, timeoutMs }],
+            proposedFix: { type: 'human', risk: 'R0', wouldNeedApproval: true },
+            firstSeen: Date.now(), lastSeen: Date.now(), passes: 1,
+          }],
+        };
+        try {
+          const dir = path.join(root, '.runtime', 'fixlist');
+          fs.mkdirSync(dir, { recursive: true });
+          writeJsonAtomic(path.join(dir, 'current.json'), timeoutList);
+        } catch { /* best effort */ }
+        log(`[${APP_NAME}] fix-list timed out after ${Date.now() - t0}ms (limit ${timeoutMs}ms) - wrote fixlist_timeout`);
+      } else {
+        log(`[${APP_NAME}] fix-list step failed: ${msg}`);
+      }
+    }
+  }
 
   return { snapshot, posted };
 }
