@@ -119,10 +119,9 @@ Verified from this repository and GitHub, not from running services on Frank:
    queued → planning → awaiting approval → running → verifying → completed,
    with success criteria, evidence and a history. See
    `docs/HEIDI_TASK_LIFECYCLE.md`.
-2. **ProtoForge event → task tracing.**
-   - `lib/pipeline` already gives every event a `trace_id` through all six
-     stages (live via protoforge-core `POST /cascade/event`).
-   - Not yet built: a pipeline decision opening a Heidi mission with the same
-     correlation id.
+2. ~~**ProtoForge event → task tracing.**~~ Done: an escalation opens a
+   Heidi task with the pipeline's `trace_id`, and `trace <id>` shows every
+   stage plus the task. See "Trace correlation" in
+   `docs/HEIDI_TASK_LIFECYCLE.md`.
 3. **A bounded improvement loop:** observe through `system report`, propose a
    mission, require approval, verify. The lifecycle it needs (1) is in place.

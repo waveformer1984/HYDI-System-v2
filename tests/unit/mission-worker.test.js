@@ -354,6 +354,7 @@ describe('legacy rows are migrated', () => {
     const rows = await memory.getMissions(null, 10);
     expect(Object.fromEntries(rows.map((r) => [r.goal, r.status]))).toEqual({ 'old pending': 'queued', 'old active': 'running', 'old done': 'completed' });
     expect(rows[0]).toHaveProperty('evidence');
+    expect(rows[0]).toHaveProperty('trace_id', null);
     await memory.initialize.call(memory); // idempotent
     await memory.close();
   });

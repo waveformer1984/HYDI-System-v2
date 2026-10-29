@@ -186,9 +186,10 @@ class HeidiMemory {
    */
   async migrateMissionLifecycle() {
     const cols = new Set((await this.all(`PRAGMA table_info(missions)`)).map((c) => c.name));
-    for (const col of ['plan', 'approval', 'evidence']) {
+    for (const col of ['plan', 'approval', 'evidence', 'trace_id']) {
       if (!cols.has(col)) await this.run(`ALTER TABLE missions ADD COLUMN ${col} TEXT`);
     }
+    await this.run(`CREATE INDEX IF NOT EXISTS idx_missions_trace ON missions(trace_id)`);
     await this.run(`CREATE TABLE IF NOT EXISTS mission_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mission_id INTEGER NOT NULL,
@@ -479,16 +480,16 @@ class HeidiMemory {
       this.inMemoryData.missions.push({
         id, goal, status: 'queued', priority, assigned_agent: assignedAgent,
         context: JSON.stringify(context), result: null, plan: null, approval: null, evidence: null,
-        created_at: at, updated_at: null
+        trace_id: opts.traceId || null, created_at: at, updated_at: null
       });
     } else {
       const result = await this.run(
-        `INSERT INTO missions (goal, status, priority, context, assigned_agent, created_at) VALUES (?, 'queued', ?, ?, ?, ?)`,
-        [goal, priority, JSON.stringify(context), assignedAgent, at]
+        `INSERT INTO missions (goal, status, priority, context, assigned_agent, trace_id, created_at) VALUES (?, 'queued', ?, ?, ?, ?, ?)`,
+        [goal, priority, JSON.stringify(context), assignedAgent, opts.traceId || null, at]
       );
       id = result.id;
     }
-    await this.addMissionEvent(id, null, 'queued', opts.actor || 'unknown', opts.reason || 'created', null, at);
+    await this.addMissionEvent(id, null, 'queued', opts.actor || 'unknown', opts.reason || 'created', opts.traceId ? { trace_id: opts.traceId } : null, at);
     return id;
   }
 
@@ -555,6 +556,18 @@ class HeidiMemory {
     }
     await this.addMissionEvent(Number(id), from, to, actor || 'unknown', reason, data, at);
     return { ok: true, from };
+  }
+
+  /** Tasks linked to a pipeline trace: exact id, or a prefix of 8+ characters. */
+  async getMissionsByTrace(traceId, limit = 20) {
+    const t = String(traceId || '').toLowerCase();
+    if (t.length < 8) return [];
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.missions.filter((m) => m.trace_id && m.trace_id.toLowerCase().startsWith(t)).slice(-limit);
+    }
+    // The prefix is checked to be hex/dashes by callers; escape LIKE anyway.
+    const like = `${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return this.all(`SELECT * FROM missions WHERE lower(trace_id) LIKE ? ESCAPE '\\' ORDER BY id ASC LIMIT ?`, [like, limit]);
   }
 
   async countMissionsByStatus() {

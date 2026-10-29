@@ -183,6 +183,7 @@ app.get('/api/system/status', (req, res) => relayCore('GET', '/system/status', r
 // Tasks: list, detail + history, and the person's approve/reject/cancel.
 app.get('/api/missions', (req, res) => relayCore('GET', `/missions${qs(req.query)}`, res));
 app.get('/api/missions/:id', (req, res) => relayCore('GET', `/missions/${encodeURIComponent(req.params.id)}`, res));
+app.get('/api/traces/:id', (req, res) => relayCore('GET', `/traces/${encodeURIComponent(req.params.id)}`, res));
 app.post('/api/missions/:id/:decision', (req, res) => {
     if (!['approve', 'reject', 'cancel'].includes(req.params.decision)) return res.status(404).json({ error: 'unknown action' });
     const note = req.body && typeof req.body.note === 'string' ? req.body.note : undefined;

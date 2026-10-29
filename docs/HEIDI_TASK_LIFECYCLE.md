@@ -98,6 +98,7 @@ from the database without a model call.
 | `task approve 12 [note]` | Approve. The worker starts it within seconds |
 | `task reject 12 [reason]` | Reject (cancelled) |
 | `task cancel 12 [reason]` | Cancel. Not possible while it is running or verifying |
+| `task done 12 [note]` | Close an informational task, such as a reviewed escalation. A task with an action finishes only by verification |
 
 On Frank's terminal, `node scripts/mission-cli.js
 show|approve|reject|cancel <id>` does the same, as `human:cli:<user>`.
@@ -119,11 +120,61 @@ device login (`HEIDI_MOBILE_TOKEN`).
 progress and blocked. It reports DEGRADED when a task has sat in planning,
 running or verifying for more than 10 minutes.
 
+## Trace correlation: ProtoForge pipeline → Heidi task
+
+A ProtoForge escalation becomes a Heidi task carrying the pipeline's
+`trace_id`. That one id then links:
+- the RAW LEDGER fingerprint;
+- the CASCADE classification;
+- KILO's hypotheses;
+- the ProtoForge decision and rule;
+- the Heidi task and its history.
+
+```
+event → ingestion → ledger → CASCADE → KILO → ProtoForge = escalate → emission
+                                                                        │ trace_id
+                         lib/pipeline/heidi-task-link.js ───────────────┘
+                                   │ POST /missions { trace_id, trace }
+                                   ▼
+                     Heidi task (queued, priority 2, no action)
+```
+
+- **Who opens it.** protoforge-core subscribes the linker to the pipeline's
+  emission layer.
+  - It never changes a pipeline result.
+  - A dead heidi-core is logged and counted. It is never thrown.
+- **What the task is.** An informational task with no action. KILO's
+  hypotheses aren't executable, so nothing can run from it.
+  - You review it and close it with `task done <id> [note]` or
+    `task cancel <id>`.
+  - `heidi-core POST /missions` refuses any action.
+- **No duplicates.** The route is idempotent on `trace_id`. A replayed
+  event is a ledger duplicate, so it doesn't escalate again.
+- **Switches.**
+  - `HEIDI_TRACE_LINK=false` turns linking off.
+  - `HEIDI_TRACE_LINK_OUTCOMES` sets which outcomes link (comma list,
+    default `escalate`).
+  - `HEIDI_CORE_URL` sets where tasks are opened (default
+    `http://127.0.0.1:3459`). `HEIDI_SECRET` is sent when set.
+- **The escalation row in `actions`** (`lib/protoforge/auto-gate.js`) now
+  carries `trace_id` too.
+
+### Looking a trace up
+
+| Where | What |
+|---|---|
+| chat `trace <id or first 8+ chars>` | Every pipeline stage, from protoforge-core while it still holds the trace (the last 50 runs since it started), plus the Heidi tasks it opened. Afterwards it uses the snapshot stored on the task. No model call. |
+| chat `task <id>` | Shows a `Trace:` line for a linked task |
+| heidi-core `GET /traces/:id` (`/api/traces/:id` via :3006) | The same view, as JSON |
+| heidi-core `GET /missions?trace_id=<id or prefix>` | Tasks for a trace |
+| protoforge-core `GET /pipeline/traces`, `GET /pipeline/traces/:id` | Recent runs, plus the link status. Stage results only, never the event payload |
+
 ## Database changes and rollback
 
 The migration is additive and idempotent, and runs in `sqlite-store.js` on
 start:
-- adds the `plan`, `approval` and `evidence` columns to `missions`;
+- adds the `plan`, `approval`, `evidence` and `trace_id` columns (and an
+  index on `trace_id`) to `missions`;
 - adds the `mission_events` table;
 - renames `pending` → `queued` and `active` → `running`.
 
@@ -145,4 +196,6 @@ The extra columns and table are ignored by old code. Back up
 | `tests/unit/mission-worker.test.js`, 39 tests, on both the SQLite and the in-memory store: transitions, races, approval, rejection, expiry, re-check after approval, verification, redaction, restart recovery, legacy migration, command parsing | PASSED locally |
 | `tests/unit/heidi-task-routes.test.js`: chat commands and REST through a real heidi-core, no model calls; tool restrictions | PASSED locally |
 | Related suites (`heidi*`, `mission*`, health observer, control plane, mobile chat; 48 suites, 784 tests), `npm run typecheck`, eslint, change-safety | PASSED locally |
+| `tests/unit/heidi-trace-correlation.test.js`: a real pipeline escalates, a real heidi-core opens one task, then `trace`/`task`/REST read it back, live and after protoforge-core loses it; plus linker failure modes and route validation | PASSED locally |
 | On Frank after deploy: `tasks`, then `system report` (look for `task-queue`) | NOT YET |
+| On Frank: an escalated event opening a task (needs a real escalation from protoforge-core) | NOT YET |

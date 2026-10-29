@@ -76,6 +76,11 @@ function successOf(mission) {
   return (ctx && ctx.success && typeof ctx.success === 'object') ? ctx.success : null;
 }
 
+function traceOf(mission) {
+  const ctx = parseJson(mission && mission.context);
+  return ctx && ctx.trace && typeof ctx.trace === 'object' ? ctx.trace : null;
+}
+
 function toMs(ts) {
   if (!ts) return NaN;
   const s = String(ts);
@@ -244,7 +249,7 @@ function parseTaskCommand(input) {
     return /^\d{1,9}$/.test(t) ? Number(t) : null;
   };
   if (asId(second) !== null && words.length === 2) return { cmd: 'show', id: asId(second) };
-  if (['approve', 'reject', 'cancel'].includes(second)) {
+  if (['approve', 'reject', 'cancel', 'done'].includes(second)) {
     const id = asId(words[2]);
     if (id === null) return { cmd: 'usage' };
     const note = words.slice(3).join(' ').slice(0, 300) || null;
@@ -288,6 +293,13 @@ function formatTask(m, events = [], now = Date.now()) {
   const lines = [`${STATE_ICON[st] || '•'} Task #${m.id}: ${st.toUpperCase()}`, `Goal: ${m.goal}`];
   if (m.assigned_agent) lines.push(`Agent: ${m.assigned_agent}`);
   if (a) lines.push(`Action: ${a.type} ${a.command || a.target || ''}${Array.isArray(a.args) && a.args.length ? ` ${a.args.join(' ')}` : ''}`.trim());
+  const trace = traceOf(m);
+  if (trace) {
+    const bits = [trace.outcome && `ProtoForge ${trace.outcome}`, trace.classification, trace.source && `from ${trace.source}`, trace.matched_rule_id && `rule ${trace.matched_rule_id}`].filter(Boolean);
+    lines.push(`Trace: ${m.trace_id || trace.trace_id}${bits.length ? ` (${bits.join(', ')})` : ''}. Send "trace ${String(m.trace_id || trace.trace_id).slice(0, 8)}" for the pipeline stages.`);
+  } else if (m.trace_id) {
+    lines.push(`Trace: ${m.trace_id}`);
+  }
   const success = successOf(m);
   if (success) lines.push(`Success means: ${JSON.stringify(success)}`);
   if (plan) lines.push(`Plan: needs level ${plan.requiredLevel}, ${plan.agent} is level ${plan.agentLevel}; safety check ${plan.safe ? 'passed' : 'failed'}; ${plan.armed ? 'will run for real' : 'dry run only (HEIDI_AUTONOMOUS_ACTIONS off)'}`);
@@ -322,7 +334,7 @@ function formatTask(m, events = [], now = Date.now()) {
  */
 async function runTaskCommand(memory, parsed, { actor, now = Date.now(), onApproved = null } = {}) {
   if (!memory || typeof memory.getMission !== 'function') return '⚠️ Task queue unavailable.';
-  if (parsed.cmd === 'usage') return 'Usage: task approve <id> | task reject <id> [reason] | task cancel <id> [reason]';
+  if (parsed.cmd === 'usage') return 'Usage: task approve <id> | task reject <id> [reason] | task cancel <id> [reason] | task done <id> [note]';
   if (parsed.cmd === 'list') {
     const open = await memory.getMissions(['awaiting_approval', 'running', 'verifying', 'planning', 'queued', 'blocked', 'pending', 'active'], 30);
     const recent = (await memory.getMissions(['completed', 'failed', 'cancelled'], 10)) || [];
@@ -338,6 +350,14 @@ async function runTaskCommand(memory, parsed, { actor, now = Date.now(), onAppro
     if (r.ok && parsed.cmd === 'approve' && onApproved) {
       try { await onApproved(parsed.id); } catch { /* the worker's own tick will pick it up */ }
     }
+  } else if (parsed.cmd === 'done') {
+    // A person closing an informational task (e.g. a reviewed ProtoForge
+    // escalation). Tasks with an action can only finish by verification.
+    if (!String(actor || '').startsWith('human:')) return '⚠️ Only a person can mark a task done.';
+    const evidence = { outcome: 'completed', note: parsed.note || null, by: actor, closed_by_hand: 'informational task, no action to verify' };
+    r = await transition(memory, parsed.id, 'completed', {
+      actor, reason: parsed.note ? `done: ${parsed.note}` : 'done', from: 'queued', patch: { evidence, result: evidence },
+    });
   } else {
     if (ACTIVE.has(normalizeState(m.status)) && normalizeState(m.status) !== 'planning') {
       return `⚠️ Task #${parsed.id} is ${normalizeState(m.status)}; it can't be cancelled mid-run.`;
@@ -347,6 +367,69 @@ async function runTaskCommand(memory, parsed, { actor, now = Date.now(), onAppro
   if (!r.ok) return `⚠️ ${r.error}`;
   const after = await memory.getMission(parsed.id);
   return formatTask(after, await memory.getMissionEvents(parsed.id), now);
+}
+
+// ── Trace correlation ────────────────────────────────────────────────────
+
+/** "trace <id>" with a full id or a prefix of 8+ hex/dash characters. */
+function parseTraceCommand(input) {
+  const words = String(input || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length !== 2) return null;
+  const first = words[0].toLowerCase();
+  if (first !== 'trace' && first !== '/trace') return null;
+  const id = words[1].toLowerCase();
+  if (id.length < 8 || id.length > 64 || !/^[0-9a-f-]+$/.test(id)) return { cmd: 'usage' };
+  return { cmd: 'trace', id };
+}
+
+const STAGE_ORDER = ['ingestion', 'ledger', 'cascade', 'kilo', 'protoforge', 'emission'];
+const STAGE_ICON = { ok: '✓', rejected: '✗', error: '❌', skipped: '·' };
+
+function stageDetail(name, st) {
+  const parts = [];
+  if (name === 'ingestion' && st.event_type) parts.push(`${st.event_type} from ${st.source}`);
+  if (name === 'ledger' && st.fingerprint) parts.push(`fingerprint ${String(st.fingerprint).slice(0, 12)}`);
+  if (name === 'cascade' && st.classification) parts.push(`${st.classification} (${st.confidence})`);
+  if (name === 'kilo' && st.hypotheses_count !== undefined) parts.push(`${st.hypotheses_count} hypotheses, confidence ${st.confidence}`);
+  if (name === 'protoforge' && st.decision) parts.push(`${st.decision}${st.matched_rule_id ? ` by rule ${st.matched_rule_id}` : ' (default rule)'}${st.decision_id ? `, decision ${String(st.decision_id).slice(0, 8)}` : ''}`);
+  if (st.reason) parts.push(st.reason);
+  if (st.error) parts.push(String(st.error).slice(0, 120));
+  if (typeof st.duration_ms === 'number') parts.push(`${Math.round(st.duration_ms)}ms`);
+  return parts.join(', ');
+}
+
+/**
+ * One trace end to end: the pipeline stages (live from protoforge-core when
+ * it still holds the trace, else the snapshot stored on the task) and the
+ * Heidi tasks it opened, with their current state.
+ */
+function formatTrace(traceId, live, missions = [], now = Date.now()) {
+  const fullId = (live && live.trace_id) || (missions[0] && missions[0].trace_id) || traceId;
+  const lines = [`🔗 Trace ${fullId}`];
+  if (live) {
+    lines.push(`Pipeline: ${live.outcome || 'unknown'} (started ${ageText(live.started_at, now)}, from protoforge-core)`);
+    for (const name of STAGE_ORDER) {
+      const st = live.stages && live.stages[name];
+      if (!st) continue;
+      lines.push(`  ${STAGE_ICON[st.status] || '?'} ${name}: ${st.status}${stageDetail(name, st) ? ` — ${stageDetail(name, st)}` : ''}`);
+    }
+  } else {
+    const snap = missions.map(traceOf).find(Boolean);
+    if (snap) {
+      lines.push(`Pipeline: ${snap.outcome} (snapshot on the task; protoforge-core no longer holds this trace)`);
+      lines.push(`  event ${snap.event_type || '?'} from ${snap.source || '?'}; CASCADE ${snap.classification || '?'}${snap.confidence != null ? ` (${snap.confidence})` : ''}; ProtoForge ${snap.decision || '?'}${snap.matched_rule_id ? ` by rule ${snap.matched_rule_id}` : ''}`);
+      if (snap.fingerprint) lines.push(`  ledger fingerprint ${String(snap.fingerprint).slice(0, 12)}`);
+    } else {
+      lines.push('Pipeline: not found (protoforge-core keeps the last 50 runs since it started).');
+    }
+  }
+  if (missions.length) {
+    lines.push('Heidi tasks:');
+    for (const m of missions) lines.push(`  ${oneLine(m, now)}`);
+  } else {
+    lines.push('Heidi tasks: none opened for this trace.');
+  }
+  return lines.join('\n');
 }
 
 module.exports = {
@@ -368,5 +451,8 @@ module.exports = {
   runTaskCommand,
   formatTaskList,
   formatTask,
+  traceOf,
+  parseTraceCommand,
+  formatTrace,
   RESTART_MODULE_SCRIPT,
 };

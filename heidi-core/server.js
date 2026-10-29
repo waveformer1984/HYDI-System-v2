@@ -319,6 +319,13 @@ class HeidiCore {
           send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
+        const traceCmd = lifecycle.parseTraceCommand(input);
+        if (traceCmd) {
+          const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
+          send({ t: text });
+          send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
         if (!turn.ok) {
           send({ error: turn.error, conversation_not_found: true, done: true });
@@ -559,8 +566,48 @@ class HeidiCore {
     this.app.get('/missions', async (req, res) => {
       try {
         const state = req.query.state ? String(req.query.state).split(',').map(lifecycle.normalizeState) : null;
-        const missions = await this.memory.getMissions(state, Math.min(Number(req.query.limit) || 30, 200));
+        const missions = req.query.trace_id
+          ? await this.memory.getMissionsByTrace(String(req.query.trace_id), Math.min(Number(req.query.limit) || 30, 200))
+          : await this.memory.getMissions(state, Math.min(Number(req.query.limit) || 30, 200));
         res.json({ missions: (missions || []).map(taskJson), counts: await this.memory.countMissionsByStatus() });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    // Open an informational task from another HYDI process (the ProtoForge
+    // pipeline linker, lib/pipeline/heidi-task-link.js). No action can be
+    // attached here, so nothing can ever run from this route. Idempotent on
+    // trace_id: a retry returns the task already opened for that trace.
+    this.app.post('/missions', async (req, res) => {
+      try {
+        const b = req.body || {};
+        const goal = typeof b.goal === 'string' ? b.goal.trim().slice(0, 300) : '';
+        if (!goal) return res.status(400).json({ error: 'goal is required' });
+        if (b.action || (b.context && b.context.action)) return res.status(400).json({ error: 'this route opens informational tasks only; actions come from chat or mission-cli' });
+        const traceId = typeof b.trace_id === 'string' && /^[0-9a-fA-F-]{8,64}$/.test(b.trace_id) ? b.trace_id : null;
+        if (b.trace_id && !traceId) return res.status(400).json({ error: 'trace_id must be 8-64 hex/dash characters' });
+        if (traceId) {
+          const [existing] = (await this.memory.getMissionsByTrace(traceId, 1)).filter((m) => m.trace_id === traceId);
+          if (existing) return res.json({ ok: true, existing: true, mission: taskJson(existing) });
+        }
+        const source = typeof b.source === 'string' ? b.source.slice(0, 60) : 'api';
+        const trace = b.trace && typeof b.trace === 'object' && !Array.isArray(b.trace) ? b.trace : null;
+        if (trace && JSON.stringify(trace).length > 4000) return res.status(400).json({ error: 'trace summary too large (4000 chars max)' });
+        const priority = Number.isInteger(b.priority) ? Math.max(0, Math.min(3, b.priority)) : 1;
+        const id = await this.memory.createMission(goal, priority, trace ? { trace, source } : { source }, null, {
+          actor: source, reason: traceId ? `opened from pipeline trace ${traceId.slice(0, 8)}` : 'created via API', traceId,
+        });
+        res.status(201).json({ ok: true, existing: false, mission: taskJson(await this.memory.getMission(id)) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    // One trace end to end: pipeline stages + the Heidi tasks it opened.
+    this.app.get('/traces/:id', async (req, res) => {
+      const id = String(req.params.id || '').toLowerCase();
+      if (!/^[0-9a-f-]{8,64}$/.test(id)) return res.status(400).json({ error: 'trace id must be 8-64 hex/dash characters' });
+      try {
+        const report = await this.traceReport(id);
+        if (!report.live && !report.missions.length) return res.status(404).json({ error: 'trace not found', text: report.text });
+        res.json({ trace_id: report.traceId, pipeline: report.live, missions: report.missions.map(taskJson), text: report.text });
       } catch (error) { res.status(500).json({ error: error.message }); }
     });
 
@@ -674,6 +721,13 @@ class HeidiCore {
         if (taskCmd) {
           send({ t: await this.runTaskChat(owner, taskCmd) });
           send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const traceCmd = lifecycle.parseTraceCommand(input);
+        if (traceCmd) {
+          const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
+          send({ t: text });
+          send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
@@ -1305,6 +1359,28 @@ class HeidiCore {
     { tool: 'list_missions', pattern: /\b(list|show|what('s|s)?)\b.*\bmissions?\b/i },
     { tool: 'system_status', pattern: /\b(status|health check|system health|how are you|are you (ok|okay|up|running|alive|healthy))\b/i },
   ];
+
+  /**
+   * Trace correlation: the Heidi tasks for a trace id (or prefix), plus the
+   * live pipeline trace from protoforge-core when it still holds it.
+   */
+  async traceReport(id) {
+    const missions = await this.memory.getMissionsByTrace(id, 20);
+    const base = String(process.env.PROTOFORGE_CORE_URL || 'http://127.0.0.1:3005').replace(/\/+$/, '');
+    let live = null;
+    try {
+      const full = missions[0] && missions[0].trace_id;
+      if (full) {
+        const r = await fetch(`${base}/pipeline/traces/${encodeURIComponent(full)}`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) live = (await r.json()).trace || null;
+      } else {
+        const r = await fetch(`${base}/pipeline/traces?limit=50`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) live = ((await r.json()).traces || []).find((t) => String(t.trace_id).toLowerCase().startsWith(id)) || null;
+      }
+    } catch { /* protoforge-core down: fall back to the snapshot on the task */ }
+    const traceId = (live && live.trace_id) || (missions[0] && missions[0].trace_id) || id;
+    return { traceId, live, missions, text: lifecycle.formatTrace(traceId, live, missions) };
+  }
 
   /** Start the worker's next pass now (an approved task shouldn't wait 15s). */
   nudgeWorker() {
