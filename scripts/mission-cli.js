@@ -11,13 +11,16 @@
  * Usage:
  *   node scripts/mission-cli.js create "<goal>" [--priority 0-3]
  *       [--assign <agent>] [--action '<json>']
- *   node scripts/mission-cli.js list [--status pending|active|blocked|completed|failed|cancelled] [--limit N]
- *   node scripts/mission-cli.js cancel <id>
+ *   node scripts/mission-cli.js list [--status queued|planning|awaiting_approval|running|verifying|completed|failed|cancelled|blocked] [--limit N]
+ *   node scripts/mission-cli.js show <id>          (state, plan, approval, evidence, history)
+ *   node scripts/mission-cli.js approve <id> [note] (you, at Frank's terminal, approving it)
+ *   node scripts/mission-cli.js reject <id> [reason]
+ *   node scripts/mission-cli.js cancel <id> [reason]
  *
  * Examples:
  *   node scripts/mission-cli.js create "restart mobile chat" --priority 2 \
  *     --assign Heidi --action '{"type":"run_script","target":"scripts/restart-module.js","args":["heidi-mobile-chat"]}'
- *   node scripts/mission-cli.js list --status pending
+ *   node scripts/mission-cli.js list --status awaiting_approval
  *   node scripts/mission-cli.js cancel 12
  *
  * Attaching --action without --assign is refused, same rule the
@@ -30,6 +33,7 @@
 
 const path = require('path');
 const HeidiMemory = require('../heidi-core/memory/sqlite-store');
+const lifecycle = require('../heidi-core/missions/lifecycle');
 
 function parseFlags(argv) {
   const flags = {};
@@ -82,13 +86,13 @@ async function cmdCreate(memory, argv) {
   }
 
   const context = action ? { action } : null;
-  const id = await memory.createMission(goal, priority, context, flags.assign || null);
-  console.log(`created mission #${id}`);
+  const id = await memory.createMission(goal, priority, context, flags.assign || null, { actor: 'cli', reason: 'created with mission-cli' });
+  console.log(`created mission #${id} (queued)`);
 }
 
 async function cmdList(memory, argv) {
   const flags = parseFlags(argv);
-  const status = typeof flags.status === 'string' ? flags.status : null;
+  const status = typeof flags.status === 'string' ? lifecycle.normalizeState(flags.status) : null;
   const limit = flags.limit !== undefined ? parseInt(flags.limit, 10) : 20;
   const missions = await memory.getMissions(status, limit);
   if (!missions.length) {
@@ -98,15 +102,19 @@ async function cmdList(memory, argv) {
   missions.forEach(printMission);
 }
 
-async function cmdCancel(memory, argv) {
+// show / approve / reject / cancel go through the same lifecycle code as chat.
+async function cmdTask(memory, cmd, argv) {
   const id = parseInt(argv[0], 10);
   if (!id) {
-    console.error('Usage: mission-cli.js cancel <id>');
+    console.error(`Usage: mission-cli.js ${cmd} <id>${cmd === 'show' ? '' : ' [note]'}`);
     process.exit(1);
   }
-  const changes = await memory.updateMission(id, 'cancelled');
-  console.log(changes ? `mission #${id} cancelled` : `mission #${id} not found`);
+  const note = argv.slice(1).join(' ') || null;
+  const user = process.env.USERNAME || process.env.USER || 'operator';
+  console.log(await lifecycle.runTaskCommand(memory, { cmd, id, note }, { actor: `human:cli:${user}` }));
 }
+
+const cmdCancel = (memory, argv) => cmdTask(memory, 'cancel', argv);
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -116,9 +124,9 @@ async function main() {
   try {
     if (cmd === 'create') await cmdCreate(memory, rest);
     else if (cmd === 'list') await cmdList(memory, rest);
-    else if (cmd === 'cancel') await cmdCancel(memory, rest);
+    else if (['show', 'approve', 'reject', 'cancel'].includes(cmd)) await cmdTask(memory, cmd, rest);
     else {
-      console.error('Usage: mission-cli.js <create|list|cancel> ...');
+      console.error('Usage: mission-cli.js <create|list|show|approve|reject|cancel> ...');
       process.exit(1);
     }
   } finally {
@@ -130,4 +138,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e.message); process.exit(1); });
 }
 
-module.exports = { parseFlags, cmdCreate, cmdList, cmdCancel };
+module.exports = { parseFlags, cmdCreate, cmdList, cmdCancel, cmdTask };

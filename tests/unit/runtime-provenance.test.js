@@ -69,6 +69,36 @@ describe('provenance writer', () => {
     expect(record.source).toBe('git_failed');
   });
 
+  it('build-regenerated files do not count as dirty', async () => {
+    // next-env.d.ts is rewritten by every `next build` and restored by the
+    // deploy loop itself. A process started mid-build must not latch
+    // gitDirty=true and read STALE_CODE forever.
+    const exec = (cmd, args, _opts, cb) => {
+      const key = args.join(' ');
+      const out = key === 'status --porcelain --untracked-files=no'
+        ? ' M next-env.d.ts\n'
+        : key === 'rev-parse HEAD' ? 'abc123\n' : 'clean-main\n';
+      process.nextTick(() => cb(null, out));
+      return { on() {} };
+    };
+    const id = await resolveGitIdentity({ cwd: root, env: {}, execFile: exec });
+    expect(id.gitSha).toBe('abc123');
+    expect(id.gitDirty).toBe(false);
+  });
+
+  it('a real tracked modification still counts as dirty', async () => {
+    const exec = (cmd, args, _opts, cb) => {
+      const key = args.join(' ');
+      const out = key === 'status --porcelain --untracked-files=no'
+        ? ' M lib/real.js\n'
+        : key === 'rev-parse HEAD' ? 'abc123\n' : 'clean-main\n';
+      process.nextTick(() => cb(null, out));
+      return { on() {} };
+    };
+    const id = await resolveGitIdentity({ cwd: root, env: {}, execFile: exec });
+    expect(id.gitDirty).toBe(true);
+  });
+
   it('BUILD_SHA overrides git and does not invoke git', async () => {
     const execFile = jest.fn(() => {
       throw new Error('git must not run');

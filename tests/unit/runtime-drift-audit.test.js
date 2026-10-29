@@ -161,7 +161,26 @@ describe('auditDrift verdicts', () => {
         kill_timeout: 50000,
       })],
     });
-    expect(result.rows[0].verdict).toBe('MISSING');
+    expect(result.rows[0].verdict).toBe('NOT_ONLINE');
+    expect(result.rows[0].detail).toContain('stopped');
+  });
+
+  it('a waiting_restart PM2 row is NOT_ONLINE, not MISSING', () => {
+    // heidi-web-standalone crash-looped on EADDRINUSE while pm2 listed it:
+    // the audit reported MISSING, hiding that PM2 manages it and it is
+    // restart-looping rather than absent.
+    const result = audit({
+      running: [running('hydi-daemon', {
+        status: 'waiting_restart',
+        script: '/repo/scripts/heidi-daemon-launcher.js',
+        args: '--no-stabilization',
+        kill_timeout: 50000,
+      })],
+    });
+    expect(result.rows[0].verdict).toBe('NOT_ONLINE');
+    expect(result.rows[0].detail).toContain('waiting_restart');
+    expect(result.rows[0].suggestion).toContain('pm2 logs hydi-daemon --err');
+    expect(result.overall).toBe('DRIFT');
   });
 
   it('missing provenance is UNKNOWN_CODE, and UNKNOWN is not OK', () => {

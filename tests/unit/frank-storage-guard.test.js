@@ -104,6 +104,74 @@ describe('frank storage guard cleanup', () => {
     expect(crit.commands.join('\n')).not.toMatch(/volume|system prune|--all/);
   });
 
+  it('clears %TEMP% entries untouched for 2+ days from WATCH up, and nothing else there', async () => {
+    const h = harness({ freeGb: 15 });
+    const now = Date.now();
+    const old = 3 * 24 * HOUR;
+    const put = (rel, ageMs) => {
+      const full = path.join(h.tmp, rel);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, 'x');
+      if (ageMs) age(full, ageMs, now);
+      return full;
+    };
+    const oldFile = put('old-installer.exe', old);
+    put('old-folder/a/b.bin', old);
+    age(path.join(h.tmp, 'old-folder', 'a'), old, now);
+    age(path.join(h.tmp, 'old-folder'), old, now);
+    const recentFile = put('today.log', 0);
+    // an old-looking folder with fresh content deep inside is in use
+    put('busy-folder/deep/fresh.tmp', 0);
+    age(path.join(h.tmp, 'busy-folder', 'deep'), old, now);
+    age(path.join(h.tmp, 'busy-folder'), old, now);
+    const swap = put('wsl-swap.vhdx', old);
+    const ciLike = put('hydi-ci-notasha-Ab34Cd/x', old);
+    age(path.dirname(ciLike), old, now);
+    // a link to a folder elsewhere: neither followed nor removed
+    const outside = tmpDir('storage-guard-outside-');
+    fs.writeFileSync(path.join(outside, 'keep.txt'), 'mine');
+    // a junction on Windows (no admin needed), a symlink elsewhere
+    fs.symlinkSync(outside, path.join(h.tmp, 'link-out'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    const status = await guard.runStoragePass({ ...h.opts, now: () => now });
+
+    expect(fs.existsSync(oldFile)).toBe(false);
+    expect(fs.existsSync(path.join(h.tmp, 'old-folder'))).toBe(false);
+    expect(fs.existsSync(recentFile)).toBe(true);
+    expect(fs.existsSync(path.join(h.tmp, 'busy-folder', 'deep', 'fresh.tmp'))).toBe(true);
+    expect(fs.existsSync(swap)).toBe(true);
+    expect(fs.existsSync(ciLike)).toBe(true);
+    expect(fs.lstatSync(path.join(h.tmp, 'link-out')).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(outside, 'keep.txt'), 'utf8')).toBe('mine');
+    expect(status.level).toBe('WATCH');
+    expect(status.actions.find((a) => a.id === 'stale-temp').detail).toBe('2 removed');
+  });
+
+  it('leaves %TEMP% alone at OK and off Windows', async () => {
+    const now = Date.now();
+    for (const [freeGb, platform, detail] of [[50, 'win32', undefined], [15, 'linux', 'skipped: Windows only']]) {
+      const h = harness({ freeGb });
+      const f = path.join(h.tmp, 'old-installer.exe');
+      fs.writeFileSync(f, 'x');
+      age(f, 3 * 24 * HOUR, now);
+      const status = await guard.runStoragePass({ ...h.opts, platform, now: () => now });
+      expect(fs.existsSync(f)).toBe(true);
+      const action = status.actions.find((a) => a.id === 'stale-temp');
+      expect(action && action.detail).toBe(detail);
+    }
+  });
+
+  it('treats a folder too big to walk as in use', () => {
+    const dir = tmpDir();
+    for (let i = 0; i < 5; i += 1) fs.writeFileSync(path.join(dir, `f${i}`), 'x');
+    const now = Date.now();
+    age(dir, 3 * 24 * HOUR, now);
+    expect(guard.newestMtime(dir, 3)).toBe(Infinity);
+    // mtimeMs has sub-ms precision; compare against a fresh clock, not the
+    // floored `now` captured before the files were written.
+    expect(guard.newestMtime(dir)).toBeLessThanOrEqual(Date.now());
+  });
+
   it('leaves .next/cache alone while a deploy holds its lock', async () => {
     const h = harness({ freeGb: 7 });
     fs.mkdirSync(path.join(h.root, '.next', 'cache'), { recursive: true });
@@ -170,6 +238,20 @@ describe('frank storage guard status, alerts and reports', () => {
     accept = true;
     await guard.runStoragePass(opts);
     expect(h.posts.filter((p) => p.channel === 'alerts')).toHaveLength(2);
+  });
+
+  it('reports a failed board post to stderr instead of failing silently', async () => {
+    const h = harness({ freeGb: 3 });
+    const log = jest.fn();
+    const opts = {
+      ...h.opts,
+      log,
+      post: async () => ({ ok: false, skipped: true, error: 'board auth not configured' }),
+    };
+    await guard.runStoragePass(opts);
+    expect(log).toHaveBeenCalledWith(
+      '[frank-storage-guard] board post to #alerts failed: board auth not configured',
+    );
   });
 
   it('posts the weekly report once per 7 days', async () => {

@@ -505,6 +505,134 @@ def tool_frank():
     lines.append(f"Read {snap.get('at')}. Source: Frank's own monitors; nothing was changed.")
     return "\n".join(lines)
 
+# ── QR key import (GET /api/keys/status, POST /api/keys/provision) ─────
+# Frank's /phone/provision page shows a QR holding a 5-minute, single-use
+# code plus Frank's addresses — never a key. The dashboard scans it and this
+# server redeems the code with Frank, then writes the keys into
+# ~/.hydi/thin-client.env (0600). Values are never returned, logged or shown:
+# the dashboard only learns which names are set. Both endpoints answer only
+# to this phone (loopback), since hydi.py listens on 0.0.0.0.
+THIN_CLIENT_ENV = os.path.expanduser("~/.hydi/thin-client.env")
+PROVISION_KEYS = ("HYDI_BOARD_HUMAN_TOKEN", "HYDI_PHONE_READ_TOKEN", "GROQ_API_KEY", "FRANK_HOSTS")
+_PROVISION_RE = re.compile(
+    r"^hydi-provision:v1\?c=([A-Z2-7]{32})&h=([A-Za-z0-9.:,-]{1,300})&p=(\d{1,5})$")
+
+def parse_provision_payload(text):
+    """Returns (code, hosts, port). Raises ValueError for anything else."""
+    m = _PROVISION_RE.match((text or "").strip())
+    if not m:
+        raise ValueError("not a Hydi key QR")
+    hosts = [h for h in m.group(2).split(",") if h][:4]
+    port = int(m.group(3))
+    if not hosts or not 0 < port < 65536:
+        raise ValueError("not a Hydi key QR")
+    return m.group(1), hosts, port
+
+_BARE_CODE_RE = re.compile(r"^[A-Z2-7]{32}$")
+
+def normalize_provision_input(text, hosts=None, port=None):
+    """Scan or paste -> canonical payload. Raises ValueError for anything else.
+
+    Accepts the full QR payload, or just the 32-character code (spaces and
+    dashes ignored, any case) typed or pasted from Frank's page. A bare code
+    is sent to the Frank addresses this phone already knows (FRANK_HOSTS),
+    because without an address there is nobody to redeem it with.
+    """
+    raw = (text or "").strip()
+    if raw.lower().startswith("hydi-provision:"):
+        parse_provision_payload(raw)
+        return raw
+    bare = re.sub(r"[\s-]", "", raw).upper()
+    if not _BARE_CODE_RE.match(bare):
+        raise ValueError("not a Hydi key code")
+    known = frank_candidates() if hosts is None else hosts
+    if not known:
+        raise ValueError("this phone doesn't know Frank's address yet — paste the whole code (Copy code on Frank)")
+    port = int(port or os.environ.get("FRANK_WEB_PORT", "3000"))
+    payload = f"hydi-provision:v1?c={bare}&h={','.join(known[:4])}&p={port}"
+    parse_provision_payload(payload)
+    return payload
+
+def redeem_provision(code, hosts, port, timeout=8):
+    """Try each Frank address in order. Returns (keys, missing, None) or (None, None, reason)."""
+    reason = "Frank not reachable"
+    for host in hosts:
+        req = Request(f"http://{host}:{port}/api/phone/provision/redeem",
+                      data=json.dumps({"code": code}).encode(),
+                      headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except HTTPError as err:
+            # The code is single-use: a definite answer from Frank ends the search.
+            if err.code in (400, 403, 410, 429):
+                return None, None, {400: "code already used or invalid — show a new QR",
+                                    403: "Frank refused this network",
+                                    410: "code expired — show a new QR",
+                                    429: "too many tries — wait a minute"}[err.code]
+            reason = f"Frank answered {err.code}"
+            continue
+        except (URLError, OSError, ValueError):
+            continue
+        keys = data.get("keys") if isinstance(data, dict) else None
+        if not isinstance(keys, dict):
+            return None, None, "Frank returned no keys"
+        clean = {k: str(v) for k, v in keys.items()
+                 if k in PROVISION_KEYS and isinstance(v, str) and v.strip() and "\n" not in v and "\r" not in v}
+        missing = [k for k in (data.get("missing") or []) if k in PROVISION_KEYS]
+        return clean, missing, None
+    return None, None, reason
+
+def write_env_keys(keys, path=None):
+    """Replace or add KEY=value lines, keeping every other line. Atomic, 0600."""
+    path = path or THIN_CLIENT_ENV
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        lines = []
+    def key_of(line):
+        k = line.strip().partition("=")[0].strip()
+        return k[len("export "):].strip() if k.startswith("export ") else k
+    kept = [ln for ln in lines if key_of(ln) not in keys]
+    kept += [f"{k}={v}" for k, v in keys.items()]
+    tmp = f"{path}.tmp-{os.getpid()}"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(kept) + "\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+def keys_status():
+    return {k: bool(os.environ.get(k, "").strip()) for k in PROVISION_KEYS}
+
+def provision_from_payload(text, env_path=None):
+    """Scan result -> keys written. Returns a dict safe to show (names only)."""
+    try:
+        code, hosts, port = parse_provision_payload(normalize_provision_input(text))
+    except ValueError as err:
+        return {"ok": False, "error": str(err)}
+    keys, missing, reason = redeem_provision(code, hosts, port)
+    if keys is None:
+        return {"ok": False, "error": reason}
+    if not keys:
+        return {"ok": False, "error": "Frank had none of the phone keys set"}
+    write_env_keys(keys, env_path)
+    for k, v in keys.items():
+        os.environ[k] = v
+    _FRANK_OBS.update({"at": 0.0, "snapshot": None, "reason": None})
+    try:
+        frank_resolve(force=True)
+    except Exception:
+        pass
+    note = "Restart hydi-daemon (sv restart hydi-daemon) for the Groq key to take effect." if "GROQ_API_KEY" in keys else ""
+    log_event("Keys imported from QR: " + ", ".join(sorted(keys)), "info")
+    return {"ok": True, "set": sorted(keys), "missing": missing or [], "note": note}
+
+def _is_loopback(addr):
+    return addr in ("127.0.0.1", "::1", "::ffff:127.0.0.1") or str(addr).startswith("127.")
+
 def fleet_status():
     """Real subsystem cards for the dashboard. Everything is probed."""
     items = []
@@ -1314,6 +1442,11 @@ class HydiHandler(BaseHTTPRequestHandler):
             })
         elif p == "/api/models":
             self._json(models_payload())
+        elif p == "/api/keys/status":
+            if not _is_loopback(self.client_address[0]):
+                self._board_json(403, {"ok": False, "error": "this phone only"})
+                return
+            self._board_json(200, {"ok": True, "keys": keys_status()})
         elif p == "/board":
             self._serve_board()
         elif p == "/api/board":
@@ -1334,6 +1467,20 @@ class HydiHandler(BaseHTTPRequestHandler):
                 self._board_json(413, {"ok": False, "error": "body too large"})
                 return
             self._board("POST", raw or b"{}")
+            return
+        if p == "/api/keys/provision":
+            if not _is_loopback(self.client_address[0]):
+                self._board_json(403, {"ok": False, "error": "this phone only"})
+                return
+            if length > 4096:
+                self._board_json(413, {"ok": False, "error": "body too large"})
+                return
+            try:
+                payload = json.loads(raw or b"{}").get("payload", "")
+            except (ValueError, AttributeError):
+                payload = ""
+            result = provision_from_payload(payload)
+            self._board_json(200 if result.get("ok") else 400, result)
             return
         body    = json.loads(raw or b"{}")
         session = self.headers.get("X-Session-Id", "default")

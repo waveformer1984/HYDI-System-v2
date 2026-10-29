@@ -56,7 +56,10 @@ const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
 const ToolRegistry = require('./tools/tool-registry');
 const MissionWorker = require('./missions/mission-worker');
+const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
+const { MemoryRuntime } = require('./memory/memory-runtime');
+const { checkSystem, formatSystemStatus, isSystemReportQuery } = require('./status/system-status');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -77,6 +80,12 @@ class HeidiCore {
     });
     this.missionWorker = new MissionWorker(this.memory, this.actions, config.missionWorker);
     this.healthObserver = new HealthObserver(this.memory, config.healthObserver);
+    // Persistent conversations + long-term memory (memory/memory-runtime.js).
+    // Same SQLite file as the legacy store; never falls back to RAM.
+    this.memoryRuntime = config.memoryRuntime || new MemoryRuntime({
+      dbPath: config.conversationDbPath || (config.memory && config.memory.dbPath),
+      root: require('path').resolve(__dirname, '..'),
+    });
 
     // State
     this.isRunning = false;
@@ -289,6 +298,40 @@ class HeidiCore {
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
 
+        // Persistent conversation + memory (see memory/memory-runtime.js)
+        const owner = this.memoryRuntime.resolveOwner(req);
+        const requestId = req.body.request_id || null;
+        if (isSystemReportQuery(input)) {
+          const report = await this.getSystemStatus();
+          send({ t: formatSystemStatus(report) });
+          send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (this.memoryRuntime.isMemoryCommand(input)) {
+          const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
+          send({ t: text });
+          send({ done: true, model: 'memory', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const taskCmd = lifecycle.parseTaskCommand(input);
+        if (taskCmd) {
+          send({ t: await this.runTaskChat(owner, taskCmd) });
+          send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const traceCmd = lifecycle.parseTraceCommand(input);
+        if (traceCmd) {
+          const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
+          send({ t: text });
+          send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
+        if (!turn.ok) {
+          send({ error: turn.error, conversation_not_found: true, done: true });
+          return res.end();
+        }
+
         // RETRIEVE
         let memoryContext;
         try {
@@ -316,7 +359,7 @@ class HeidiCore {
           send({ t: msg });
           result = { text: msg, model: 'no-tool-available', tokens: { prompt: 0, completion: 0 } };
         } else {
-          const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
+          const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context, turn.context);
           try {
             result = await this.brain.generateStream(prompt, (t) => send({ t }), options);
           } catch (e) {
@@ -329,7 +372,8 @@ class HeidiCore {
 
         // STORE + REFLECT (post-stream, non-blocking for the client)
         const confidence = this.estimateConfidence(result.text, memoryContext);
-        await this.memory.storeShortTerm(input, result.text, context, confidence);
+        await this.memory.storeShortTerm(input, result.text, context, confidence).catch(() => {});
+        const saved = this.memoryRuntime.endTurn(turn, { owner, input, answer: result.text, requestId, failed: result.model === 'fallback' });
         this.extractAndStoreFacts(input, result.text).catch(() => {});
         if (confidence > 0.7 && result.model !== 'fallback') {
           this.reflection.reflect(input, result.text, confidence)
@@ -341,7 +385,8 @@ class HeidiCore {
           model: result.model,
           confidence,
           latency_ms: Date.now() - startTime,
-          memories_retrieved: memoryContext.recent_interactions.length + memoryContext.relevant_facts.length
+          memories_retrieved: memoryContext.recent_interactions.length + memoryContext.relevant_facts.length,
+          ...this.turnMeta(turn, saved)
         });
         res.end();
       } catch (error) {
@@ -456,6 +501,155 @@ class HeidiCore {
       }
     });
 
+    // CONVERSATIONS + MEMORY (memory/memory-runtime.js). Same auth as every
+    // other route; every read is scoped to the caller's owner.
+    const memStore = () => this.memoryRuntime.store;
+    const memUnavailable = (res) => res.status(503).json({ error: `memory unavailable: ${this.memoryRuntime.storeError}` });
+
+    this.app.get('/conversations', (req, res) => {
+      if (!memStore()) return memUnavailable(res);
+      try {
+        res.json({ conversations: memStore().listConversations(this.memoryRuntime.resolveOwner(req), { limit: Number(req.query.limit) || 20 }) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/conversations', (req, res) => {
+      if (!memStore()) return memUnavailable(res);
+      try {
+        res.status(201).json({ conversation: memStore().createConversation(this.memoryRuntime.resolveOwner(req), req.body && req.body.title) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/conversations/:id/messages', (req, res) => {
+      if (!memStore()) return memUnavailable(res);
+      const owner = this.memoryRuntime.resolveOwner(req);
+      const convo = memStore().getConversation(owner, req.params.id);
+      if (!convo) return res.status(404).json({ error: 'conversation not found' });
+      try {
+        const messages = memStore().listMessages(owner, convo.id, { limit: Number(req.query.limit) || 50, before: req.query.before || null });
+        res.json({ conversation: convo, messages });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/memory/status', async (req, res) => {
+      const text = await this.memoryRuntime.runCommand({
+        owner: this.memoryRuntime.resolveOwner(req),
+        conversationId: req.query.conversation_id || null,
+        input: 'memory status',
+        diagnostics: () => this.getMemoryDiagnostics(),
+      });
+      res.status(memStore() ? 200 : 503).json({ available: Boolean(memStore()), text });
+    });
+
+    // Unified HYDI status: HEALTHY / DEGRADED / UNAVAILABLE / UNKNOWN per
+    // component, from real probes with timeouts (status/system-status.js).
+    this.app.get('/system/status', async (req, res) => {
+      try {
+        const report = await this.getSystemStatus();
+        res.status(report.overall === 'UNAVAILABLE' ? 503 : 200).json({ ...report, text: formatSystemStatus(report) });
+      } catch (error) {
+        res.status(500).json({ overall: 'UNKNOWN', error: error.message });
+      }
+    });
+
+    // TASKS (missions/lifecycle.js). Same auth as every other route. Approve
+    // and reject act as a person (`human:<owner>`); the model's tools can't.
+    const taskJson = (m) => m && {
+      ...m,
+      status: lifecycle.normalizeState(m.status),
+      context: lifecycle.parseJson(m.context),
+      plan: lifecycle.parseJson(m.plan),
+      approval: lifecycle.parseJson(m.approval),
+      evidence: lifecycle.parseJson(m.evidence),
+    };
+
+    this.app.get('/missions', async (req, res) => {
+      try {
+        const state = req.query.state ? String(req.query.state).split(',').map(lifecycle.normalizeState) : null;
+        const missions = req.query.trace_id
+          ? await this.memory.getMissionsByTrace(String(req.query.trace_id), Math.min(Number(req.query.limit) || 30, 200))
+          : await this.memory.getMissions(state, Math.min(Number(req.query.limit) || 30, 200));
+        res.json({ missions: (missions || []).map(taskJson), counts: await this.memory.countMissionsByStatus() });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    // Open an informational task from another HYDI process (the ProtoForge
+    // pipeline linker, lib/pipeline/heidi-task-link.js). No action can be
+    // attached here, so nothing can ever run from this route. Idempotent on
+    // trace_id: a retry returns the task already opened for that trace.
+    this.app.post('/missions', async (req, res) => {
+      try {
+        const b = req.body || {};
+        const goal = typeof b.goal === 'string' ? b.goal.trim().slice(0, 300) : '';
+        if (!goal) return res.status(400).json({ error: 'goal is required' });
+        if (b.action || (b.context && b.context.action)) return res.status(400).json({ error: 'this route opens informational tasks only; actions come from chat or mission-cli' });
+        const traceId = typeof b.trace_id === 'string' && /^[0-9a-fA-F-]{8,64}$/.test(b.trace_id) ? b.trace_id : null;
+        if (b.trace_id && !traceId) return res.status(400).json({ error: 'trace_id must be 8-64 hex/dash characters' });
+        if (traceId) {
+          const [existing] = (await this.memory.getMissionsByTrace(traceId, 1)).filter((m) => m.trace_id === traceId);
+          if (existing) return res.json({ ok: true, existing: true, mission: taskJson(existing) });
+        }
+        const source = typeof b.source === 'string' ? b.source.slice(0, 60) : 'api';
+        const trace = b.trace && typeof b.trace === 'object' && !Array.isArray(b.trace) ? b.trace : null;
+        if (trace && JSON.stringify(trace).length > 4000) return res.status(400).json({ error: 'trace summary too large (4000 chars max)' });
+        const priority = Number.isInteger(b.priority) ? Math.max(0, Math.min(3, b.priority)) : 1;
+        const id = await this.memory.createMission(goal, priority, trace ? { trace, source } : { source }, null, {
+          actor: source, reason: traceId ? `opened from pipeline trace ${traceId.slice(0, 8)}` : 'created via API', traceId,
+        });
+        res.status(201).json({ ok: true, existing: false, mission: taskJson(await this.memory.getMission(id)) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    // One trace end to end: pipeline stages + the Heidi tasks it opened.
+    this.app.get('/traces/:id', async (req, res) => {
+      const id = String(req.params.id || '').toLowerCase();
+      if (!/^[0-9a-f-]{8,64}$/.test(id)) return res.status(400).json({ error: 'trace id must be 8-64 hex/dash characters' });
+      try {
+        const report = await this.traceReport(id);
+        if (!report.live && !report.missions.length) return res.status(404).json({ error: 'trace not found', text: report.text });
+        res.json({ trace_id: report.traceId, pipeline: report.live, missions: report.missions.map(taskJson), text: report.text });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/missions/:id', async (req, res) => {
+      try {
+        const m = await this.memory.getMission(Number(req.params.id));
+        if (!m) return res.status(404).json({ error: 'task not found' });
+        const events = await this.memory.getMissionEvents(m.id);
+        res.json({ mission: taskJson(m), events: events.map((e) => ({ ...e, data: lifecycle.parseJson(e.data) })), text: lifecycle.formatTask(m, events) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/missions/:id/:decision', async (req, res) => {
+      const decision = req.params.decision;
+      if (!['approve', 'reject', 'cancel'].includes(decision)) return res.status(404).json({ error: 'unknown action' });
+      try {
+        const id = Number(req.params.id);
+        const actor = `human:${this.memoryRuntime.resolveOwner(req)}`;
+        const note = req.body && typeof req.body.note === 'string' ? req.body.note.slice(0, 300) : null;
+        const r = decision === 'cancel'
+          ? await lifecycle.transition(this.memory, id, 'cancelled', { actor, reason: note ? `cancelled: ${note}` : 'cancelled', from: ['queued', 'blocked', 'awaiting_approval'] })
+          : await lifecycle.decide(this.memory, id, decision, { actor, reason: note });
+        if (!r.ok) return res.status(/not found/.test(r.error) ? 404 : 409).json({ ok: false, error: r.error });
+        if (decision === 'approve') this.nudgeWorker();
+        const m = await this.memory.getMission(id);
+        res.json({ ok: true, mission: taskJson(m) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/memory/search', (req, res) => {
+      if (!memStore()) return memUnavailable(res);
+      const q = String(req.query.q || '');
+      if (!q) return res.status(400).json({ error: 'q is required' });
+      res.json({ memories: memStore().searchMemories(this.memoryRuntime.resolveOwner(req), q, { limit: Number(req.query.limit) || 10 }) });
+    });
+
+    this.app.delete('/memory/:id', (req, res) => {
+      if (!memStore()) return memUnavailable(res);
+      const removed = memStore().forget(this.memoryRuntime.resolveOwner(req), String(req.params.id));
+      res.status(removed ? 200 : 404).json({ removed });
+    });
+
     // CHAT - Conversational endpoint
     this.app.post('/chat', async (req, res) => {
       try {
@@ -507,18 +701,62 @@ class HeidiCore {
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
 
+        // Persistent conversation + memory (see memory/memory-runtime.js).
+        // Memory commands answer from the store itself, before any model.
+        const owner = this.memoryRuntime.resolveOwner(req);
+        const requestId = req.body.request_id || null;
+        if (isSystemReportQuery(input)) {
+          const report = await this.getSystemStatus();
+          send({ t: formatSystemStatus(report) });
+          send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (this.memoryRuntime.isMemoryCommand(input)) {
+          const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
+          send({ t: text });
+          send({ done: true, model: 'memory', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const taskCmd = lifecycle.parseTaskCommand(input);
+        if (taskCmd) {
+          send({ t: await this.runTaskChat(owner, taskCmd) });
+          send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const traceCmd = lifecycle.parseTraceCommand(input);
+        if (traceCmd) {
+          const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
+          send({ t: text });
+          send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
+        if (!turn.ok) {
+          // Never silently start a blank conversation in place of one we couldn't load.
+          send({ error: turn.error, conversation_not_found: true, done: true });
+          return res.end();
+        }
+
         // Deterministic fast-path: skip the LLM tool-loop entirely for the
         // handful of parameterless read-only queries that map 1:1 to a tool.
         // Turns a ~50-100s round-trip (on this box, with this model) into a
         // single tool call.
         const fastPath = this.matchFastPath(input);
         if (fastPath) {
-          const toolResult = await this.toolRegistry.execute(fastPath.tool, fastPath.args, 'Heidi');
-          const finalText = this.formatFastPathResult(fastPath.tool, toolResult);
+          // "status"/"health" get the unified report: real health, not "the
+          // port answered" (the system_status tool still serves the model).
+          let finalText;
+          if (fastPath.tool === 'system_status') {
+            finalText = formatSystemStatus(await this.getSystemStatus());
+          } else {
+            const toolResult = await this.toolRegistry.execute(fastPath.tool, fastPath.args, 'Heidi');
+            finalText = this.formatFastPathResult(fastPath.tool, toolResult);
+          }
           send({ t: finalText });
           await this.memory.storeShortTerm(input, finalText, { tools_used: [fastPath.tool], fast_path: true }, 0.95)
             .catch(() => {});
-          send({ done: true, model: 'fast-path', tools_used: [fastPath.tool], latency_ms: Date.now() - startTime });
+          const saved = this.memoryRuntime.endTurn(turn, { owner, input, answer: finalText, requestId });
+          send({ done: true, model: 'fast-path', tools_used: [fastPath.tool], latency_ms: Date.now() - startTime, ...this.turnMeta(turn, saved) });
           return res.end();
         }
 
@@ -538,21 +776,20 @@ class HeidiCore {
           .map((t) => `- ${t.function.name}: ${t.function.description}`)
           .join('\n');
 
-        const messages = [
-          {
-            role: 'system',
-            content: this.getSystemPersonality() +
+        const messages = MemoryRuntime.chatMessages(
+            this.getSystemPersonality() +
               '\n\nYou have REAL tools. For every user request, decide if one of the tools below matches. ' +
               'If it does, you MUST call that tool with the correct arguments. ' +
               'If the user asks to run a command, call run_command. ' +
               'If the user wants to create/update/list missions, agents, or memories, call the matching tool. ' +
               'If the user asks about system status, health, models, or services, call the matching tool. ' +
-              'Answer ONLY from the tool result — never invent status or command output. ' +
+              'Answer status, health and command questions ONLY from the tool result — never invent status or command output. ' +
+              'Answer questions about earlier conversation or saved facts from the conversation history and MEMORY DATA; if they do not contain the answer, say so. ' +
               'When reporting tool results, copy the EXACT names, numbers, and statuses from the JSON. ' +
-              'Keep the layout compact for a mobile screen.\n\nAvailable tools:\n' + toolsList
-          },
-          { role: 'user', content: input }
-        ];
+              'Keep the layout compact for a mobile screen.\n' + MemoryRuntime.DATA_RULE + '\n\nAvailable tools:\n' + toolsList,
+            turn.context,
+            input
+        );
 
         const toolsUsed = [];
         let result = null;
@@ -609,12 +846,14 @@ class HeidiCore {
         // STORE — same memory loop as /think, minus reflection noise
         await this.memory.storeShortTerm(input, finalText, { tools_used: toolsUsed }, 0.9)
           .catch(() => {});
+        const saved = this.memoryRuntime.endTurn(turn, { owner, input, answer: finalText, requestId });
 
         send({
           done: true,
           model,
           tools_used: toolsUsed,
-          latency_ms: Date.now() - startTime
+          latency_ms: Date.now() - startTime,
+          ...this.turnMeta(turn, saved)
         });
         res.end();
       } catch (error) {
@@ -631,15 +870,59 @@ class HeidiCore {
    * Build prompt with procedural memory injected from Supabase
    * This is the NEW memory-aware version (Phase 1 wiring)
    */
-  buildPromptWithMemory(input, memoryContext, proceduralFacts, userContext) {
+  /** Persistence/context fields added to a chat turn's final SSE event. */
+  turnMeta(turn, saved) {
+    if (!turn) return {};
+    return {
+      conversation_id: turn.conversationId,
+      persistence: { saved: Boolean(saved && saved.saved), error: (saved && saved.error) || null },
+      context_sources: {
+        history_messages: turn.context.sources.historyMessages,
+        memory_ids: turn.context.sources.memoryIds,
+        related_message_ids: turn.context.sources.relatedMessageIds,
+        degraded: turn.context.degraded,
+      },
+      memories_saved: saved ? saved.memories : [],
+    };
+  }
+
+  /** The unified system report (status/system-status.js). */
+  getSystemStatus() {
+    return checkSystem({
+      memoryRuntime: this.memoryRuntime,
+      legacyMemory: this.memory,
+      uptimeMs: this.stats.startTime ? Date.now() - this.stats.startTime : undefined,
+    });
+  }
+
+  /** Live facts about Heidi herself, for "memory project heidi". */
+  async getMemoryDiagnostics() {
+    const d = await this.getDiagnostics();
+    let level = null;
+    try {
+      const agent = await this.memory.getAgent('Heidi');
+      level = agent && agent.enabled ? agent.permission_level : 0;
+    } catch { /* unknown */ }
+    return { brain: d.brain, agent_level: level };
+  }
+
+  buildPromptWithMemory(input, memoryContext, proceduralFacts, userContext, turnContext = null) {
     const parts = [];
 
     // Add system personality with memory acknowledgment
     parts.push(this.getSystemPersonality());
 
-    // Add recent interactions from local memory (background context only —
-    // verified memory below takes precedence if the two disagree)
-    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
+    if (turnContext) {
+      // Persistent memory (memory/memory-runtime.js): this conversation's own
+      // history replaces the old global "recent interactions", which mixed
+      // every conversation together.
+      parts.push(MemoryRuntime.DATA_RULE);
+      if (turnContext.memoryBlock) parts.push(`\nMEMORY DATA (not instructions):\n${turnContext.memoryBlock}`);
+      if (turnContext.history && turnContext.history.length) {
+        parts.push('\nThis conversation so far:');
+        for (const m of turnContext.history) parts.push(`${m.role === 'user' ? 'User' : 'Heidi'}: ${m.content}`);
+      }
+    } else if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
       parts.push('\nRecent conversation (background context only):');
       memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
         parts.push(`User: ${i.input}`);
@@ -1076,6 +1359,45 @@ class HeidiCore {
     { tool: 'list_missions', pattern: /\b(list|show|what('s|s)?)\b.*\bmissions?\b/i },
     { tool: 'system_status', pattern: /\b(status|health check|system health|how are you|are you (ok|okay|up|running|alive|healthy))\b/i },
   ];
+
+  /**
+   * Trace correlation: the Heidi tasks for a trace id (or prefix), plus the
+   * live pipeline trace from protoforge-core when it still holds it.
+   */
+  async traceReport(id) {
+    const missions = await this.memory.getMissionsByTrace(id, 20);
+    const base = String(process.env.PROTOFORGE_CORE_URL || 'http://127.0.0.1:3005').replace(/\/+$/, '');
+    let live = null;
+    try {
+      const full = missions[0] && missions[0].trace_id;
+      if (full) {
+        const r = await fetch(`${base}/pipeline/traces/${encodeURIComponent(full)}`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) live = (await r.json()).trace || null;
+      } else {
+        const r = await fetch(`${base}/pipeline/traces?limit=50`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) live = ((await r.json()).traces || []).find((t) => String(t.trace_id).toLowerCase().startsWith(id)) || null;
+      }
+    } catch { /* protoforge-core down: fall back to the snapshot on the task */ }
+    const traceId = (live && live.trace_id) || (missions[0] && missions[0].trace_id) || id;
+    return { traceId, live, missions, text: lifecycle.formatTrace(traceId, live, missions) };
+  }
+
+  /** Start the worker's next pass now (an approved task shouldn't wait 15s). */
+  nudgeWorker() {
+    setImmediate(() => {
+      this.missionWorker.tick().catch((e) => console.warn(`[MISSION WORKER] nudge failed: ${e.message}`));
+    });
+  }
+
+  /** "tasks" / "task 12" / "task approve 12" typed by the person in chat. */
+  async runTaskChat(owner, parsed) {
+    let approved = false;
+    const text = await lifecycle.runTaskCommand(this.memory, parsed, {
+      actor: `human:${owner}`,
+      onApproved: () => { approved = true; this.nudgeWorker(); },
+    });
+    return approved ? `${text}\n\n👍 Approved. The worker re-checks permissions and safety, then runs it; send "task ${parsed.id}" for the result.` : text;
+  }
 
   matchFastPath(input) {
     if (!input) return null;

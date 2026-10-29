@@ -35,6 +35,12 @@ function createApi(repository, config = {}) {
 
   const sampleLibrary = new SampleLibraryAdapter({ logger: repository ? repository.logger : undefined });
 
+  const { createCopilot } = require('../copilot');
+  const copilot = config.copilot || createCopilot({ repository, engine, dataDir: config.dataDir });
+
+  const { createAudit } = require('../audit');
+  const audit = config.audit || createAudit({ repository, engine, copilot, config });
+
   // ── Static product UI ─────────────────────────────────────────────
   app.use(express.static(require('path').join(__dirname, '..', '..', 'public')));
 
@@ -362,6 +368,31 @@ function createApi(repository, config = {}) {
 
   app.get('/ownership/records/:id', h(async (req, res) => {
     send(res, { record: repository.getOwnershipRecord(req.params.id) });
+  }));
+
+  // ── Co-Pilot — creative direction, project awareness, session memory ──
+  app.get('/copilot/context', h(async (req, res) => {
+    send(res, { context: await copilot.context(req.query.projectId || null) });
+  }));
+  app.get('/copilot/suggest', h(async (req, res) => {
+    send(res, await copilot.suggest(req.query.projectId || null));
+  }));
+  app.post('/copilot/note', h(async (req, res) => {
+    const note = req.body && req.body.note;
+    if (!note || !String(note).trim()) return res.status(400).json({ ok: false, error: 'note is required' });
+    send(res, { entry: await copilot.remember(req.body.projectId || null, note) });
+  }));
+  app.get('/copilot/memory', h(async (req, res) => {
+    send(res, await copilot.memory(req.query.projectId || null));
+  }));
+
+  // ── Readiness audit — read-only system check for the setup wizard ──
+  // GET writes nothing. The persistence probe is an explicit POST.
+  app.get('/audit', h(async (req, res) => {
+    send(res, { report: await audit.run() });
+  }));
+  app.post('/audit/probe', h(async (req, res) => {
+    send(res, { probe: await audit.probe() });
   }));
 
   app.get('/engine/status', h(async (req, res) => {

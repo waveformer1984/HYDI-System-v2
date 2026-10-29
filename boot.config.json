@@ -134,6 +134,7 @@
       "type": "process",
       "enabled": true,
       "required": false,
+      "supervisedAs": "hydi-revenue-autopilot-tick",
       "command": "npx",
       "args": [
         "tsx",

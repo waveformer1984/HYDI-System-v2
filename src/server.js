@@ -25,6 +25,11 @@ const HydiContextualConscience = require('../modules/hydi-contextual-conscience'
 const ProtoForgeInfrastructure = require('../modules/protoforge-infrastructure');
 const cascade = require('../modules/cascade-complete-v2');
 const { metricsHandler: pipelineMetricsHandler } = require('../lib/pipeline/metrics');
+const { createHeidiTaskLinker } = require('../lib/pipeline/heidi-task-link');
+const { mountTraceRoutes } = require('../lib/pipeline/trace-routes');
+// ProtoForge escalations become Heidi tasks with the same trace_id
+// (lib/pipeline/heidi-task-link.js). Off with HEIDI_TRACE_LINK=false.
+const heidiTaskLinker = createHeidiTaskLinker();
 const ChatWebSocketServer = require('../modules/chat-websocket-server');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -1125,6 +1130,10 @@ app.get('/cascade/emissions', (req, res) => {
 // only -- no event data.
 app.get('/pipeline/metrics', pipelineMetricsHandler());
 
+// Recent pipeline traces by id (lib/pipeline/trace-routes.js): Heidi's
+// `trace <id>` command reads these.
+mountTraceRoutes(app, { getPipeline: () => cascade.pipeline, linker: heidiTaskLinker });
+
 // Get schema lock info
 app.get('/cascade/schema', (req, res) => {
   try {
@@ -1631,6 +1640,8 @@ server.listen(PORT, async () => {
     if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
       ursulaSSE.broadcast({ type: 'pipeline_trace', ...traceEvent, timestamp: new Date().toISOString() });
     }
+    // Fire-and-forget: the linker never throws and never delays the pipeline.
+    heidiTaskLinker.handle(traceEvent);
   });
 
   cascade.on('schema_violation', (violation) => {

@@ -82,11 +82,22 @@ ports_from_run() {
   sed -n \
     -e 's/.*--port[=[:space:]]\{1,\}\([0-9][0-9]*\).*/\1/p' \
     -e 's/.*[[:space:]]-p[[:space:]]\{1,\}\([0-9][0-9]*\).*/\1/p' \
-    -e 's/.*hydi\.py[[:space:]][[:space:]]*server[[:space:]][[:space:]]*\([0-9][0-9]*\).*/\1/p' \
-    -e 's/.*LLAMA_PORT:-\([0-9][0-9]*\).*/\1/p' \
-    -e 's/.*HYDI_PY_PORT:-\([0-9][0-9]*\).*/\1/p' \
     "$file" | while IFS= read -r p; do
       add_port "$label" "$p"
+    done
+  # hydi.py's port is the dashboard the doctor should point at, so it gets
+  # its own label whether it comes from hydi.py itself or the daemon
+  # service's HYDI_PY_PORT.
+  sed -n \
+    -e 's/.*hydi\.py[[:space:]][[:space:]]*server[[:space:]][[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+    -e 's/.*HYDI_PY_PORT:-\([0-9][0-9]*\).*/\1/p' \
+    "$file" | while IFS= read -r p; do
+      add_port "hydi.py" "$p"
+    done
+  # llama.cpp is an inference backend, never the page to open. Its ports
+  # are still probed and reported but can never become OPEN_PORT.
+  sed -n 's/.*LLAMA_PORT:-\([0-9][0-9]*\).*/\1/p' "$file" | while IFS= read -r p; do
+      add_port "llama" "$p"
     done
 }
 
@@ -184,7 +195,11 @@ else
       say "port $port ($label): listening HTTP $code"
       case $label in
         hydi.py) PY_PORT=$port ;;
-        hydi/run|hydi-daemon/run) [ -z "$RUN_PORT" ] && RUN_PORT=$port ;;
+        # llama.cpp answers HTTP too, but it is an inference backend — the
+        # "hydi" runit service IS llama, so neither label may become
+        # OPEN_PORT. hydi-daemon is the hydi.py service.
+        llama|hydi/run) ;;
+        hydi-daemon/run) [ -z "$RUN_PORT" ] && RUN_PORT=$port ;;
         "env PORT"|thin-client.env|termux/.env.hydi|start_hydi.sh)
           [ -z "$CONF_PORT" ] && CONF_PORT=$port ;;
         *) [ -z "$OPEN_PORT" ] && OPEN_PORT=$port ;;
@@ -194,12 +209,14 @@ else
     fi
   done < "$PORTLIST"
 fi
-if [ -n "$RUN_PORT" ]; then
+# The dashboard is hydi.py: prefer its port (from hydi.py itself or the
+# hydi-daemon service), then any other daemon-declared port, then config.
+if [ -n "$PY_PORT" ]; then
+  OPEN_PORT=$PY_PORT
+elif [ -n "$RUN_PORT" ]; then
   OPEN_PORT=$RUN_PORT
 elif [ -n "$CONF_PORT" ]; then
   OPEN_PORT=$CONF_PORT
-elif [ -z "$OPEN_PORT" ]; then
-  OPEN_PORT=$PY_PORT
 fi
 
 say ""

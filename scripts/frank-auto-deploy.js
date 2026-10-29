@@ -11,6 +11,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const board = require('../lib/forge-board/sdk');
@@ -21,6 +22,16 @@ const INTERVAL_MS = 5 * 60 * 1000;
 const LOCK_STALE_MS = 45 * 60 * 1000;
 const HEALTH_TIMEOUT_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 5 * 1000;
+// The Next build goes to STAGING_DIR and is swapped in only once complete;
+// the build it replaced stays in PREV_DIR so a rollback is a rename, not a
+// rebuild (rebuilding under memory pressure is what failed on 2026-10-25).
+const LIVE_DIR = '.next';
+const STAGING_DIR = '.next-staging';
+const PREV_DIR = '.next-prev';
+const FAILED_DIR = '.next-failed';
+const WEB_APP = 'heidi-web-standalone';
+const BUILD_MARKERS = Object.freeze(['BUILD_ID', path.join('server', 'pages-manifest.json')]);
+const GIB = 1024 ** 3;
 const HEALTH_CHECKS = Object.freeze([
   { name: 'heidi-web', url: 'http://127.0.0.1:3000/api/health' },
   { name: 'heidi-mobile', url: 'http://127.0.0.1:3006/api/health' },
@@ -60,7 +71,8 @@ function execResult(file, args, options = {}) {
 async function mustRun(run, file, args, options) {
   const result = await run(file, args, options);
   if (!result || result.code !== 0) {
-    const error = new Error(`${path.basename(file)} ${args[0] || ''} failed`);
+    const tail = String((result && (result.stderr || result.stdout)) || '').trim().split(/\r?\n/).slice(-3).join(' | ').slice(-300);
+    const error = new Error(`${path.basename(file)} ${args.slice(0, 2).join(' ')} failed${tail ? `: ${tail}` : ''}`);
     error.result = result;
     throw error;
   }
@@ -189,8 +201,8 @@ async function pm2AppNames(run, root, platform, skip = skippedApps(root)) {
     .map((app) => app.name))];
 }
 
-async function restartApps(run, root, platform) {
-  const names = await pm2AppNames(run, root, platform);
+async function restartApps(run, root, platform, extra = []) {
+  const names = [...new Set([...(await pm2AppNames(run, root, platform)), ...extra])];
   if (!names.length) throw new Error('no PM2 applications available to restart');
   await mustRun(run, executable('pm2', platform), ['restart', ...names, '--update-env'], {
     cwd: root,
@@ -242,14 +254,96 @@ async function restoreGenerated(run, root) {
   await run('git', ['checkout', '--', 'next-env.d.ts'], { cwd: root });
 }
 
-async function rollback({ run, root, platform, oldCommit, lockChanged, healthOptions }) {
+const realFs = Object.freeze({
+  exists: (p) => fs.existsSync(p),
+  rm: (p) => fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 }),
+  rename: (a, b) => fs.renameSync(a, b),
+  mkdir: (p) => fs.mkdirSync(p, { recursive: true }),
+});
+
+/** Free RAM gate. A build below this fails partway; better to wait. */
+function memoryPreflight(env = process.env, freemem = os.freemem) {
+  const n = Number(env.HYDI_DEPLOY_MIN_FREE_RAM_GB);
+  const minGb = Number.isFinite(n) && n > 0 ? n : 0.75;
+  const freeGb = Math.round((freemem() / GIB) * 100) / 100;
+  return freeGb >= minGb
+    ? { ok: true, freeGb, reason: 'ok' }
+    : { ok: false, freeGb, reason: `only ${freeGb} GB RAM free, needs ${minGb} GB` };
+}
+
+/**
+ * Build into STAGING_DIR while the live site keeps serving LIVE_DIR.
+ * Throws if the build fails or leaves an incomplete output.
+ */
+async function stagedBuild({ run, root, platform, fsx = realFs, env = process.env }) {
+  const staging = path.join(root, STAGING_DIR);
+  fsx.rm(staging);
+  fsx.rm(path.join(root, FAILED_DIR));
+  // Carry the webpack cache over so staged builds stay incremental.
+  const liveCache = path.join(root, LIVE_DIR, 'cache');
+  if (fsx.exists(liveCache)) {
+    fsx.mkdir(staging);
+    try { fsx.rename(liveCache, path.join(staging, 'cache')); } catch { /* in use; build without it */ }
+  }
+  await mustRun(run, executable('npm', platform), ['run', 'build'], {
+    cwd: root,
+    timeout: 20 * 60 * 1000,
+    env: { ...env, HYDI_NEXT_DIST_DIR: STAGING_DIR },
+  });
+  const missing = BUILD_MARKERS.filter((f) => !fsx.exists(path.join(staging, f)));
+  if (missing.length) throw new Error(`build incomplete: ${missing.join(', ')} missing`);
+}
+
+/**
+ * Rename `from` over LIVE_DIR, keeping what was live at `keepAs`. Windows
+ * can refuse to rename a directory the running server holds open; then stop
+ * the web app, retry, and report it so the caller starts it again.
+ */
+async function swapLive({ run, root, platform, from, keepAs, fsx = realFs }) {
+  const live = path.join(root, LIVE_DIR);
+  const source = path.join(root, from);
+  const keep = path.join(root, keepAs);
+  const attempt = () => {
+    fsx.rm(keep);
+    if (fsx.exists(live)) fsx.rename(live, keep);
+    try {
+      fsx.rename(source, live);
+    } catch (error) {
+      if (!fsx.exists(live) && fsx.exists(keep)) fsx.rename(keep, live);
+      throw error;
+    }
+  };
+  try {
+    attempt();
+    return { stoppedWeb: false };
+  } catch {
+    await run(executable('pm2', platform), ['stop', WEB_APP], { cwd: root, timeout: 60 * 1000 });
+    attempt();
+    return { stoppedWeb: true };
+  }
+}
+
+async function rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped = false, fsx = realFs }) {
   await mustRun(run, 'git', ['reset', '--hard', oldCommit], { cwd: root });
   if (lockChanged) {
     await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
   }
-  await mustRun(run, executable('npm', platform), ['run', 'build'], { cwd: root, timeout: 20 * 60 * 1000 });
+  // The build never went live: the running apps still have the old code and
+  // the old .next, so there is nothing to rebuild or restart.
+  if (!swapped) {
+    fsx.rm(path.join(root, STAGING_DIR));
+    return waitForHealth(healthOptions);
+  }
+  let extra = [];
+  if (fsx.exists(path.join(root, PREV_DIR))) {
+    const swap = await swapLive({ run, root, platform, from: PREV_DIR, keepAs: FAILED_DIR, fsx });
+    if (swap.stoppedWeb) extra = [WEB_APP];
+  } else {
+    // No previous build kept (first staged deploy): fall back to rebuilding.
+    await mustRun(run, executable('npm', platform), ['run', 'build'], { cwd: root, timeout: 20 * 60 * 1000 });
+  }
   await restoreGenerated(run, root);
-  await restartApps(run, root, platform);
+  await restartApps(run, root, platform, extra);
   return waitForHealth(healthOptions);
 }
 
@@ -259,6 +353,7 @@ async function runAutoDeploy(overrides = {}) {
   const run = overrides.run || execResult;
   const now = overrides.now || (() => Date.now());
   const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
+  const log = overrides.log || ((message) => console.error(message));
   const lockPath = overrides.lockPath || path.join(root, '.runtime', 'frank-auto-deploy.lock');
   const lock = (overrides.acquireLock || acquireLock)(lockPath);
   if (!lock) return { status: 'lock_held' };
@@ -268,14 +363,27 @@ async function runAutoDeploy(overrides = {}) {
   let newCommit = null;
   let updated = false;
   let lockChanged = false;
+  let swapped = false;
   let prTitles = [];
+  const fsx = overrides.fsx || realFs;
+
+  // A rejected board post must never be silent: one stderr line with the
+  // board's own error text (never the token) so the PM2 err log shows why
+  // #alerts stayed quiet.
+  const postToBoard = async (channel, body) => {
+    const sent = await post(channel, body);
+    if (!postSucceeded(sent)) {
+      log(`[${APP_NAME}] board post to #${channel} failed: ${board.postFailureReason(sent)}`);
+    }
+    return sent;
+  };
 
   // Alert once per distinct blocked/failed reason. The last reason persists
   // in .runtime so the long-lived loop does not spam #alerts every interval.
   const alertStatePath = overrides.alertStatePath || path.join(root, '.runtime', 'frank-auto-deploy-alert.json');
   const alert = async (reason, text) => {
     if (readAlertState(alertStatePath) === reason) return;
-    const sent = await post('alerts', text);
+    const sent = await postToBoard('alerts', text);
     if (postSucceeded(sent)) writeAlertState(alertStatePath, reason);
   };
   const healthOptions = {
@@ -325,6 +433,15 @@ async function runAutoDeploy(overrides = {}) {
     }
 
     if (!result) {
+      const mem = (overrides.memoryPreflight || memoryPreflight)(overrides.env || process.env);
+      if (!mem.ok) {
+        const reason = `low memory: ${mem.reason}`;
+        await alert('low_memory', `Frank auto-deploy waiting: ${mem.reason}. Nothing changed. Close apps you aren't using on Frank; it retries every 5 minutes.`);
+        result = { status: 'blocked', reason };
+      }
+    }
+
+    if (!result) {
       const log = await mustRun(run, 'git', ['log', '--format=%B%x1e', `${oldCommit}..${newCommit}`], { cwd: root });
       prTitles = parseMergedPrTitles(log.stdout);
       const lockDiff = await mustRun(run, 'git', ['diff', '--name-only', oldCommit, newCommit, '--', 'package-lock.json'], { cwd: root });
@@ -335,19 +452,21 @@ async function runAutoDeploy(overrides = {}) {
       if (lockChanged) {
         await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
       }
-      await mustRun(run, executable('npm', platform), ['run', 'build'], { cwd: root, timeout: 20 * 60 * 1000 });
+      await stagedBuild({ run, root, platform, fsx, env: overrides.env || process.env });
       await restoreGenerated(run, root);
-      await restartApps(run, root, platform);
+      const swap = await swapLive({ run, root, platform, from: STAGING_DIR, keepAs: PREV_DIR, fsx });
+      swapped = true;
+      await restartApps(run, root, platform, swap.stoppedWeb ? [WEB_APP] : []);
 
       const health = await waitForHealth(healthOptions);
       if (!health.ok) {
         const failing = health.results.filter((check) => !check.ok).map((check) => check.name).join(', ');
-        const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions });
+        const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped, fsx });
         await alert(
           `rollback:${newCommit}`,
           `Frank auto-deploy rolled back ${newCommit.slice(0, 8)} to ${oldCommit.slice(0, 8)}; failing check: ${failing}. Rollback health: ${healthText(rollbackHealth)}.`,
         );
-        await post('ops', [
+        await postToBoard('ops', [
           `Frank deploy rolled back: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}→${oldCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Failed health: ${healthText(health)}`,
@@ -356,7 +475,7 @@ async function runAutoDeploy(overrides = {}) {
         ].join('\n'));
         result = { status: 'rolled_back', oldCommit, newCommit, health, rollbackHealth };
       } else {
-        await post('ops', [
+        await postToBoard('ops', [
           `Frank deployed: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Health: ${healthText(health)}`,
@@ -369,8 +488,9 @@ async function runAutoDeploy(overrides = {}) {
     const reason = error instanceof Error ? error.message : 'unknown deployment failure';
     if (updated && oldCommit) {
       try {
-        const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions });
-        await alert(`rollback_error:${reason}`, `Frank auto-deploy rolled back after deployment error: ${reason}. Rollback health: ${healthText(rollbackHealth)}.`);
+        const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped, fsx });
+        const where = swapped ? 'restored the previous build' : 'the live site was never touched';
+        await alert(`rollback_error:${reason}`, `Frank auto-deploy rolled back after deployment error (${where}): ${reason}. Health: ${healthText(rollbackHealth)}.`);
         result = { status: 'rolled_back', oldCommit, newCommit, reason, rollbackHealth };
       } catch {
         await alert(`rollback_failed:${reason}`, `Frank auto-deploy ROLLBACK FAILED after: ${reason}. Human intervention required.`);
@@ -386,7 +506,7 @@ async function runAutoDeploy(overrides = {}) {
 
   // A successful pass clears any standing blocked/failed alert — post once.
   if ((result.status === 'noop' || result.status === 'deployed') && readAlertState(alertStatePath) !== null) {
-    const sent = await post('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
+    const sent = await postToBoard('alerts', 'Frank auto-deploy unblocked — deploys resumed.');
     if (postSucceeded(sent)) clearAlertState(alertStatePath);
   }
   return result;
@@ -399,6 +519,9 @@ function startDeployLoop({
   log = (message) => console.error(message),
 } = {}) {
   let inFlight = false;
+  // 'blocked' is a steady state, not an event: log each distinct reason
+  // once, so a day-long block leaves one readable line instead of a flood.
+  const loggedBlockedReasons = new Set();
   const tick = async () => {
     if (inFlight) return;
     inFlight = true;
@@ -406,6 +529,12 @@ function startDeployLoop({
       const result = await deploy();
       if (result.status === 'failed' || result.status === 'rollback_failed') {
         log(`[${APP_NAME}] ${result.status}: ${result.reason || ''}`);
+      } else if (result.status === 'blocked') {
+        const reason = result.reason || 'unknown';
+        if (!loggedBlockedReasons.has(reason)) {
+          loggedBlockedReasons.add(reason);
+          log(`[${APP_NAME}] blocked: ${reason}`);
+        }
       }
     } catch (error) {
       log(`[${APP_NAME}] unhandled error: ${error instanceof Error ? error.message : error}`);
@@ -419,6 +548,7 @@ function startDeployLoop({
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   require('../lib/runtime/provenance').recordProcessProvenance(APP_NAME).then(() => startDeployLoop());
 }
 
@@ -441,6 +571,14 @@ module.exports = {
   postSucceeded,
   parseMergedPrTitles,
   waitForHealth,
+  memoryPreflight,
+  stagedBuild,
+  swapLive,
+  rollback,
+  LIVE_DIR,
+  STAGING_DIR,
+  PREV_DIR,
+  WEB_APP,
   runAutoDeploy,
   startDeployLoop,
 };

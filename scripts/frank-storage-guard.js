@@ -26,6 +26,7 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const disk = require('../lib/storage/disk');
+const board = require('../lib/forge-board/sdk');
 
 const APP_NAME = 'frank-storage-guard';
 const INTERVAL_MS = 15 * 60 * 1000;
@@ -39,6 +40,16 @@ const DEPLOY_LOCK_FRESH_MS = 45 * 60 * 1000;
 // local-ci's throwaway worktrees: mkdtemp(`hydi-ci-<7-char sha>-`) + 6 chars.
 const CI_WORKTREE_RE = /^hydi-ci-[0-9a-f]{7}-[A-Za-z0-9]{6}$/;
 const CI_LOG_DIR_RE = /^[0-9a-f]{7}$/;
+// Stale %TEMP%: anything at the top of the temp folder untouched for 2 days.
+// On 2026-10-27 8.6 GB of old temp files took C: to 0.6 GB free while every
+// tier above had nothing left to clear.
+const STALE_TEMP_AGE_MS = 2 * DAY;
+// Left alone: local-ci's own entries (their tiers handle them) and virtual
+// disks (WSL's swap file lives in %TEMP% and is in use while Docker runs).
+const TEMP_KEEP_RE = /^hydi-ci-|^hydi-local-ci$|\.vhdx?$/i;
+// A folder with more entries than this is treated as in use and skipped
+// rather than walked every pass.
+const TEMP_SCAN_LIMIT = 20000;
 
 function commandFor(name, platform) {
   return platform === 'win32' && (name === 'npm' || name === 'pm2') ? `${name}.cmd` : name;
@@ -86,6 +97,47 @@ function staleDirs(dir, re, ageMs, now) {
   return out;
 }
 
+/**
+ * Newest mtime anywhere under `full` (links are not followed), or Infinity
+ * when the walk is cut short, so an oversized or unreadable folder counts as
+ * fresh and is kept.
+ */
+function newestMtime(full, limit = TEMP_SCAN_LIMIT) {
+  let newest = 0;
+  let seen = 0;
+  const stack = [full];
+  while (stack.length) {
+    const cur = stack.pop();
+    let st;
+    try { st = fs.lstatSync(cur); } catch { return Infinity; }
+    seen += 1;
+    if (seen > limit) return Infinity;
+    newest = Math.max(newest, st.mtimeMs);
+    if (st.isSymbolicLink() || !st.isDirectory()) continue;
+    let names;
+    try { names = fs.readdirSync(cur); } catch { return Infinity; }
+    for (const name of names) stack.push(path.join(cur, name));
+  }
+  return newest;
+}
+
+/** Top-level entries of the temp folder whose newest content is older than `ageMs`. */
+function staleTempEntries(dir, ageMs, now) {
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const out = [];
+  for (const name of names) {
+    if (TEMP_KEEP_RE.test(name)) continue;
+    const full = path.join(dir, name);
+    let st;
+    try { st = fs.lstatSync(full); } catch { continue; }
+    if (st.isSymbolicLink()) continue; // never follow or remove links/junctions
+    const newest = st.isDirectory() ? newestMtime(full) : st.mtimeMs;
+    if (now - newest >= ageMs) out.push(full);
+  }
+  return out;
+}
+
 function removeDirs(dirs) {
   const removed = [];
   const errors = [];
@@ -117,6 +169,7 @@ const CLEANUP = Object.freeze([
   { id: 'ci-orphan-worktrees', minLevel: 'OK', what: 'local-ci worktrees left behind by a crashed run (>6h old)' },
   { id: 'ci-old-logs', minLevel: 'OK', what: 'local-ci logs older than 14 days' },
   { id: 'git-worktree-prune', minLevel: 'OK', what: 'git records of worktrees that no longer exist' },
+  { id: 'stale-temp', minLevel: 'WATCH', what: '%TEMP% entries untouched for 2+ days (Windows only; links and virtual disks skipped)' },
   { id: 'npm-cache', minLevel: 'LOW', what: 'npm download cache (refilled by the next install)' },
   { id: 'next-build-cache', minLevel: 'LOW', what: '.next/cache (rebuilt by the next build; skipped during a deploy)' },
   { id: 'docker-build-cache', minLevel: 'LOW', what: 'Docker build cache (not images, containers or volumes)' },
@@ -139,6 +192,14 @@ async function runCleanup({ level, root, tmpdir, run, platform, now }) {
         const r = removeDirs(staleDirs(path.join(tmpdir, 'hydi-local-ci'), CI_LOG_DIR_RE, CI_LOG_AGE_MS, now));
         action.detail = `${r.removed.length} removed`;
         if (r.errors.length) { action.ok = false; action.detail += `; ${r.errors.join('; ')}`; }
+      } else if (step.id === 'stale-temp') {
+        if (platform !== 'win32') {
+          action.detail = 'skipped: Windows only';
+        } else {
+          const r = removeDirs(staleTempEntries(tmpdir, STALE_TEMP_AGE_MS, now));
+          // Files another program holds open refuse to go; that is expected.
+          action.detail = `${r.removed.length} removed${r.errors.length ? `, ${r.errors.length} in use` : ''}`;
+        }
       } else if (step.id === 'git-worktree-prune') {
         const r = await run('git', ['worktree', 'prune'], { cwd: root });
         action.ok = r.code === 0;
@@ -273,7 +334,8 @@ async function runStoragePass(overrides = {}) {
   const run = overrides.run || execResult;
   const tmpdir = overrides.tmpdir || os.tmpdir();
   const measure = overrides.measure || (() => disk.measure(disk.defaultVolume(root)));
-  const post = overrides.post || ((channel, body) => require('../lib/forge-board/sdk').post(channel, body, null, { sender: 'hydi-daemon' }));
+  const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
+  const log = overrides.log || ((message) => console.error(message));
   const dir = overrides.storageDir || path.join(root, '.runtime', 'storage');
   const statusPath = path.join(dir, 'status.json');
   const statePath = path.join(dir, 'state.json');
@@ -314,6 +376,17 @@ async function runStoragePass(overrides = {}) {
   };
   try { writeJsonAtomic(statusPath, status); } catch { /* best effort */ }
 
+  // A rejected board post must never be silent: one stderr line with the
+  // board's own error text (never the token) so the PM2 err log shows why
+  // #alerts stayed quiet.
+  const postToBoard = async (channel, body) => {
+    const sent = await post(channel, body);
+    if (!postSucceeded(sent)) {
+      log(`[${APP_NAME}] board post to #${channel} failed: ${board.postFailureReason(sent)}`);
+    }
+    return sent;
+  };
+
   // Alert once per distinct condition; post a recovery once when it clears.
   let alertKey = null;
   if (disk.severity(level) >= disk.severity('LOW')) alertKey = level;
@@ -321,19 +394,19 @@ async function runStoragePass(overrides = {}) {
 
   let posted = null;
   if (alertKey && state.alertKey !== alertKey) {
-    if (postSucceeded(await post('alerts', alertText(status)))) {
+    if (postSucceeded(await postToBoard('alerts', alertText(status)))) {
       state.alertKey = alertKey;
       posted = alertKey;
     }
   } else if (!alertKey && state.alertKey) {
-    if (postSucceeded(await post('alerts', `Frank storage recovered: ${level}, ${status.freeGb} GB free. Deploys and local CI resume.`))) {
+    if (postSucceeded(await postToBoard('alerts', `Frank storage recovered: ${level}, ${status.freeGb} GB free. Deploys and local CI resume.`))) {
       delete state.alertKey;
       posted = 'RECOVERED';
     }
   }
 
   if (after && (!state.lastReportAt || now - state.lastReportAt >= REPORT_EVERY_MS)) {
-    if (postSucceeded(await post('ops', reportText(status, history, now)))) state.lastReportAt = now;
+    if (postSucceeded(await postToBoard('ops', reportText(status, history, now)))) state.lastReportAt = now;
   }
   try { writeJsonAtomic(statePath, state); } catch { /* best effort */ }
 
@@ -360,6 +433,7 @@ function startGuardLoop({ pass = runStoragePass, intervalMs = INTERVAL_MS, setIn
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   if (process.argv.includes('--once')) {
     runStoragePass().then((s) => console.log(JSON.stringify(s, null, 2)));
   } else {
@@ -372,7 +446,10 @@ module.exports = {
   INTERVAL_MS,
   CLEANUP,
   CI_WORKTREE_RE,
+  STALE_TEMP_AGE_MS,
   staleDirs,
+  staleTempEntries,
+  newestMtime,
   runCleanup,
   trendGbPerDay,
   daysUntilCritical,

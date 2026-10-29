@@ -3,6 +3,10 @@ node_modules/
 
 # Next.js
 .next/
+# frank-auto-deploy staged builds (scripts/frank-auto-deploy.js)
+.next-staging/
+.next-prev/
+.next-failed/
 
 # Per-process code identity written at startup (lib/runtime/provenance.js)
 .runtime/

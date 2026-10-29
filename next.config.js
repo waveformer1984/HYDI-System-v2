@@ -3,6 +3,10 @@ const path = require('path')
 
 const nextConfig = {
   reactStrictMode: true,
+  // frank-auto-deploy builds into a staging directory and swaps it in only
+  // once the build is complete, so a build that dies halfway never leaves
+  // the live site without a working .next. Unset means the normal .next.
+  distDir: process.env.HYDI_NEXT_DIST_DIR || '.next',
   outputFileTracingRoot: path.join(__dirname),
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // Next 16's `next dev` otherwise appends its own rules block to AGENTS.md

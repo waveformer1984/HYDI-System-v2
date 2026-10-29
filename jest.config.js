@@ -62,6 +62,11 @@ module.exports = {
   // offender that produces warnings but does not block exit because forceExit
   // handles it. If a future change introduces a new leak, this flag ensures
   // it shows up in the output rather than being silently swallowed.
+  // Vendored, unmodified third-party code (lib/third_party/) is not ours to
+  // cover; counting it would score every PR that touches it on someone
+  // else's untested lines.
+  coveragePathIgnorePatterns: ['/node_modules/', '/lib/third_party/'],
+
   forceExit: true,
   detectOpenHandles: true,
   testTimeout: 15000,

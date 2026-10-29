@@ -153,7 +153,8 @@ class HealthObserver {
       `Auto-detected: ${mod.id} failed ${failures} consecutive health checks -- restart it`,
       2,
       { action: { type: 'run_script', target: RESTART_MODULE_SCRIPT, args: [mod.id] } },
-      this.assignedAgent
+      this.assignedAgent,
+      { actor: 'health-observer', reason: `${mod.id} failed ${failures} health checks` }
     );
     this.lastProposedAt.set(mod.id, Date.now());
     this.log(`[HEALTH OBSERVER] ${mod.id} down (${failures} consecutive failures) -- proposed mission ${missionId} assigned to ${this.assignedAgent}`);

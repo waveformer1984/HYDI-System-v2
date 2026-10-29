@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { buildFrankSnapshot } = require('../lib/observation/frank-snapshot');
+const board = require('../lib/forge-board/sdk');
 
 const APP_NAME = 'frank-observer';
 const INTERVAL_MS = 60 * 1000;
@@ -68,7 +69,8 @@ async function runObservationPass(overrides = {}) {
   const now = (overrides.now || Date.now)();
   const platform = overrides.platform || process.platform;
   const collect = overrides.collect || runCollector;
-  const post = overrides.post || ((channel, body) => require('../lib/forge-board/sdk').post(channel, body, null, { sender: 'hydi-daemon' }));
+  const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
+  const log = overrides.log || ((message) => console.error(message));
   const outDir = overrides.outDir || path.join(root, '.runtime', 'observation');
   const statePath = path.join(outDir, 'observer-state.json');
 
@@ -77,8 +79,17 @@ async function runObservationPass(overrides = {}) {
     collected = platform === 'win32' ? await collect(root) : { ok: false, skipped: 'collector is Windows-only' };
   }
 
-  const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)() });
+  // Processes PM2 lost track of (lib/observation/strays.js). null = could
+  // not be read this pass, which is not itself an issue.
+  let strays = null;
+  try {
+    const collectStrays = overrides.collectStrays || require('../lib/observation/strays').collectStrays;
+    strays = await collectStrays(root, { platform });
+  } catch { strays = null; }
+
+  const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)(), extraIssues: strays || [] });
   snapshot.collector = collected;
+  snapshot.straysChecked = strays !== null;
   try { writeJsonAtomic(path.join(outDir, 'frank.json'), snapshot); } catch { /* best effort */ }
 
   // seen: crit id -> consecutive passes; alerted: crit ids already posted.
@@ -97,18 +108,29 @@ async function runObservationPass(overrides = {}) {
   const toClear = Object.keys(state.alerted).filter((id) => !crit.has(id));
   const posted = [];
 
+  // A rejected board post must never be silent: one stderr line with the
+  // board's own error text (never the token) so the PM2 err log shows why
+  // #alerts stayed quiet.
+  const postToBoard = async (channel, body) => {
+    const sent = await post(channel, body);
+    if (!postSucceeded(sent)) {
+      log(`[${APP_NAME}] board post to #${channel} failed: ${board.postFailureReason(sent)}`);
+    }
+    return sent;
+  };
+
   if (toRaise.length) {
     const body = [`Frank CRITICAL — ${toRaise.length === 1 ? 'new issue' : `${toRaise.length} new issues`}:`,
       ...toRaise.map((i) => `• ${i.text}`),
       'Ask Heidi "frank status" or check the phone dashboard for the full picture.'].join('\n');
-    if (postSucceeded(await post('alerts', body))) {
+    if (postSucceeded(await postToBoard('alerts', body))) {
       for (const i of toRaise) state.alerted[i.id] = state.alerted[i.id] || i.text;
       posted.push('raised');
     }
   }
   if (toClear.length) {
     const body = `Frank recovered: ${toClear.map((id) => state.alerted[id]).join('; ')} — cleared.`;
-    if (postSucceeded(await post('alerts', body))) {
+    if (postSucceeded(await postToBoard('alerts', body))) {
       for (const id of toClear) delete state.alerted[id];
       posted.push('cleared');
     }
@@ -141,6 +163,7 @@ function startObserverLoop({ pass = runObservationPass, intervalMs = INTERVAL_MS
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
   if (process.argv.includes('--once')) {
     runObservationPass().then(({ snapshot }) => {
       console.log(require('../lib/observation/frank-snapshot').formatFrankSnapshot(snapshot));

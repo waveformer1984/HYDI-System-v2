@@ -75,13 +75,83 @@ pm2 save
 #### Storage guard (`frank-storage-guard`)
 
 PM2 loop (15 min) that measures free space on the repo's volume, clears
-only regenerable caches in tiers (OK → orphaned local-ci worktrees; LOW →
-npm/.next/Docker build cache; CRITICAL → dangling images, `pm2 flush`),
+only regenerable caches in tiers (OK → orphaned local-ci worktrees;
+WATCH → `%TEMP%` entries untouched for 2+ days; LOW → npm/.next/Docker
+build cache; CRITICAL → dangling images, `pm2 flush`),
 writes `.runtime/storage/status.json`, and posts `#alerts` once per level
 change plus a weekly `#ops` report. Levels live in `lib/storage/disk.js`;
 `frank-auto-deploy` refuses to build below `HYDI_DEPLOY_MIN_FREE_GB` (5)
 and `local-ci` skips passes below `LOCAL_CI_MIN_FREE_GB` (8). It never
 touches Docker volumes or user files. See `docs/STORAGE_PROGRAM.md`.
+
+#### Auto-deploy (`frank-auto-deploy`)
+
+PM2 loop (5 min), fast-forward only. Preflights: clean `clean-main`, free
+disk ≥ `HYDI_DEPLOY_MIN_FREE_GB` (5), free RAM ≥
+`HYDI_DEPLOY_MIN_FREE_RAM_GB` (0.75). The Next build runs into
+`.next-staging` (`HYDI_NEXT_DIST_DIR`, read by `next.config.js` and
+`scripts/stamp-hydi-build.js`) while the live site keeps serving `.next`;
+an incomplete build (no `BUILD_ID`/`server/pages-manifest.json`) never goes
+live. A finished build is renamed into `.next` and the replaced one kept as
+`.next-prev`, so a failed health check rolls back by renaming — no rebuild
+(rebuilding under memory pressure is what wedged Frank on 2026-10-25). If
+Windows refuses the rename, it stops `heidi-web-standalone`, retries, and
+starts it again. Alerts go to `#alerts` once per distinct reason.
+
+#### Heidi persistent memory (`heidi-core/memory/`)
+
+Heidi's chat (`/chat-tools`, `/think-stream`) is conversation-aware:
+`conversation_id` + `request_id` on each turn, history and long-term
+memories assembled into a bounded context (retrieved text goes in a
+"MEMORY DATA" message, never the system prompt), the user message and
+answer saved, and durable facts extracted only from what the user said.
+Storage is `hm_*` tables in `heidi-core/data/heidi_memory.db` via the
+built-in `node:sqlite` (no in-memory fallback — failures are reported per
+turn). Every query is scoped by owner (`HEIDI_OWNER`, or `x-heidi-owner`
+from an authenticated caller). Chat commands: `memory status|search|recent|
+project <hydi|heidi|protoforge>|audit|forget`. See
+`docs/HEIDI_PERSISTENT_MEMORY.md`.
+
+#### Heidi task lifecycle (`heidi-core/missions/`)
+
+Heidi's missions run queued → planning → awaiting_approval → running →
+verifying → completed (or failed / cancelled / blocked). The rules live in
+`lifecycle.js` and the worker in `mission-worker.js`. Every change is a
+conditional update plus a `mission_events` row (actor, reason). A task
+with an action completes only through verification against its
+`context.success`, with evidence stored. Only `human:<owner>` can approve:
+chat `task approve <id>`, `POST /missions/:id/approve`, or `mission-cli`.
+The model's `update_mission` tool can only cancel, re-queue a blocked task,
+or close an informational one. Approval needs no person for read-only
+actions or a single-module `restart-module.js` run
+(`HEIDI_AUTO_APPROVE_RESTARTS=false` turns that off). Execution still needs
+`HEIDI_AUTONOMOUS_ACTIONS=true`. A ProtoForge `escalate` opens an
+informational task carrying the pipeline `trace_id`
+(`lib/pipeline/heidi-task-link.js`, wired on protoforge-core's emission;
+`HEIDI_TRACE_LINK=false` turns it off). `trace <id>` in chat, or
+`GET /traces/:id`, shows every pipeline stage plus the tasks it opened. See
+`docs/HEIDI_TASK_LIFECYCLE.md`.
+
+#### System report + mobile device login
+
+`system report` in Heidi's chat (or `GET /system/status` on heidi-core,
+`/api/system/status` via :3006) gives every component a HEALTHY /
+DEGRADED / UNAVAILABLE / UNKNOWN state from real evidence — an HTTP answer
+alone is never HEALTHY, a missing or stale status file is UNKNOWN
+(`heidi-core/status/system-status.js`). `HEIDI_MOBILE_TOKEN` turns on device
+login for `launch-heidi-mobile.js`: off-box `/api/*` calls (including
+loopback traffic with forwarding headers, e.g. `tailscale serve`) need a
+paired-device cookie from `/api/pair` or a bearer token
+(`lib/mobile-chat/local-auth.js`). See `docs/HEIDI_SYSTEM_STATUS.md`.
+
+#### Stray processes (`lib/observation/strays.js`)
+
+`frank-observer` also checks, every pass on Windows, for processes PM2 has
+lost track of: the owner of :3000 that isn't `heidi-web-standalone` or its
+child, the holder of the daemon lock that isn't `hydi-daemon`, or a
+`ProcessContainerFork` child of the PM2 daemon that PM2 doesn't list. Each
+is a CRIT issue (alerted after two passes) naming the pid and the
+`Stop-Process -Id <pid>` to run. It never stops anything itself.
 
 #### Human-action DB mirror (`human_action_mirror`)
 
@@ -197,9 +267,10 @@ restarts, kills, or starts a process. Each row is one of:
 | Verdict | Meaning |
 |---|---|
 | OK | SHA matches HEAD, the tree is not dirty, and the live PM2 settings match the file |
-| STALE_CODE | SHA differs from HEAD, or `gitDirty` is true |
+| STALE_CODE | SHA differs from HEAD, or `gitDirty` is true (build-regenerated files like `next-env.d.ts` do not count — the deploy restores them) |
 | UNDECLARED | online under PM2, absent from `ecosystem.config.js` |
-| MISSING | declared, not online |
+| MISSING | declared, absent from PM2 entirely |
+| NOT_ONLINE | declared and present under PM2, but not `online`/`launching` (e.g. `waiting_restart` crash loop — check `pm2 logs <name> --err`) |
 | UNKNOWN_CODE | online, but no provenance file or `gitSha` is null |
 | CONFIG_DRIFT | live `max_restarts`, `exp_backoff_restart_delay`, `kill_timeout`, `script`, `args`, or `cwd` differ from the file |
 | UNKNOWN | `pm2 jlist` could not be read. This is not OK |
