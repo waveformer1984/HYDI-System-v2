@@ -108,6 +108,9 @@ describe('launch-heidi-mobile.js with HEIDI_MOBILE_TOKEN', () => {
       expect(health).toMatchObject({ loginRequired: true, loggedIn: false });
 
       expect((await fetch(`${base}/api/conversations`, { headers: remote })).status).toBe(401);
+      // Tasks (and their approve route) are behind the same login.
+      expect((await fetch(`${base}/api/missions`, { headers: remote })).status).toBe(401);
+      expect((await fetch(`${base}/api/missions/1/approve`, { method: 'POST', headers: remote })).status).toBe(401);
       expect((await fetch(`${base}/`, { headers: remote })).status).toBe(200); // the page loads to ask for the token
 
       const bad = await fetch(`${base}/api/pair`, { method: 'POST', headers: { ...remote, 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'guess' }) });
@@ -119,6 +122,8 @@ describe('launch-heidi-mobile.js with HEIDI_MOBILE_TOKEN', () => {
       expect(after.status).toBe(503);
       // This machine itself needs no login.
       expect((await fetch(`${base}/api/conversations`)).status).toBe(503);
+      expect((await fetch(`${base}/api/missions/1`)).status).toBe(503); // relayed to the (down) core
+      expect((await fetch(`${base}/api/missions/1/explode`, { method: 'POST' })).status).toBe(404);
       // /api is rate-limited per client before the login check.
       expect(after.headers.get('ratelimit-policy')).toMatch(/300;w=60/);
     } finally {

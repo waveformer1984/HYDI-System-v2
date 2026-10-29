@@ -112,6 +112,21 @@ from an authenticated caller). Chat commands: `memory status|search|recent|
 project <hydi|heidi|protoforge>|audit|forget`. See
 `docs/HEIDI_PERSISTENT_MEMORY.md`.
 
+#### Heidi task lifecycle (`heidi-core/missions/`)
+
+Heidi's missions run queued → planning → awaiting_approval → running →
+verifying → completed (or failed / cancelled / blocked). The rules live in
+`lifecycle.js` and the worker in `mission-worker.js`. Every change is a
+conditional update plus a `mission_events` row (actor, reason). A task
+with an action completes only through verification against its
+`context.success`, with evidence stored. Only `human:<owner>` can approve:
+chat `task approve <id>`, `POST /missions/:id/approve`, or `mission-cli`.
+The model's `update_mission` tool can only cancel, re-queue a blocked task,
+or close an informational one. Approval needs no person for read-only
+actions or a single-module `restart-module.js` run
+(`HEIDI_AUTO_APPROVE_RESTARTS=false` turns that off). Execution still needs
+`HEIDI_AUTONOMOUS_ACTIONS=true`. See `docs/HEIDI_TASK_LIFECYCLE.md`.
+
 #### System report + mobile device login
 
 `system report` in Heidi's chat (or `GET /system/status` on heidi-core,

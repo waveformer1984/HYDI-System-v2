@@ -47,6 +47,7 @@ class HeidiMemory {
         reflections: [],
         system_state: [],
         missions: [],
+        mission_events: [],
         agent_registry: []
       };
       this.initialized = true;
@@ -141,7 +142,7 @@ class HeidiMemory {
       `CREATE TABLE IF NOT EXISTS missions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         goal TEXT NOT NULL,
-        status TEXT DEFAULT 'pending', -- pending | active | blocked | completed | failed | cancelled
+        status TEXT DEFAULT 'queued', -- queued | planning | awaiting_approval | running | verifying | completed | failed | cancelled | blocked (missions/lifecycle.js)
         priority INTEGER DEFAULT 1,    -- 0 low, 1 normal, 2 high, 3 critical
         assigned_agent TEXT,
         context TEXT,                  -- JSON
@@ -173,8 +174,34 @@ class HeidiMemory {
     await this.run(`CREATE INDEX IF NOT EXISTS idx_reflections_pattern ON reflections(pattern_type)`);
     await this.run(`CREATE INDEX IF NOT EXISTS idx_system_state_type ON system_state(state_type)`);
     await this.run(`CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status, priority)`);
+    await this.migrateMissionLifecycle();
 
     console.log('[HEIDI Memory] Tables created');
+  }
+
+  /**
+   * Task lifecycle (missions/lifecycle.js), additive and idempotent:
+   * plan/approval/evidence columns, an append-only mission_events history,
+   * and the legacy status names renamed (pending -> queued, active -> running).
+   */
+  async migrateMissionLifecycle() {
+    const cols = new Set((await this.all(`PRAGMA table_info(missions)`)).map((c) => c.name));
+    for (const col of ['plan', 'approval', 'evidence']) {
+      if (!cols.has(col)) await this.run(`ALTER TABLE missions ADD COLUMN ${col} TEXT`);
+    }
+    await this.run(`CREATE TABLE IF NOT EXISTS mission_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mission_id INTEGER NOT NULL,
+      from_state TEXT,
+      to_state TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      reason TEXT,
+      data TEXT,
+      at TEXT NOT NULL
+    )`);
+    await this.run(`CREATE INDEX IF NOT EXISTS idx_mission_events_mission ON mission_events(mission_id, id)`);
+    await this.run(`UPDATE missions SET status = 'queued' WHERE status = 'pending'`);
+    await this.run(`UPDATE missions SET status = 'running' WHERE status = 'active'`);
   }
 
   run(sql, params = []) {
@@ -444,33 +471,111 @@ class HeidiMemory {
   }
 
   // Mission queue operations - persistent goals (see C:\ProtoForge_Ecosystem\CANONICAL.md)
-  async createMission(goal, priority = 1, context = null, assignedAgent = null) {
+  async createMission(goal, priority = 1, context = null, assignedAgent = null, opts = {}) {
+    const at = new Date().toISOString();
+    let id;
     if (!sqlite3 && this.inMemoryData) {
-      const id = this.inMemoryData.missions.length + 1;
+      id = this.inMemoryData.missions.reduce((m, x) => Math.max(m, x.id), 0) + 1;
       this.inMemoryData.missions.push({
-        id, goal, status: 'pending', priority, assigned_agent: assignedAgent,
-        context: JSON.stringify(context), result: null,
-        created_at: new Date().toISOString(), updated_at: null
+        id, goal, status: 'queued', priority, assigned_agent: assignedAgent,
+        context: JSON.stringify(context), result: null, plan: null, approval: null, evidence: null,
+        created_at: at, updated_at: null
       });
-      return id;
+    } else {
+      const result = await this.run(
+        `INSERT INTO missions (goal, status, priority, context, assigned_agent, created_at) VALUES (?, 'queued', ?, ?, ?, ?)`,
+        [goal, priority, JSON.stringify(context), assignedAgent, at]
+      );
+      id = result.id;
     }
+    await this.addMissionEvent(id, null, 'queued', opts.actor || 'unknown', opts.reason || 'created', null, at);
+    return id;
+  }
 
-    const result = await this.run(
-      `INSERT INTO missions (goal, priority, context, assigned_agent) VALUES (?, ?, ?, ?)`,
-      [goal, priority, JSON.stringify(context), assignedAgent]
+  async addMissionEvent(missionId, from, to, actor, reason = null, data = null, at = new Date().toISOString()) {
+    const json = data == null ? null : JSON.stringify(data);
+    if (!sqlite3 && this.inMemoryData) {
+      const events = this.inMemoryData.mission_events;
+      events.push({ id: events.length + 1, mission_id: missionId, from_state: from, to_state: to, actor, reason, data: json, at });
+      return events.length;
+    }
+    const r = await this.run(
+      `INSERT INTO mission_events (mission_id, from_state, to_state, actor, reason, data, at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [missionId, from, to, actor, reason, json, at]
     );
-    return result.id;
+    return r.id;
+  }
+
+  async getMissionEvents(missionId, limit = 50) {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.mission_events.filter((e) => e.mission_id === Number(missionId)).slice(-limit);
+    }
+    return this.all(
+      `SELECT * FROM (SELECT * FROM mission_events WHERE mission_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC`,
+      [missionId, limit]
+    );
+  }
+
+  async getMission(id) {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.missions.find((m) => m.id === Number(id)) || null;
+    }
+    return (await this.get(`SELECT * FROM missions WHERE id = ?`, [id])) || null;
+  }
+
+  /**
+   * Move a mission to `to` only if its current status is one of `fromStates`
+   * (a conditional UPDATE, so two writers can't both claim it), merge
+   * `patch` columns (plan/approval/evidence/result: objects stored as JSON),
+   * and append the history event. Returns { ok, from } or { ok: false, current }.
+   */
+  async transitionMission(id, fromStates, to, { actor, reason = null, patch = {}, data = null } = {}) {
+    const at = new Date().toISOString();
+    const cols = ['plan', 'approval', 'evidence', 'result'].filter((c) => patch[c] !== undefined);
+    const enc = (v) => (v == null ? null : typeof v === 'string' ? v : JSON.stringify(v));
+    const current = await this.getMission(id);
+    if (!current) return { ok: false, current: null };
+    const from = current.status;
+    if (!fromStates.includes(from)) return { ok: false, current: from };
+
+    if (!sqlite3 && this.inMemoryData) {
+      current.status = to;
+      current.updated_at = at;
+      for (const c of cols) current[c] = enc(patch[c]);
+    } else {
+      const sets = ['status = ?', 'updated_at = ?', ...cols.map((c) => `${c} = ?`)];
+      const res = await this.run(
+        `UPDATE missions SET ${sets.join(', ')} WHERE id = ? AND status = ?`,
+        [to, at, ...cols.map((c) => enc(patch[c])), id, from]
+      );
+      if (!res.changes) {
+        const now = await this.getMission(id);
+        return { ok: false, current: now ? now.status : null };
+      }
+    }
+    await this.addMissionEvent(Number(id), from, to, actor || 'unknown', reason, data, at);
+    return { ok: true, from };
+  }
+
+  async countMissionsByStatus() {
+    if (!sqlite3 && this.inMemoryData) {
+      const out = {};
+      for (const m of this.inMemoryData.missions) out[m.status] = (out[m.status] || 0) + 1;
+      return out;
+    }
+    const rows = await this.all(`SELECT status, COUNT(*) AS n FROM missions GROUP BY status`);
+    return Object.fromEntries(rows.map((r) => [r.status, r.n]));
   }
 
   async nextMission() {
     if (!sqlite3 && this.inMemoryData) {
       return this.inMemoryData.missions
-        .filter(m => m.status === 'pending')
+        .filter(m => m.status === 'queued')
         .sort((a, b) => (b.priority - a.priority) || (a.id - b.id))[0] || null;
     }
 
     return this.get(
-      `SELECT * FROM missions WHERE status = 'pending' ORDER BY priority DESC, id ASC LIMIT 1`
+      `SELECT * FROM missions WHERE status = 'queued' ORDER BY priority DESC, id ASC LIMIT 1`
     );
   }
 
@@ -493,22 +598,22 @@ class HeidiMemory {
   }
 
   async getMissions(status = null, limit = 20) {
+    const statuses = status == null ? null : (Array.isArray(status) ? status : [status]);
     if (!sqlite3 && this.inMemoryData) {
       return this.inMemoryData.missions
-        .filter(m => !status || m.status === status)
+        .filter(m => !statuses || statuses.includes(m.status))
         .slice(-limit);
     }
 
-    if (status) {
+    if (statuses) {
       return this.all(
-        `SELECT * FROM missions WHERE status = ? ORDER BY priority DESC, created_at DESC LIMIT ?`,
-        [status, limit]
+        `SELECT * FROM missions WHERE status IN (${statuses.map(() => '?').join(', ')}) ORDER BY priority DESC, created_at DESC LIMIT ?`,
+        [...statuses, limit]
       );
     }
     return this.all(`SELECT * FROM missions ORDER BY priority DESC, created_at DESC LIMIT ?`, [limit]);
   }
 
-  // Agent registry operations - levels defined in Agent_Sandbox\PERMISSIONS.md
   async registerAgent(name, role, entryPoint = null, permissionLevel = 0) {
     if (!sqlite3 && this.inMemoryData) {
       let agent = this.inMemoryData.agent_registry.find(a => a.name === name);
