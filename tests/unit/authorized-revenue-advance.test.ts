@@ -66,6 +66,9 @@ const CTX = { sessionId: 's1', actorId: 'heidi', actorTrustLevel: 'trusted_syste
 
 describe('authorized revenue.advance_offer → real RevenueRuntime seam', () => {
   const realPools: Pool[] = [];
+  const savedAdvance = process.env.HEIDI_ALLOW_REVENUE_ADVANCE;
+  beforeAll(() => { process.env.HEIDI_ALLOW_REVENUE_ADVANCE = 'true'; });
+  afterAll(() => { if (savedAdvance === undefined) delete process.env.HEIDI_ALLOW_REVENUE_ADVANCE; else process.env.HEIDI_ALLOW_REVENUE_ADVANCE = savedAdvance; });
   function coreFor(pool: Pool) {
     const { core, realPool } = makeCore(pool);
     realPools.push(realPool);
