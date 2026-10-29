@@ -98,9 +98,10 @@ async function runObservationPass(overrides = {}) {
   let fixList = null;
   try {
     const t0 = Date.now();
-    const { collectFixListInputs } = require('../lib/observation/fix-list-collector');
+    const mod = require('../lib/observation/fix-list-collector');
     const { buildFixList } = require('../lib/observation/fix-list');
-    const inputs = await collectFixListInputs(root, { snapshot });
+    if (typeof mod.collectFixListInputs !== 'function') throw new Error('fix-list collector module did not load');
+    const inputs = await mod.collectFixListInputs(root, { snapshot });
     fixList = buildFixList({ ...inputs, now: Date.now() });
     const dir = path.join(root, '.runtime', 'fixlist');
     fs.mkdirSync(dir, { recursive: true });
