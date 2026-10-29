@@ -536,7 +536,10 @@
     <div class="quick-action" onclick="sendQuick('models')">🤖 Models</div>
     <div class="quick-action" onclick="sendQuick('help')">💡 What can you do</div>
     <div class="quick-action" onclick="sendQuick('health')">🔧 Health check</div>
-    <div class="quick-action" onclick="sendQuick('clear')">🗑️ Clear chat</div>
+    <div class="quick-action" onclick="sendQuick('clear')">➕ New chat</div>
+    <div class="quick-action" onclick="sendQuick('chats')">💬 Chats</div>
+    <div class="quick-action" onclick="sendQuick('memory status')">🧠 Memory</div>
+    <div class="quick-action" onclick="sendQuick('memory project hydi')">📁 HYDI status</div>
 </div>
 
 <div class="input-area">
@@ -580,13 +583,88 @@ let msgCount = 0;
 let healthTimer = null;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+// ─── Persistent conversations ────────────────────────────────────────────────
+// The server (Heidi Core's SQLite store) is the source of truth. This page
+// only remembers WHICH conversation is open, so a reload or app restart
+// reopens it instead of starting blank.
+const CONV_KEY = 'heidi.conversationId';
+let conversationId = (() => { try { return localStorage.getItem(CONV_KEY); } catch { return null; } })();
+function setConversation(id) {
+    conversationId = id || null;
+    try { id ? localStorage.setItem(CONV_KEY, id) : localStorage.removeItem(CONV_KEY); } catch { /* private mode: this tab only */ }
+}
+function newRequestId() {
+    try { return crypto.randomUUID(); } catch { return `r-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+}
+function renderStored(role, content) {
+    const speakWas = ttsEnabled;
+    ttsEnabled = false; // never read old messages aloud
+    addMsg(role === 'user' ? 'user' : 'heidi', content);
+    ttsEnabled = speakWas;
+}
+async function openConversation(id) {
+    const r = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages?limit=50`, { signal: AbortSignal.timeout(10000) });
+    if (r.status === 404) {
+        setConversation(null);
+        addMsg('system', '⚠️ Your previous conversation could not be found on Heidi, so a new one will start with your next message. Nothing was loaded in its place.');
+        return false;
+    }
+    if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        addMsg('system', `⚠️ Could not load your conversation history (${d.error || `HTTP ${r.status}`}). Heidi's memory may be offline — replies will say whether they were saved.`);
+        return false;
+    }
+    const d = await r.json();
+    document.getElementById('messages').innerHTML = '';
+    setConversation(d.conversation.id);
+    for (const m of d.messages) renderStored(m.role, m.content);
+    msgCount = d.messages.length;
+    document.getElementById('metricMsgCount').textContent = msgCount;
+    addMsg('system', `↩️ Reopened “${d.conversation.title || 'conversation'}” (${d.messages.length} messages). Tap ➕ New chat to start fresh.`);
+    return true;
+}
+async function showConversationList() {
+    try {
+        const r = await fetch('/api/conversations?limit=10', { signal: AbortSignal.timeout(10000) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+        if (!d.conversations.length) { addMsg('system', 'No saved conversations yet.'); return; }
+        const container = document.getElementById('messages');
+        const el = document.createElement('div');
+        el.className = 'message heidi';
+        const card = document.createElement('div');
+        card.className = 'action-card';
+        card.innerHTML = '<div class="action-card-header">💬 Your conversations</div>';
+        d.conversations.forEach((c) => {
+            const btn = document.createElement('button');
+            btn.className = 'action-button';
+            btn.textContent = `${c.id === conversationId ? '● ' : ''}${c.title || '(untitled)'} · ${c.message_count} msgs`;
+            btn.onclick = () => openConversation(c.id);
+            card.appendChild(btn);
+        });
+        el.appendChild(card);
+        container.appendChild(el);
+        scrollBottom();
+    } catch (e) {
+        addMsg('system', `⚠️ Could not list conversations: ${e.message}`);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     initVoice();
     loadVoices();
     const online = await checkServer();
-    if (online) {
+    if (online && conversationId) {
         await loadModels();
         pollHealth();
+        const opened = await openConversation(conversationId).catch((e) => {
+            addMsg('system', `⚠️ Could not load your conversation history: ${e.message}`);
+            return false;
+        });
+        if (opened) return;
+    }
+    if (online) {
+        if (!conversationId) { await loadModels(); pollHealth(); }
         addMsg('heidi',
             "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. You can talk to me, ask about your system, or use voice input with the 🎤 button. Enable 🔊 in the header so I speak back to you.",
             [{ label: '📊 System status', q: 'status' }, { label: '🤖 Available models', q: 'models' }]
@@ -733,12 +811,13 @@ async function sendMessage() {
     let fullText = '';
     let provider = 'local';
     let firstToken = true;
+    let doneMeta = null;
 
     try {
         const resp = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider })
+            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider, conversation_id: conversationId || undefined, request_id: newRequestId() })
         });
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -772,7 +851,15 @@ async function sendMessage() {
                             bubble.innerHTML = esc(fullText) + '<span class="streaming-cursor"></span>';
                             scrollBottom();
                         }
-                        if (d.done) provider = d.provider || 'local';
+                        if (d.done) {
+                            provider = d.provider || 'local';
+                            doneMeta = d;
+                            if (d.conversation_id) setConversation(d.conversation_id);
+                            if (d.conversation_not_found) {
+                                setConversation(null);
+                                fullText = fullText || '⚠️ That conversation no longer exists on Heidi. Your next message will start a new one — please resend.';
+                            }
+                        }
                     } catch {}
                 }
             }
@@ -795,11 +882,30 @@ async function sendMessage() {
     timeEl.textContent = `Heidi · ${now()} · ${provider}`;
     meta.appendChild(timeEl);
 
-    // Add facts badge to show response is grounded in procedural memory
-    const factsBadge = document.createElement('span');
-    factsBadge.className = 'facts-badge';
-    factsBadge.textContent = 'grounded';
-    meta.appendChild(factsBadge);
+    // Memory badge: what this reply actually used and whether it was saved.
+    // Shows the real result from Heidi Core, never a fixed label.
+    const memBadge = document.createElement('span');
+    memBadge.className = 'facts-badge';
+    const p = doneMeta && doneMeta.persistence;
+    const src = doneMeta && doneMeta.context_sources;
+    if (doneMeta && doneMeta.model === 'memory') {
+        memBadge.textContent = 'from memory store';
+    } else if (p && p.saved) {
+        const used = src ? (src.memory_ids || []).length + (src.related_message_ids || []).length : 0;
+        memBadge.textContent = `saved${used ? ` · ${used} memories used` : ''}`;
+    } else {
+        memBadge.textContent = 'not saved';
+        memBadge.title = (p && p.error) || 'Heidi did not confirm this reply was saved';
+        memBadge.style.opacity = '0.7';
+        if (p && p.error) showAlert(`Not saved: ${p.error}`, 'error');
+    }
+    meta.appendChild(memBadge);
+    if (doneMeta && doneMeta.memories_saved && doneMeta.memories_saved.some((m) => m.action === 'created' || m.action === 'superseded')) {
+        const saved = document.createElement('span');
+        saved.className = 'facts-badge';
+        saved.textContent = '🧠 remembered';
+        meta.appendChild(saved);
+    }
 
     msgEl.appendChild(meta);
 
@@ -815,11 +921,15 @@ async function sendMessage() {
 
 function sendQuick(cmd) {
     if (cmd === 'clear') {
+        // Starts a NEW conversation; the old one stays saved (💬 Chats).
+        setConversation(null);
         document.getElementById('messages').innerHTML = '';
         msgCount = 0;
         document.getElementById('metricMsgCount').textContent = '0';
+        addMsg('system', '➕ New conversation. Earlier ones are under 💬 Chats, and anything I remembered still applies.');
         return;
     }
+    if (cmd === 'chats') { showConversationList(); return; }
     const map = {
         status: 'What is the current system and AI status? Check if Ollama is running and which models are available.',
         models: 'List all available AI models and tell me about the current one you are using.',

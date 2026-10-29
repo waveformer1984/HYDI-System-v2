@@ -98,6 +98,20 @@ live. A finished build is renamed into `.next` and the replaced one kept as
 Windows refuses the rename, it stops `heidi-web-standalone`, retries, and
 starts it again. Alerts go to `#alerts` once per distinct reason.
 
+#### Heidi persistent memory (`heidi-core/memory/`)
+
+Heidi's chat (`/chat-tools`, `/think-stream`) is conversation-aware:
+`conversation_id` + `request_id` on each turn, history and long-term
+memories assembled into a bounded context (retrieved text goes in a
+"MEMORY DATA" message, never the system prompt), the user message and
+answer saved, and durable facts extracted only from what the user said.
+Storage is `hm_*` tables in `heidi-core/data/heidi_memory.db` via the
+built-in `node:sqlite` (no in-memory fallback — failures are reported per
+turn). Every query is scoped by owner (`HEIDI_OWNER`, or `x-heidi-owner`
+from an authenticated caller). Chat commands: `memory status|search|recent|
+project <hydi|heidi|protoforge>|audit|forget`. See
+`docs/HEIDI_PERSISTENT_MEMORY.md`.
+
 #### Stray processes (`lib/observation/strays.js`)
 
 `frank-observer` also checks, every pass on Windows, for processes PM2 has
