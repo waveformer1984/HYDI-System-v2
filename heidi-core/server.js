@@ -59,7 +59,7 @@ const MissionWorker = require('./missions/mission-worker');
 const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
 const { MemoryRuntime } = require('./memory/memory-runtime');
-const { checkSystem, formatSystemStatus, isSystemReportQuery } = require('./status/system-status');
+const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList } = require('./status/system-status');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -305,6 +305,13 @@ class HeidiCore {
           const report = await this.getSystemStatus();
           send({ t: formatSystemStatus(report) });
           send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (isFixListQuery(input)) {
+          let list = null;
+          try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
+          send({ t: formatFixList(list) });
+          send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {
@@ -709,6 +716,13 @@ class HeidiCore {
           const report = await this.getSystemStatus();
           send({ t: formatSystemStatus(report) });
           send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (isFixListQuery(input)) {
+          let list = null;
+          try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
+          send({ t: formatFixList(list) });
+          send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {

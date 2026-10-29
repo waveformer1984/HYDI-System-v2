@@ -228,4 +228,21 @@ function isSystemReportQuery(input) {
   return t === 'system report' || t === 'status report' || t === 'health report' || t === '/status' || t === 'full status';
 }
 
-module.exports = { checkSystem, formatSystemStatus, isSystemReportQuery, STATES };
+/** Chat phrases that ask for the ranked fix list (read-only; lib/observation/fix-list.js). */
+function isFixListQuery(input) {
+  const t = String(input || '').trim().toLowerCase();
+  return t === 'fix list' || t === 'fixlist' || t === 'fix-list' || t === '/fixlist';
+}
+
+/** Render .runtime/fixlist/current.json — evidence only, never commands. */
+function formatFixList(list) {
+  if (!list || !Array.isArray(list.items)) {
+    return 'fix list: not produced yet — frank-observer writes .runtime/fixlist/current.json each pass.';
+  }
+  const c = list.counts || {};
+  const head = `fix list: ${list.items.length} item(s) — CRIT=${c.CRIT || 0} WARN=${c.WARN || 0} UNKNOWN=${c.UNKNOWN || 0} INFO=${c.INFO || 0} (generated ${String(list.generatedAt || '').slice(11, 19)} UTC)`;
+  const lines = list.items.slice(0, 10).map((i) => `  ${i.level} ${i.kind} ${i.subject} — ${i.detail || ''}${i.proposedFix && i.proposedFix.command ? ` [${i.proposedFix.command}]` : ''}`);
+  return [head, ...lines].join('\n');
+}
+
+module.exports = { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, STATES };

@@ -92,6 +92,24 @@ async function runObservationPass(overrides = {}) {
   snapshot.straysChecked = strays !== null;
   try { writeJsonAtomic(path.join(outDir, 'frank.json'), snapshot); } catch { /* best effort */ }
 
+  // fix-list v1 — read-only ranked report of what is wrong. Adds no
+  // process and no always-on memory: it rides this same pass. Any
+  // failure here must never break the observation pass.
+  let fixList = null;
+  try {
+    const t0 = Date.now();
+    const { collectFixListInputs } = require('../lib/observation/fix-list-collector');
+    const { buildFixList } = require('../lib/observation/fix-list');
+    const inputs = await collectFixListInputs(root, { snapshot });
+    fixList = buildFixList({ ...inputs, now: Date.now() });
+    const dir = path.join(root, '.runtime', 'fixlist');
+    fs.mkdirSync(dir, { recursive: true });
+    writeJsonAtomic(path.join(dir, 'current.json'), fixList);
+    log(`[${APP_NAME}] fix-list: ${fixList.items.length} item(s) in ${Date.now() - t0}ms`);
+  } catch (e) {
+    log(`[${APP_NAME}] fix-list step failed: ${e && e.message ? e.message : 'unknown'}`);
+  }
+
   // seen: crit id -> consecutive passes; alerted: crit ids already posted.
   const state = readJson(statePath, { seen: {}, alerted: {} });
   state.seen = state.seen || {};
