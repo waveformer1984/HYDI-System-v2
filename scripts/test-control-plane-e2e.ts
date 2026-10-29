@@ -25,6 +25,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import { enforceDestructivePm2TestGuard } from './pm2-prod-daemon-guard.js';
+enforceDestructivePm2TestGuard('test-control-plane-e2e.ts');
 import os from 'os';
 import http from 'http';
 import { execSync } from 'child_process';

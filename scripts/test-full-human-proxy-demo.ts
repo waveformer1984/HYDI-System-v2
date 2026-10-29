@@ -25,6 +25,8 @@
  */
 
 import dotenv from 'dotenv';
+import { enforceDestructivePm2TestGuard } from './pm2-prod-daemon-guard.js';
+enforceDestructivePm2TestGuard('test-full-human-proxy-demo.ts');
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
