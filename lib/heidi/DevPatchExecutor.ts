@@ -22,6 +22,7 @@
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { devPatchEnabled, GATE_DEV_PATCH_DISABLED } from './executor-env-gates';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const FORBIDDEN = ['.env', '.git/', 'package-lock', 'pnpm-lock', 'yarn.lock', 'POLICY', 'policy-engine'];
@@ -84,6 +85,13 @@ export async function applyBoundedPatch(mission: {
   verify?: string[];
 }): Promise<DevPatchResult> {
   const evidence: string[] = [];
+
+  // Chokepoint env gate — every caller, including the builder agent, lands
+  // here. Refusal happens before any file is read or any git process runs.
+  if (!devPatchEnabled()) {
+    evidence.push(`${GATE_DEV_PATCH_DISABLED}: HEIDI_ALLOW_DEV_PATCH must be exactly 'true'`);
+    return { ok: false, status: 'REJECTED', reason: GATE_DEV_PATCH_DISABLED, filesChanged: [], evidence };
+  }
 
   const bounds = validatePatchBounds(mission.patches);
   if (!bounds.ok) return { ok: false, status: 'REJECTED', reason: bounds.reason, filesChanged: [], evidence };
