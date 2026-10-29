@@ -244,6 +244,19 @@ to `HYDI_PHONE_READ_TOKEN` (shared check in `lib/phone/read-auth.js`).
 Phone Hydi shows it as a "Frank health" card and chat tool; Heidi answers
 `REQUEST @Heidi: frank status`. See `docs/FRANK_OBSERVATION.md`.
 
+#### Fix list (`fix-list`, read-only v1)
+
+Inside the same `frank-observer` pass — no new PM2 app —
+`lib/observation/fix-list.js` builds one ranked list of what is wrong:
+drift rows, strays, daemon pid/lock split, unreadable jlist, dead DB,
+`action_refused` counts, mission backlog. Each item carries evidence and a
+`proposedFix` from a fixed template table (no LLM). It writes
+`.runtime/fixlist/current.json`, answers the `fix list` chat command, and
+shows a `fixList` summary on `GET /api/phone/observe`. v1 produces the
+list only — no missions, no commands. See `docs/FIX_LIST.md`. v2
+(turning proposed fixes into `awaiting_approval` missions via the
+health-observer path) is deliberately NOT in this change.
+
 #### Runtime provenance (which code is running)
 
 PM2 "online" does not say which commit is in memory. Three failures followed
