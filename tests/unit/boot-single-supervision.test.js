@@ -15,6 +15,8 @@
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const boot = require(path.join(ROOT, 'boot.config.json'));
+// The function boot-agent actually consults before spawning a module.
+const { isExternallySupervised, supervisedAs } = require(path.join(ROOT, 'scripts', 'module-ownership'));
 const ecosystem = require(path.join(ROOT, 'ecosystem.config.js'));
 
 function pm2Names() {
@@ -33,6 +35,22 @@ describe('single supervisor for lock-guarded processes', () => {
     expect(mod).toBeTruthy();
     expect(pm2Names()).toContain('hydi-revenue-autopilot-tick');
     expect(mod.supervisedAs).toBe('hydi-revenue-autopilot-tick');
+    // supervisedAs alone is metadata: boot-agent only refuses to spawn a
+    // module when supervisor === 'pm2' (scripts/module-ownership.js). Until
+    // 2026-10-29 this entry had supervisedAs but no supervisor, so boot still
+    // spawned a second copy next to PM2's -- the incident above, still live.
+    expect(isExternallySupervised(mod)).toBe(true);
+    expect(supervisedAs(mod)).toBe('hydi-revenue-autopilot-tick');
+  });
+
+  it('every boot module that names a PM2 app is one boot-agent will not spawn', () => {
+    const names = pm2Names();
+    const marked = (boot.modules || []).filter((m) => m && m.supervisedAs);
+    expect(marked.length).toBeGreaterThan(0);
+    for (const m of marked) {
+      expect({ id: m.id, external: isExternallySupervised(m) }).toEqual({ id: m.id, external: true });
+      expect(names).toContain(supervisedAs(m));
+    }
   });
 
   it('no enabled boot process duplicates a PM2-owned app without supervisedAs', () => {
