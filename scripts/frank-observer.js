@@ -94,9 +94,11 @@ async function runObservationPass(overrides = {}) {
 
   // fix-list v1 — read-only ranked report of what is wrong. Adds no
   // process and no always-on memory: it rides this same pass. Any
-  // failure here must never break the observation pass.
-  let fixList = null;
-  try {
+  // failure here must never break the observation pass. The collector's
+  // probes can take seconds, so tests opt in via overrides.fixList;
+  // under jest it skips by default (NODE_ENV=test).
+  const wantFixList = overrides.fixList !== undefined ? overrides.fixList : process.env.NODE_ENV !== 'test';
+  if (wantFixList) try {
     const t0 = Date.now();
     const mod = require('../lib/observation/fix-list-collector');
     const { buildFixList } = require('../lib/observation/fix-list');
