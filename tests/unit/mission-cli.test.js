@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * Unit tests for scripts/mission-cli.js. memory is mocked throughout -- no
- * real database is touched.
+ * Unit tests for scripts/mission-cli.js. memory is mocked for create/list;
+ * the task commands run on the in-memory store -- no database file is touched.
  */
 
-const { parseFlags, cmdCreate, cmdList, cmdCancel } = require('../../scripts/mission-cli');
+const { parseFlags, cmdCreate, cmdList, cmdCancel, cmdTask } = require('../../scripts/mission-cli');
 
 function fakeMemory() {
   return {
@@ -55,14 +55,14 @@ describe('mission-cli: cmdCreate', () => {
   it('creates a bare-goal mission with default priority 1 and no context', async () => {
     const memory = fakeMemory();
     await cmdCreate(memory, ['fix the thing']);
-    expect(memory.createMission).toHaveBeenCalledWith('fix the thing', 1, null, null);
-    expect(console.log).toHaveBeenCalledWith('created mission #7');
+    expect(memory.createMission).toHaveBeenCalledWith('fix the thing', 1, null, null, { actor: 'cli', reason: 'created with mission-cli' });
+    expect(console.log).toHaveBeenCalledWith('created mission #7 (queued)');
   });
 
   it('creates a mission with an explicit priority and assignee, no action', async () => {
     const memory = fakeMemory();
     await cmdCreate(memory, ['fix the thing', '--priority', '3', '--assign', 'Heidi']);
-    expect(memory.createMission).toHaveBeenCalledWith('fix the thing', 3, null, 'Heidi');
+    expect(memory.createMission).toHaveBeenCalledWith('fix the thing', 3, null, 'Heidi', { actor: 'cli', reason: 'created with mission-cli' });
   });
 
   it('creates a mission with a structured action when --assign is also given', async () => {
@@ -74,7 +74,8 @@ describe('mission-cli: cmdCreate', () => {
     expect(memory.createMission).toHaveBeenCalledWith(
       'restart mobile chat', 1,
       { action: { type: 'run_script', target: 'scripts/restart-module.js', args: ['heidi-mobile-chat'] } },
-      'Heidi'
+      'Heidi',
+      { actor: 'cli', reason: 'created with mission-cli' }
     );
   });
 
@@ -103,11 +104,13 @@ describe('mission-cli: cmdList', () => {
   beforeEach(() => { console.log = jest.fn(); });
   afterEach(() => { console.log = realLog; });
 
-  it('passes through status filter and limit', async () => {
+  it('passes through status filter and limit, mapping old state names', async () => {
     const memory = fakeMemory();
-    memory.getMissions.mockResolvedValue([{ id: 1, status: 'pending', priority: 1, goal: 'x', assigned_agent: null }]);
+    memory.getMissions.mockResolvedValue([{ id: 1, status: 'queued', priority: 1, goal: 'x', assigned_agent: null }]);
     await cmdList(memory, ['--status', 'pending', '--limit', '5']);
-    expect(memory.getMissions).toHaveBeenCalledWith('pending', 5);
+    expect(memory.getMissions).toHaveBeenCalledWith('queued', 5);
+    await cmdList(memory, ['--status', 'awaiting_approval']);
+    expect(memory.getMissions).toHaveBeenLastCalledWith('awaiting_approval', 20);
   });
 
   it('defaults to no status filter and limit 20', async () => {
@@ -123,35 +126,48 @@ describe('mission-cli: cmdList', () => {
   });
 });
 
-describe('mission-cli: cmdCancel', () => {
+describe('mission-cli: cancel / approve through the task lifecycle', () => {
   const realExit = process.exit;
   const realLog = console.log;
-  beforeEach(() => {
+  let memory;
+  beforeEach(async () => {
     process.exit = jest.fn((code) => { throw new Error(`exit:${code}`); });
     console.log = jest.fn();
+    let Store;
+    jest.isolateModules(() => {
+      jest.doMock('sqlite3', () => { throw new Error('RAM store for this test'); });
+      Store = require('../../heidi-core/memory/sqlite-store');
+    });
+    jest.dontMock('sqlite3');
+    memory = new Store({});
+    await memory.initialize();
   });
   afterEach(() => {
     process.exit = realExit;
     console.log = realLog;
   });
 
-  it('marks the mission cancelled', async () => {
-    const memory = fakeMemory();
-    await cmdCancel(memory, ['12']);
-    expect(memory.updateMission).toHaveBeenCalledWith(12, 'cancelled');
-    expect(console.log).toHaveBeenCalledWith('mission #12 cancelled');
+  it('cancels a queued task and records the operator as a person', async () => {
+    const id = await memory.createMission('x', 1, null, null, { actor: 'test' });
+    await cmdCancel(memory, [String(id), 'not', 'needed']);
+    expect((await memory.getMission(id)).status).toBe('cancelled');
+    const last = (await memory.getMissionEvents(id)).pop();
+    expect(last.actor).toMatch(/^human:cli:/);
+    expect(last.reason).toBe('cancelled: not needed');
   });
 
-  it('reports not-found when updateMission changes nothing', async () => {
-    const memory = fakeMemory();
-    memory.updateMission.mockResolvedValue(0);
+  it('reports a missing task', async () => {
     await cmdCancel(memory, ['999']);
-    expect(console.log).toHaveBeenCalledWith('mission #999 not found');
+    expect(console.log).toHaveBeenCalledWith('⚠️ Task #999 not found.');
   });
 
   it('refuses a missing/non-numeric id', async () => {
-    const memory = fakeMemory();
     await expect(cmdCancel(memory, [])).rejects.toThrow('exit:1');
-    expect(memory.updateMission).not.toHaveBeenCalled();
+  });
+
+  it('approves only a task that is waiting for approval', async () => {
+    const id = await memory.createMission('x', 1, null, null, { actor: 'test' });
+    await cmdTask(memory, 'approve', [String(id)]);
+    expect(console.log).toHaveBeenLastCalledWith(`⚠️ task ${id} is queued, not awaiting approval`);
   });
 });

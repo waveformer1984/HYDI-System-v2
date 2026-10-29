@@ -16,6 +16,7 @@
  * Levels: 0 observe | 1 read | 2 create | 3 approved commands | 4 full
  */
 
+const lifecycle = require('../missions/lifecycle');
 const path = require('path');
 
 // Must be absolute -- see the identical comment in health-observer.js.
@@ -181,57 +182,70 @@ class ToolRegistry {
 
   list_missions = tool({
     level: 1,
-    description: 'List missions from the persistent mission queue, optionally filtered by status (pending, active, blocked, completed, failed, cancelled).',
+    description: 'List tasks (missions) from the persistent queue, optionally filtered by state: queued, planning, awaiting_approval, running, verifying, completed, failed, cancelled, blocked.',
     parameters: {
       type: 'object',
       properties: {
-        status: { type: 'string', description: 'Optional status filter' },
+        status: { type: 'string', description: 'Optional state filter' },
         limit: { type: 'integer', description: 'Max rows, default 20' }
       },
       required: []
     }
   })(async (args = {}) =>
-    this.memory.getMissions(args.status || null, args.limit || 20)
+    this.memory.getMissions(args.status ? lifecycle.normalizeState(args.status) : null, args.limit || 20)
   );
 
   // ── Level 2: create ──
 
   create_mission = tool({
     level: 2,
-    description: 'Add a new mission (persistent goal) to the queue. Priority: 0 low, 1 normal, 2 high, 3 critical. Optionally attach a structured action (type: run_command|run_script, plus its fields) and assign it to an agent -- the mission worker only ever executes it for real if that agent independently already holds permission_level >= 3 (proposing work here does not grant it). Without a structured action, missions are informational only and the worker leaves them alone.',
+    description: 'Add a new task (mission) to the queue. Priority: 0 low, 1 normal, 2 high, 3 critical. Optionally attach a structured action (type: run_command|run_script|read_file|log_event, plus its fields), the agent whose permission level gates it, and success criteria. The worker plans it, waits for the person to approve anything beyond a read-only action, runs it, and verifies it before calling it completed -- proposing work here grants nothing. Without an action the task is informational and the worker leaves it alone.',
     parameters: {
       type: 'object',
       properties: {
         goal: { type: 'string', description: 'What should be accomplished' },
         priority: { type: 'integer', description: '0-3, default 1' },
-        action: { type: 'object', description: 'Optional structured action for the mission worker, e.g. {"type":"restart_service","service":"heidi-mobile-chat"} or {"type":"run_command","command":"git","args":["status"]}' },
-        assigned_agent: { type: 'string', description: 'Agent name whose permission_level gates execution of the action' }
+        action: { type: 'object', description: 'Optional structured action for the mission worker, e.g. {"type":"run_command","command":"git","args":["status"]}' },
+        assigned_agent: { type: 'string', description: 'Agent name whose permission_level gates execution of the action' },
+        success: { type: 'object', description: 'Optional success criteria checked after it runs: {"exitCode":0} and/or {"outputIncludes":"text"}. Default: no error and exit code 0.' }
       },
       required: ['goal']
     }
   })(async (args = {}) => {
     if (!args.goal) return { error: 'goal is required' };
     if (args.action && !args.assigned_agent) return { error: 'assigned_agent is required when attaching an action' };
-    const context = args.action ? { action: args.action } : null;
-    const id = await this.memory.createMission(args.goal, args.priority ?? 1, context, args.assigned_agent ?? null);
-    return { created: true, mission_id: id };
+    const context = args.action ? { action: args.action, ...(args.success ? { success: args.success } : {}) } : null;
+    const id = await this.memory.createMission(args.goal, args.priority ?? 1, context, args.assigned_agent ?? null, { actor: 'Heidi', reason: 'created from chat' });
+    return { created: true, task_id: id, state: 'queued' };
   });
 
+  // The model can cancel, re-queue a blocked task, or close an
+  // informational one. It cannot approve, run, or mark an action completed:
+  // those belong to the person and to the worker's verification.
   update_mission = tool({
     level: 2,
-    description: 'Update a mission status (pending, active, blocked, completed, failed, cancelled), optionally recording a result.',
+    description: 'Change a task you are tracking: "cancelled" (not while running), "queued" (re-check a blocked task), or for an informational task with no action "completed"/"failed". Approving and finishing action tasks is not possible here: the person approves with "task approve <id>" and the worker verifies.',
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'integer', description: 'Mission id' },
-        status: { type: 'string', description: 'New status' },
-        result: { type: 'string', description: 'Optional outcome note' }
+        id: { type: 'integer', description: 'Task id' },
+        status: { type: 'string', description: 'cancelled | queued | completed | failed' },
+        result: { type: 'string', description: 'Optional note' }
       },
       required: ['id', 'status']
     }
   })(async (args = {}) => {
-    const changes = await this.memory.updateMission(args.id, args.status, args.result ?? null);
-    return changes ? { updated: true } : { error: `mission ${args.id} not found` };
+    const to = lifecycle.normalizeState(String(args.status || ''));
+    if (!['cancelled', 'queued', 'completed', 'failed'].includes(to)) {
+      return { error: `status '${args.status}' can't be set from chat; allowed: cancelled, queued, completed, failed (informational tasks only)` };
+    }
+    const from = to === 'queued' ? 'blocked' : to === 'cancelled' ? ['queued', 'blocked', 'awaiting_approval'] : 'queued';
+    const note = args.result ? String(args.result).slice(0, 500) : null;
+    const r = await lifecycle.transition(this.memory, args.id, to, {
+      actor: 'Heidi', reason: note || `set to ${to} from chat`, from,
+      patch: note && (to === 'completed' || to === 'failed') ? { result: note, evidence: { outcome: to, note, by: 'Heidi (informational task, no action to verify)' } } : {},
+    });
+    return r.ok ? { updated: true, state: to } : { error: r.error };
   });
 
   search_memory = tool({

@@ -54,7 +54,11 @@ const allGood = {
 };
 const goodDaemon = { state: 'running', lastCycleOutcome: 'SUCCESS', consecutiveFailures: 0, persistence: { pg: 'ok', rest: 'ok', checkedAt: iso(20000) }, updatedAt: iso(20000) };
 const goodFrank = { at: iso(30000), level: 'OK', issues: [] };
-const legacy = (failed = []) => ({ db: {}, getMissions: async (status) => (status === 'failed' ? failed : []) });
+const legacy = (failed = [], { counts = { queued: 2, awaiting_approval: 1, completed: 5 }, inFlight = [] } = {}) => ({
+  db: {},
+  getMissions: async (status) => (status === 'failed' ? failed : Array.isArray(status) ? inFlight : []),
+  countMissionsByStatus: async () => counts,
+});
 
 function memoryRuntime() {
   return new MemoryRuntime({ dbPath: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hydi-status-mem-')), 'm.db') });
@@ -138,7 +142,7 @@ describe('system status', () => {
     const r = byName(await run({
       env: {},
       root: makeRoot({ daemon: goodDaemon, frank: { at: iso(30000), level: 'CRIT', issues: [{ text: 'C: 1.2 GB free' }] } }),
-      legacyMemory: { db: null, inMemoryData: {}, getMissions: async () => [{ goal: 'restart rezonate', status: 'failed', updated_at: '2026-10-29 10:00:00' }] },
+      legacyMemory: { db: null, inMemoryData: {}, getMissions: async () => [{ goal: 'restart rezonate', status: 'failed', updated_at: '2026-10-29 10:00:00' }], countMissionsByStatus: async () => ({}) },
     }));
     expect(r['frank-host']).toMatchObject({ state: 'DEGRADED', detail: 'CRIT: 1 issue(s) — C: 1.2 GB free' });
     expect(r.auth.state).toBe('DEGRADED');
@@ -146,6 +150,13 @@ describe('system status', () => {
     expect(r.memory.state).toBe('DEGRADED');
     expect(r.memory.detail).toMatch(/legacy store .* RAM only/);
     expect(r['recent-failures']).toMatchObject({ state: 'DEGRADED', detail: '1 failed mission(s) in 24h, latest: restart rezonate' });
+  });
+
+  it('summarises the task queue and flags a task stuck mid-run', async () => {
+    expect(byName(await run())['task-queue']).toMatchObject({ state: 'HEALTHY', detail: '1 awaiting approval, 2 queued, 0 in progress, 0 blocked' });
+    const stuck = byName(await run({ legacyMemory: legacy([], { counts: { running: 1 }, inFlight: [{ id: 7, status: 'running', updated_at: iso(15 * 60000) }] }) }));
+    expect(stuck['task-queue']).toMatchObject({ state: 'DEGRADED', detail: '0 awaiting approval, 0 queued, 1 in progress, 0 blocked; task #7 has been running for over 10 min' });
+    expect(byName(await run({ legacyMemory: { getMissions: async () => [] } }))['task-queue'].state).toBe('UNKNOWN');
   });
 
   it('recognizes the report phrases only', () => {

@@ -180,6 +180,14 @@ app.post('/api/conversations', (req, res) => relayCore('POST', '/conversations',
 app.get('/api/conversations/:id/messages', (req, res) => relayCore('GET', `/conversations/${encodeURIComponent(req.params.id)}/messages${qs(req.query)}`, res));
 app.get('/api/memory/status', (req, res) => relayCore('GET', `/memory/status${qs(req.query)}`, res));
 app.get('/api/system/status', (req, res) => relayCore('GET', '/system/status', res));
+// Tasks: list, detail + history, and the person's approve/reject/cancel.
+app.get('/api/missions', (req, res) => relayCore('GET', `/missions${qs(req.query)}`, res));
+app.get('/api/missions/:id', (req, res) => relayCore('GET', `/missions/${encodeURIComponent(req.params.id)}`, res));
+app.post('/api/missions/:id/:decision', (req, res) => {
+    if (!['approve', 'reject', 'cancel'].includes(req.params.decision)) return res.status(404).json({ error: 'unknown action' });
+    const note = req.body && typeof req.body.note === 'string' ? req.body.note : undefined;
+    return relayCore('POST', `/missions/${encodeURIComponent(req.params.id)}/${req.params.decision}`, res, { note });
+});
 
 // SSE streaming chat
 app.post('/api/chat', async (req, res) => {

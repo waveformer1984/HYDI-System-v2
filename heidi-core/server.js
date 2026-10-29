@@ -56,6 +56,7 @@ const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
 const ToolRegistry = require('./tools/tool-registry');
 const MissionWorker = require('./missions/mission-worker');
+const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery } = require('./status/system-status');
@@ -312,6 +313,12 @@ class HeidiCore {
           send({ done: true, model: 'memory', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
+        const taskCmd = lifecycle.parseTaskCommand(input);
+        if (taskCmd) {
+          send({ t: await this.runTaskChat(owner, taskCmd) });
+          send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
         if (!turn.ok) {
           send({ error: turn.error, conversation_not_found: true, done: true });
@@ -538,6 +545,51 @@ class HeidiCore {
       }
     });
 
+    // TASKS (missions/lifecycle.js). Same auth as every other route. Approve
+    // and reject act as a person (`human:<owner>`); the model's tools can't.
+    const taskJson = (m) => m && {
+      ...m,
+      status: lifecycle.normalizeState(m.status),
+      context: lifecycle.parseJson(m.context),
+      plan: lifecycle.parseJson(m.plan),
+      approval: lifecycle.parseJson(m.approval),
+      evidence: lifecycle.parseJson(m.evidence),
+    };
+
+    this.app.get('/missions', async (req, res) => {
+      try {
+        const state = req.query.state ? String(req.query.state).split(',').map(lifecycle.normalizeState) : null;
+        const missions = await this.memory.getMissions(state, Math.min(Number(req.query.limit) || 30, 200));
+        res.json({ missions: (missions || []).map(taskJson), counts: await this.memory.countMissionsByStatus() });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/missions/:id', async (req, res) => {
+      try {
+        const m = await this.memory.getMission(Number(req.params.id));
+        if (!m) return res.status(404).json({ error: 'task not found' });
+        const events = await this.memory.getMissionEvents(m.id);
+        res.json({ mission: taskJson(m), events: events.map((e) => ({ ...e, data: lifecycle.parseJson(e.data) })), text: lifecycle.formatTask(m, events) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/missions/:id/:decision', async (req, res) => {
+      const decision = req.params.decision;
+      if (!['approve', 'reject', 'cancel'].includes(decision)) return res.status(404).json({ error: 'unknown action' });
+      try {
+        const id = Number(req.params.id);
+        const actor = `human:${this.memoryRuntime.resolveOwner(req)}`;
+        const note = req.body && typeof req.body.note === 'string' ? req.body.note.slice(0, 300) : null;
+        const r = decision === 'cancel'
+          ? await lifecycle.transition(this.memory, id, 'cancelled', { actor, reason: note ? `cancelled: ${note}` : 'cancelled', from: ['queued', 'blocked', 'awaiting_approval'] })
+          : await lifecycle.decide(this.memory, id, decision, { actor, reason: note });
+        if (!r.ok) return res.status(/not found/.test(r.error) ? 404 : 409).json({ ok: false, error: r.error });
+        if (decision === 'approve') this.nudgeWorker();
+        const m = await this.memory.getMission(id);
+        res.json({ ok: true, mission: taskJson(m) });
+      } catch (error) { res.status(500).json({ error: error.message }); }
+    });
+
     this.app.get('/memory/search', (req, res) => {
       if (!memStore()) return memUnavailable(res);
       const q = String(req.query.q || '');
@@ -616,6 +668,12 @@ class HeidiCore {
           const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
           send({ t: text });
           send({ done: true, model: 'memory', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const taskCmd = lifecycle.parseTaskCommand(input);
+        if (taskCmd) {
+          send({ t: await this.runTaskChat(owner, taskCmd) });
+          send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
@@ -1247,6 +1305,23 @@ class HeidiCore {
     { tool: 'list_missions', pattern: /\b(list|show|what('s|s)?)\b.*\bmissions?\b/i },
     { tool: 'system_status', pattern: /\b(status|health check|system health|how are you|are you (ok|okay|up|running|alive|healthy))\b/i },
   ];
+
+  /** Start the worker's next pass now (an approved task shouldn't wait 15s). */
+  nudgeWorker() {
+    setImmediate(() => {
+      this.missionWorker.tick().catch((e) => console.warn(`[MISSION WORKER] nudge failed: ${e.message}`));
+    });
+  }
+
+  /** "tasks" / "task 12" / "task approve 12" typed by the person in chat. */
+  async runTaskChat(owner, parsed) {
+    let approved = false;
+    const text = await lifecycle.runTaskCommand(this.memory, parsed, {
+      actor: `human:${owner}`,
+      onApproved: () => { approved = true; this.nudgeWorker(); },
+    });
+    return approved ? `${text}\n\n👍 Approved. The worker re-checks permissions and safety, then runs it; send "task ${parsed.id}" for the result.` : text;
+  }
 
   matchFastPath(input) {
     if (!input) return null;

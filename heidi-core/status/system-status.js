@@ -189,6 +189,24 @@ async function checkSystem(opts = {}) {
     }
   })());
 
+  // Task queue (missions/lifecycle.js): what waits on the person, and
+  // anything stuck mid-run (the action executor times out after 30s).
+  tasks.push((async () => {
+    const lm = opts.legacyMemory;
+    if (!lm || typeof lm.countMissionsByStatus !== 'function') return component('task-queue', 'UNKNOWN', 'task queue not readable', 'missions');
+    try {
+      const n = await lm.countMissionsByStatus();
+      const c = (k) => n[k] || 0;
+      const inFlight = await lm.getMissions(['planning', 'running', 'verifying'], 50);
+      const stuck = (inFlight || []).filter((m) => ageMs(String(m.updated_at || m.created_at || '').replace(' ', 'T') + (String(m.updated_at || m.created_at || '').includes('Z') ? '' : 'Z'), now) > 10 * 60 * 1000);
+      const summary = `${c('awaiting_approval')} awaiting approval, ${c('queued') + c('pending')} queued, ${c('running') + c('active') + c('verifying') + c('planning')} in progress, ${c('blocked')} blocked`;
+      if (stuck.length) return component('task-queue', 'DEGRADED', `${summary}; task #${stuck[0].id} has been ${stuck[0].status} for over 10 min`, 'missions');
+      return component('task-queue', 'HEALTHY', summary, 'missions');
+    } catch (error) {
+      return component('task-queue', 'UNKNOWN', `could not read tasks: ${error instanceof Error ? error.message : 'error'}`, 'missions');
+    }
+  })());
+
   const components = (await Promise.all(tasks)).flat();
   // Overall: the core needs memory and a model; anything else wrong is DEGRADED.
   const core = components.filter((c) => c.name === 'memory' || c.name === 'local-model');

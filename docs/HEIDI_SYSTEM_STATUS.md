@@ -115,18 +115,14 @@ Verified from this repository and GitHub, not from running services on Frank:
 
 ## Not done yet, by priority
 
-1. **The task lifecycle (QUEUED → … → COMPLETED) is not unified.**
-   - Heidi's `missions` already cover pending, active, blocked, completed,
-     failed and cancelled, gated by the agent permission ladder.
-   - HYDI also has human actions, ActionProposals and the CognitiveCore
-     decision log.
-   - The next step is to extend missions, adding a planning, awaiting-approval
-     and verifying step plus success criteria and evidence, rather than
-     building a parallel system.
+1. ~~**The task lifecycle is not unified.**~~ Done: Heidi's missions now run
+   queued → planning → awaiting approval → running → verifying → completed,
+   with success criteria, evidence and a history. See
+   `docs/HEIDI_TASK_LIFECYCLE.md`.
 2. **ProtoForge event → task tracing.**
    - `lib/pipeline` already gives every event a `trace_id` through all six
      stages (live via protoforge-core `POST /cascade/event`).
    - Not yet built: a pipeline decision opening a Heidi mission with the same
      correlation id.
 3. **A bounded improvement loop:** observe through `system report`, propose a
-   mission, require approval, verify. It depends on 1.
+   mission, require approval, verify. The lifecycle it needs (1) is in place.
