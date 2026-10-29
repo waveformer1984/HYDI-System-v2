@@ -18,6 +18,8 @@
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { enforceDestructivePm2TestGuard } = require('./pm2-prod-daemon-guard');
+enforceDestructivePm2TestGuard('heidi-start.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const DAEMON_SCRIPT = path.resolve(ROOT, 'scripts', 'heidi-daemon.ts');

@@ -23,6 +23,8 @@ import path from 'path';
 import { execSync, exec } from 'child_process';
 import fs from 'fs';
 import os from 'os';
+import { enforceDestructivePm2TestGuard } from './pm2-prod-daemon-guard.js';
+enforceDestructivePm2TestGuard('test-pm2-restart.ts');
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config();
 
