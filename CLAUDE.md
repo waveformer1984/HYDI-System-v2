@@ -125,7 +125,12 @@ The model's `update_mission` tool can only cancel, re-queue a blocked task,
 or close an informational one. Approval needs no person for read-only
 actions or a single-module `restart-module.js` run
 (`HEIDI_AUTO_APPROVE_RESTARTS=false` turns that off). Execution still needs
-`HEIDI_AUTONOMOUS_ACTIONS=true`. See `docs/HEIDI_TASK_LIFECYCLE.md`.
+`HEIDI_AUTONOMOUS_ACTIONS=true`. A ProtoForge `escalate` opens an
+informational task carrying the pipeline `trace_id`
+(`lib/pipeline/heidi-task-link.js`, wired on protoforge-core's emission;
+`HEIDI_TRACE_LINK=false` turns it off). `trace <id>` in chat, or
+`GET /traces/:id`, shows every pipeline stage plus the tasks it opened. See
+`docs/HEIDI_TASK_LIFECYCLE.md`.
 
 #### System report + mobile device login
 
