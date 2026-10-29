@@ -1,0 +1,15 @@
+chore(deps): fix HIGH-severity Dependabot alerts (patch/minor only)
+
+npm audit fix (non-force):
+- body-parser -> 2.4.0 (GHSA-27r3-jxmh-p828)
+- undici -> 6.29.1 (GHSA-xjj6-f33q-929c)
+- zod -> 4.6.7 (GHSA-mrhx-c7xc-m3w5)
+
+Left unfixed (needs major bumps - dev deps only):
+- @typescript-eslint chain, minimatch, brace-expansion (jest transitive)
+- chromium-bidi / puppeteer-core (test-only)
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+
