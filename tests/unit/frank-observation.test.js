@@ -124,6 +124,18 @@ describe('frank-observer loop', () => {
     return { root, posts, collect, opts };
   }
 
+  it('a fix-list collector that never resolves still lets alerts evaluate and writes a timeout item', async () => {
+    const h = harness({ '.observatory/current.json': sample({ pm2: { available: true, processes: [{ name: 'x', status: 'errored' }] } }) });
+    const never = () => new Promise(() => {});
+    const passOpts = { ...h.opts, now: () => NOW, fixList: true, fixListInputs: never, fixListTimeoutMs: 50 };
+    await observer.runObservationPass(passOpts); // pass 1 — records the crit, raises nothing yet
+    await observer.runObservationPass(passOpts); // pass 2 — confirms and alerts
+    expect(h.posts.some((p) => p.channel === 'alerts')).toBe(true); // alerting did not wait on the collector
+    const list = JSON.parse(fs.readFileSync(path.join(h.root, '.runtime', 'fixlist', 'current.json'), 'utf8'));
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({ kind: 'fixlist_timeout', level: 'UNKNOWN' });
+  });
+
   it('runs the collector only when the sample is older than 75s, and only on Windows', async () => {
     const fresh = harness({ '.observatory/current.json': sample() });
     await observer.runObservationPass({ ...fresh.opts, now: () => NOW });
