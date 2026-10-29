@@ -149,9 +149,10 @@ module.exports = {
       // of an extensionless .ts file (CredentialRunbookRegistry,
       // ExternalCapabilityAcquisitionEngine, delegated-operator, the
       // CognitiveCore lazy imports) failed ERR_MODULE_NOT_FOUND inside the
-      // daemon. `--import tsx` hooks the ESM loader too, so both paths work.
+      // daemon. The launcher owns BOTH hooks now: require('tsx/cjs') plus
+      // require('tsx/esm/api').register() - no node_args needed, which also
+      // stops PM2's cached process definition from silently dropping them.
       script: 'scripts/heidi-daemon-launcher.js',
-      node_args: '--import tsx',
       args: '--no-stabilization',
       cwd: __dirname,
       instances: 1,
