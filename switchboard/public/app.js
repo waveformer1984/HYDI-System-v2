@@ -1,4 +1,4 @@
-const API = window.SWITCHBOARD_API || 'http://localhost:3001';
+const API = window.SWITCHBOARD_API || 'http://localhost:3018';
 let currentUser = null;
 
 const app = document.getElementById('app');

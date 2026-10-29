@@ -1,0 +1,14 @@
+fix(ports): move keeper + switchboard off :3001 (rezonate owns it)
+
+keeper -> 3017, switchboard -> 3018. Three services defaulted to :3001
+and all serve /health, masking which process actually held the port
+(rezonate-app's EADDRINUSE loop on 2026-10-28).
+
+- keeper/server.js, agent-example.js, README: PORT default 3017
+- switchboard/src/config.js, public/{app,ui}.js, README: port default 3018
+- .ports.json: register keeper + switchboard
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+

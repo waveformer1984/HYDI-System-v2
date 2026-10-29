@@ -32,13 +32,13 @@ npm test
 npm start
 ```
 
-Then open `http://localhost:3001`.
+Then open `http://localhost:3018`.
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 3001 | API port |
+| `PORT` | 3018 | API port |
 | `SWITCHBOARD_DATA_DIR` | `data` | Data directory |
 | `SWITCHBOARD_DB_PATH` | `data/db.json` | Database file |
 | `SWITCHBOARD_BACKUP_DIR` | `data/backups` | Backup directory |
