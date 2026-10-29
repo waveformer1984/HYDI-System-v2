@@ -58,6 +58,7 @@ const ToolRegistry = require('./tools/tool-registry');
 const MissionWorker = require('./missions/mission-worker');
 const HealthObserver = require('./missions/health-observer');
 const { MemoryRuntime } = require('./memory/memory-runtime');
+const { checkSystem, formatSystemStatus, isSystemReportQuery } = require('./status/system-status');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -299,6 +300,12 @@ class HeidiCore {
         // Persistent conversation + memory (see memory/memory-runtime.js)
         const owner = this.memoryRuntime.resolveOwner(req);
         const requestId = req.body.request_id || null;
+        if (isSystemReportQuery(input)) {
+          const report = await this.getSystemStatus();
+          send({ t: formatSystemStatus(report) });
+          send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
         if (this.memoryRuntime.isMemoryCommand(input)) {
           const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
           send({ t: text });
@@ -520,6 +527,17 @@ class HeidiCore {
       res.status(memStore() ? 200 : 503).json({ available: Boolean(memStore()), text });
     });
 
+    // Unified HYDI status: HEALTHY / DEGRADED / UNAVAILABLE / UNKNOWN per
+    // component, from real probes with timeouts (status/system-status.js).
+    this.app.get('/system/status', async (req, res) => {
+      try {
+        const report = await this.getSystemStatus();
+        res.status(report.overall === 'UNAVAILABLE' ? 503 : 200).json({ ...report, text: formatSystemStatus(report) });
+      } catch (error) {
+        res.status(500).json({ overall: 'UNKNOWN', error: error.message });
+      }
+    });
+
     this.app.get('/memory/search', (req, res) => {
       if (!memStore()) return memUnavailable(res);
       const q = String(req.query.q || '');
@@ -588,6 +606,12 @@ class HeidiCore {
         // Memory commands answer from the store itself, before any model.
         const owner = this.memoryRuntime.resolveOwner(req);
         const requestId = req.body.request_id || null;
+        if (isSystemReportQuery(input)) {
+          const report = await this.getSystemStatus();
+          send({ t: formatSystemStatus(report) });
+          send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
         if (this.memoryRuntime.isMemoryCommand(input)) {
           const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
           send({ t: text });
@@ -607,8 +631,15 @@ class HeidiCore {
         // single tool call.
         const fastPath = this.matchFastPath(input);
         if (fastPath) {
-          const toolResult = await this.toolRegistry.execute(fastPath.tool, fastPath.args, 'Heidi');
-          const finalText = this.formatFastPathResult(fastPath.tool, toolResult);
+          // "status"/"health" get the unified report: real health, not "the
+          // port answered" (the system_status tool still serves the model).
+          let finalText;
+          if (fastPath.tool === 'system_status') {
+            finalText = formatSystemStatus(await this.getSystemStatus());
+          } else {
+            const toolResult = await this.toolRegistry.execute(fastPath.tool, fastPath.args, 'Heidi');
+            finalText = this.formatFastPathResult(fastPath.tool, toolResult);
+          }
           send({ t: finalText });
           await this.memory.storeShortTerm(input, finalText, { tools_used: [fastPath.tool], fast_path: true }, 0.95)
             .catch(() => {});
@@ -741,6 +772,15 @@ class HeidiCore {
       },
       memories_saved: saved ? saved.memories : [],
     };
+  }
+
+  /** The unified system report (status/system-status.js). */
+  getSystemStatus() {
+    return checkSystem({
+      memoryRuntime: this.memoryRuntime,
+      legacyMemory: this.memory,
+      uptimeMs: this.stats.startTime ? Date.now() - this.stats.startTime : undefined,
+    });
   }
 
   /** Live facts about Heidi herself, for "memory project heidi". */

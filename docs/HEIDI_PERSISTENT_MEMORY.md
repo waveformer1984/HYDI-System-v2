@@ -181,7 +181,8 @@ by owner.
     without a secret, as `/api/chat` already was. Anyone who can reach :3006
     can read conversation history through it. It is not on the
     public-ingress allowlist, and ngrok points at :3000.
-  - A per-device token on :3006 is the recommended follow-up.
+  - Set `HEIDI_MOBILE_TOKEN` to require a paired device; see
+    `docs/HEIDI_SYSTEM_STATUS.md`.
 - **Owner isolation.** Every store query filters by owner. The tests cover
   memory, conversations, forget and search across owners.
 - **No secrets in memory.**

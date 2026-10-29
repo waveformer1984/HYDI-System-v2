@@ -73,6 +73,25 @@ app.use((req, res, next) => {
     next();
 });
 
+// Device login (lib/mobile-chat/local-auth.js). Off unless HEIDI_MOBILE_TOKEN
+// is set; then every /api route except health/pair needs a paired device.
+const mobileAuth = require('./lib/mobile-chat/local-auth').createLocalAuth();
+// Every /api request is rate-limited per client address BEFORE the login
+// check, so the bearer/cookie comparison can't be hammered. Generous enough
+// for the page's polling; /api/pair has its own tighter 10/min limit.
+const { rateLimit } = require('express-rate-limit');
+app.use('/api', rateLimit({
+    windowMs: 60 * 1000,
+    limit: Number(process.env.HEIDI_MOBILE_RATE_LIMIT) || 300,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    // Forwarded traffic (tailscale serve) is limited by socket address; the
+    // header itself is never trusted, so silence the library's warning.
+    validate: { xForwardedForHeader: false },
+}));
+app.use(mobileAuth.middleware);
+app.post('/api/pair', (req, res) => mobileAuth.pair(req, res));
+
 // Serve mobile chat UI
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
     res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html'));
@@ -116,7 +135,7 @@ app.get('/api/models', async (req, res) => {
 
 // Server + AI health
 app.get('/api/health', async (req, res) => {
-    const status = { server: 'ok', ollama: false, lmstudio: false, heidiCore: false, models: [] };
+    const status = { server: 'ok', ollama: false, lmstudio: false, heidiCore: false, models: [], loginRequired: mobileAuth.enabled, loggedIn: mobileAuth.authorized(req) };
 
     try {
         const r = await fetch(`${HEIDI_CORE_URL}/health`, { signal: AbortSignal.timeout(2000) });
@@ -160,6 +179,7 @@ app.get('/api/conversations', (req, res) => relayCore('GET', `/conversations${qs
 app.post('/api/conversations', (req, res) => relayCore('POST', '/conversations', res, req.body || {}));
 app.get('/api/conversations/:id/messages', (req, res) => relayCore('GET', `/conversations/${encodeURIComponent(req.params.id)}/messages${qs(req.query)}`, res));
 app.get('/api/memory/status', (req, res) => relayCore('GET', `/memory/status${qs(req.query)}`, res));
+app.get('/api/system/status', (req, res) => relayCore('GET', '/system/status', res));
 
 // SSE streaming chat
 app.post('/api/chat', async (req, res) => {

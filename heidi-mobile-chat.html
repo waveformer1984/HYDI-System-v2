@@ -583,6 +583,26 @@ let msgCount = 0;
 let healthTimer = null;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+// ─── Device login ─────────────────────────────────────────────────────────────
+// When Frank sets HEIDI_MOBILE_TOKEN, /api calls from other devices answer 401
+// until this device pairs once (the server then sets an HttpOnly cookie).
+const rawFetch = window.fetch.bind(window);
+let pairing = null;
+window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const res = await rawFetch(input, init);
+    if (res.status !== 401 || !url.startsWith('/api/') || url === '/api/pair') return res;
+    const body = await res.clone().json().catch(() => ({}));
+    if (body.error !== 'login_required') return res;
+    pairing = pairing || (async () => {
+        const token = window.prompt('This Heidi needs your device token (HEIDI_MOBILE_TOKEN on Frank):');
+        if (!token) return false;
+        const r = await rawFetch('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+        return r.ok;
+    })().finally(() => { setTimeout(() => { pairing = null; }, 0); });
+    return (await pairing) ? rawFetch(input, init) : res;
+};
+
 // ─── Persistent conversations ────────────────────────────────────────────────
 // The server (Heidi Core's SQLite store) is the source of truth. This page
 // only remembers WHICH conversation is open, so a reload or app restart
@@ -931,10 +951,10 @@ function sendQuick(cmd) {
     }
     if (cmd === 'chats') { showConversationList(); return; }
     const map = {
-        status: 'What is the current system and AI status? Check if Ollama is running and which models are available.',
+        status: 'system report',
         models: 'List all available AI models and tell me about the current one you are using.',
         help: 'What can you help me with? Give a friendly overview of your capabilities.',
-        health: 'Run a health check: check Ollama, server status, and any issues you can detect.',
+        health: 'system report',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
