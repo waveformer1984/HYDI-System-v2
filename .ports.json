@@ -60,6 +60,20 @@
       "depends_on": [],
       "external": true
     },
+    "keeper": {
+      "port": 3017,
+      "name": "Keeper Agent Server",
+      "env_var": "PORT",
+      "description": "Keeper agent execution API (moved off 3001 — rezonate-app owns 3001)",
+      "depends_on": []
+    },
+    "switchboard": {
+      "port": 3018,
+      "name": "Switchboard UI/API",
+      "env_var": "PORT",
+      "description": "Switchboard operator console (moved off 3001 — rezonate-app owns 3001)",
+      "depends_on": []
+    },
     "supabase-rest": {
       "port": 3001,
       "name": "Supabase REST API",

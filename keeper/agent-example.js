@@ -4,7 +4,7 @@
  */
 
 class AgentClient {
-  constructor(agentId, keeperUrl = 'http://localhost:3001') {
+  constructor(agentId, keeperUrl = 'http://localhost:3017') {
     this.agentId = agentId;
     this.keeperUrl = keeperUrl;
   }

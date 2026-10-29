@@ -9,7 +9,7 @@ const Vault = require('./vault');
 const PolicyEngine = require('./policy-engine');
 
 class KeeperServer {
-  constructor(port = 3001) {
+  constructor(port = 3017) {
     this.app = express();
     this.port = port;
     this.keeper = null;
@@ -142,7 +142,7 @@ class KeeperServer {
 
 // Start server if run directly
 if (require.main === module) {
-  const server = new KeeperServer(process.env.PORT || 3001);
+  const server = new KeeperServer(process.env.PORT || 3017);
   server.start().catch(console.error);
 }
 

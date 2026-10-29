@@ -116,7 +116,7 @@ GET /policy/finance-agent
 
 Environment variables:
 ```bash
-PORT=3001
+PORT=3017
 KeeperEncryptionKey=your-32-byte-hex-key
 ```
 
@@ -176,7 +176,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
-EXPOSE 3001
+EXPOSE 3017
 CMD ["npm", "start"]
 ```
 
@@ -197,7 +197,7 @@ spec:
       - name: keeper
         image: protoforge/keeper:latest
         ports:
-        - containerPort: 3001
+        - containerPort: 3017
         env:
         - name: KeeperEncryptionKey
           valueFrom:

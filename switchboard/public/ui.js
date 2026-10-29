@@ -1,5 +1,5 @@
 (function (global) {
-  const API = global.SWITCHBOARD_API || 'http://localhost:3001';
+  const API = global.SWITCHBOARD_API || 'http://localhost:3018';
 
   function $(sel) { return document.querySelector(sel); }
 

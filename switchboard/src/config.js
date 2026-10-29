@@ -11,7 +11,7 @@ function boolOr(value, fallback) {
 }
 
 const defaults = {
-  port: 3001,
+  port: 3018,
   dataDir: path.join(__dirname, '..', 'data'),
   dbFile: 'db.json',
   eventLogFile: 'events.json',
