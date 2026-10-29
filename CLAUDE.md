@@ -112,6 +112,18 @@ from an authenticated caller). Chat commands: `memory status|search|recent|
 project <hydi|heidi|protoforge>|audit|forget`. See
 `docs/HEIDI_PERSISTENT_MEMORY.md`.
 
+#### System report + mobile device login
+
+`system report` in Heidi's chat (or `GET /system/status` on heidi-core,
+`/api/system/status` via :3006) gives every component a HEALTHY /
+DEGRADED / UNAVAILABLE / UNKNOWN state from real evidence — an HTTP answer
+alone is never HEALTHY, a missing or stale status file is UNKNOWN
+(`heidi-core/status/system-status.js`). `HEIDI_MOBILE_TOKEN` turns on device
+login for `launch-heidi-mobile.js`: off-box `/api/*` calls (including
+loopback traffic with forwarding headers, e.g. `tailscale serve`) need a
+paired-device cookie from `/api/pair` or a bearer token
+(`lib/mobile-chat/local-auth.js`). See `docs/HEIDI_SYSTEM_STATUS.md`.
+
 #### Stray processes (`lib/observation/strays.js`)
 
 `frank-observer` also checks, every pass on Windows, for processes PM2 has
