@@ -61,8 +61,9 @@ describe('portfolio registry', () => {
       expect(app).toBeDefined();
       const routePath = new URL(app.healthUrl).pathname;
       const src = fs.readFileSync(path.resolve(__dirname, '..', '..', routerFile), 'utf8');
-      // The router must literally register the health path.
-      expect(src).toMatch(new RegExp(`app\\.get\\('${routePath.replace(/\//g, '\\/')}'`));
+      // The router must literally register the health path (plain text
+      // match: nothing from the URL is ever turned into a regex).
+      expect(src.includes(`app.get('${routePath}'`)).toBe(true);
     }
   });
 });

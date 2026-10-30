@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Play, Folder, Tag } from 'lucide-react';
+import { Search, Play, Folder } from 'lucide-react';
 import { fetchPortfolio, DIVISIONS, type PortfolioApp } from '@/lib/portfolio';
 
 export default function AppLauncherModule() {
