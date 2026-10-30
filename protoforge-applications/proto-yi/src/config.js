@@ -2,7 +2,7 @@ const path = require('path');
 const { boolOr, intOr } = require('./validation');
 
 const defaults = {
-  port: 3000,
+  port: 3010,
   dataDir: path.join(__dirname, '..', 'data'),
   dbFile: 'db.json',
   eventLogFile: 'events.json',

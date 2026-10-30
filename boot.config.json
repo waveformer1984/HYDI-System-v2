@@ -178,6 +178,28 @@
       ]
     },
     {
+      "id": "proto-yi",
+      "label": "Proto.I.Y canonical project planner (:3010, Ursula Suite engine on :5000)",
+      "type": "process",
+      "enabled": false,
+      "required": false,
+      "supervisor": "pm2",
+      "supervisedAs": "proto-yi",
+      "command": "node",
+      "args": ["protoforge-applications/proto-yi/src/index.js"],
+      "env": {
+        "PORT": "3010"
+      },
+      "port": 3010,
+      "health": {
+        "url": "http://127.0.0.1:3010/health",
+        "graceMs": 120000,
+        "intervalMs": 2500
+      },
+      "dependsOn": [],
+      "note": "disabled until Jordan enables it — PM2 proto-yi is the supervisor"
+    },
+    {
       "id": "ursula-local",
       "label": "Ursula Command Center (Next.js prod build, :3100)",
       "type": "process",
