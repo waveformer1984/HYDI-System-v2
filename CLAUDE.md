@@ -286,7 +286,13 @@ tree: `npm run build` writes `.next/hydi-build.json` after `next build`,
 and the server reads that stamp.
 
 `npm run runtime:audit` (`lib/runtime/drift-audit.js`) compares those files
-with `pm2 jlist` and `ecosystem.config.js`. It only reports. It never
+with `pm2 jlist` and `ecosystem.config.js`. It only reports. `pm2 jlist` can
+take ~30s on Frank under memory pressure, so `lib/runtime/collect.js` runs
+one shared read at a time (bounded by `HYDI_PM2_JLIST_TIMEOUT_MS`, default
+60s), reuses it for `HYDI_PM2_JLIST_CACHE_MS` (60s), serves a result up to
+10 minutes old while refreshing (its age is `pm2ReadAgeMs`), and lets each
+caller wait only its own `waitMs` (20s for health probes, 4s for fix-list,
+the full read for the CLI). With nothing recent it is UNKNOWN with the reason. It never
 restarts, kills, or starts a process. Each row is one of:
 
 | Verdict | Meaning |

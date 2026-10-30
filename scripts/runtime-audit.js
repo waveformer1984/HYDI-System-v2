@@ -46,7 +46,10 @@ async function loadAudit() {
       return auditDrift({ pm2Readable: false });
     }
   }
-  return collectRuntimeAudit({ root: process.cwd() });
+  // A person is waiting at a terminal: wait for the full PM2 read instead
+  // of the 20s an HTTP health probe allows (pm2 jlist took ~28s on Frank).
+  const waitMs = Number(process.env.HYDI_PM2_JLIST_TIMEOUT_MS) > 0 ? Number(process.env.HYDI_PM2_JLIST_TIMEOUT_MS) : 60000;
+  return collectRuntimeAudit({ root: process.cwd(), waitMs });
 }
 
 async function main() {
