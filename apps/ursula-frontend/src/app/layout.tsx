@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ModeProvider } from "@/lib/mode-context";
+import HeidiChatPanel from "@/components/heidi/HeidiChatPanel";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +30,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ModeProvider>{children}</ModeProvider>
+        {/* Always-on Heidi chat (closable; remembered per browser). */}
+        <HeidiChatPanel />
       </body>
     </html>
   );
