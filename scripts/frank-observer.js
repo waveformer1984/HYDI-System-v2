@@ -27,6 +27,9 @@ const APP_NAME = 'frank-observer';
 const INTERVAL_MS = 60 * 1000;
 const SAMPLE_MAX_AGE_MS = 75 * 1000;
 const COLLECT_TIMEOUT_MS = 50 * 1000;
+// How long a pass waits for the shared PM2 read. A slower read keeps going
+// in the background and the next pass uses it.
+const PM2_WAIT_MS = 20 * 1000;
 const CONFIRM_PASSES = 2;
 // Disk alerts belong to frank-storage-guard, which already posts them once
 // per level; repeating them here would double every disk alert.
@@ -49,12 +52,15 @@ function sampleAgeMs(root, now) {
   return Number.isFinite(t) ? now - t : Infinity;
 }
 
-function runCollector(root) {
+function runCollector(root, { pm2SnapshotPath } = {}) {
+  const args = [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', path.join(root, 'scripts', 'observatory', 'collect.ps1'), '-Once', '-Quiet',
+  ];
+  // collect.ps1 reads PM2 from this file instead of running its own jlist.
+  if (pm2SnapshotPath) args.push('-Pm2Snapshot', pm2SnapshotPath);
   return new Promise((resolve) => {
-    execFile('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-      '-File', path.join(root, 'scripts', 'observatory', 'collect.ps1'), '-Once', '-Quiet',
-    ], { cwd: root, timeout: COLLECT_TIMEOUT_MS, windowsHide: true }, (error) => {
+    execFile('powershell.exe', args, { cwd: root, timeout: COLLECT_TIMEOUT_MS, windowsHide: true }, (error) => {
       resolve(error ? { ok: false, error: error.message } : { ok: true });
     });
   });
@@ -74,9 +80,42 @@ async function runObservationPass(overrides = {}) {
   const outDir = overrides.outDir || path.join(root, '.runtime', 'observation');
   const statePath = path.join(outDir, 'observer-state.json');
 
+  // One `pm2 jlist` per pass, shared by the collector, the strays check and
+  // fix-list (lib/runtime/collect.js keeps it). Each jlist is a slow WMI
+  // query inside the PM2 daemon; three per pass, plus the readers a timeout
+  // left behind, slowed jlist to ~60s on 2026-10-30. `undefined` keeps the
+  // old per-consumer reads (non-Windows, or a test that doesn't inject it).
+  let pm2List;
+  let pm2SnapshotPath;
+  if (platform === 'win32' || overrides.readPm2List) {
+    const readPm2List = overrides.readPm2List || require('../lib/runtime/collect').readPm2List;
+    let got;
+    try {
+      got = await readPm2List({ root, waitMs: PM2_WAIT_MS });
+    } catch (e) {
+      got = { list: null, why: e && e.message ? e.message : 'pm2 read failed' };
+    }
+    pm2List = Array.isArray(got && got.list) ? got.list : null;
+    pm2SnapshotPath = path.join(outDir, 'pm2-sanitized.json');
+    try {
+      // Sanitized: names, pids, status, counters. No pm2_env values.
+      const { sanitizePm2List } = require('./observatory/pm2_sanitizer');
+      writeJsonAtomic(pm2SnapshotPath, {
+        ts: new Date(now).toISOString(),
+        available: pm2List !== null,
+        reason: pm2List === null ? (got && got.why) || 'pm2 jlist unreadable' : null,
+        ageMs: pm2List !== null ? got.ageMs : null,
+        processes: pm2List !== null ? sanitizePm2List(pm2List) : [],
+      });
+    } catch (e) {
+      log(`[${APP_NAME}] could not write the PM2 snapshot: ${e && e.message ? e.message : 'unknown'}`);
+    }
+    if (pm2List === null) log(`[${APP_NAME}] PM2 unreadable this pass: ${(got && got.why) || 'unknown'}`);
+  }
+
   let collected = { ok: true, skipped: 'sample fresh' };
   if (sampleAgeMs(root, now) > SAMPLE_MAX_AGE_MS) {
-    collected = platform === 'win32' ? await collect(root) : { ok: false, skipped: 'collector is Windows-only' };
+    collected = platform === 'win32' ? await collect(root, { pm2SnapshotPath }) : { ok: false, skipped: 'collector is Windows-only' };
   }
 
   // Processes PM2 lost track of (lib/observation/strays.js). null = could
@@ -84,7 +123,7 @@ async function runObservationPass(overrides = {}) {
   let strays = null;
   try {
     const collectStrays = overrides.collectStrays || require('../lib/observation/strays').collectStrays;
-    strays = await collectStrays(root, { platform });
+    strays = await collectStrays(root, { platform, pm2List });
   } catch { strays = null; }
 
   const snapshot = buildFrankSnapshot({ root, now: (overrides.now || Date.now)(), extraIssues: strays || [] });

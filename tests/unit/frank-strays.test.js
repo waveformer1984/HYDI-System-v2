@@ -116,6 +116,16 @@ describe('collectStrays', () => {
     const issues = await collectStrays(root, { platform: 'win32', exec });
     expect(issues.map((i) => i.id)).toEqual(['stray-daemon-lock']);
   });
+
+  it('uses a PM2 list read elsewhere and starts no pm2 jlist of its own', async () => {
+    const calls = [];
+    const exec = async (file) => { calls.push(file); return { procs: [], portOwner: null }; };
+    const issues = await collectStrays('/repo', { platform: 'win32', exec, pm2List: [] });
+    expect(issues).toEqual([]);
+    expect(calls).toEqual(['powershell.exe']);
+    expect(await collectStrays('/repo', { platform: 'win32', exec, pm2List: null })).toBeNull();
+    expect(calls).toEqual(['powershell.exe', 'powershell.exe']);
+  });
 });
 
 describe('frank-observer + strays', () => {
@@ -132,6 +142,7 @@ describe('frank-observer + strays', () => {
       now: () => t,
       collect: async () => ({ ok: true }),
       collectStrays: async () => stray,
+      readPm2List: async () => ({ list: [], ageMs: 0 }),
       post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
     });
     writeSample();

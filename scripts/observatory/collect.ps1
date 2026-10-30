@@ -8,7 +8,10 @@
 param(
   [switch]$Once,
   [int]$IntervalSec = 60,
-  [switch]$Quiet
+  [switch]$Quiet,
+  # Sanitized PM2 list written by frank-observer this pass. When given, this
+  # script does not run its own `pm2 jlist` (one jlist per pass, not three).
+  [string]$Pm2Snapshot = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -139,11 +142,17 @@ function Invoke-Collect {
     # strips all process environment values out of telemetry.
     $sanitizer = Join-Path $PSScriptRoot 'pm2_sanitizer.js'
     $jl = $null
-    if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $sanitizer)) {
+    if ($Pm2Snapshot) {
+      if (-not (Test-Path $Pm2Snapshot)) { throw 'shared PM2 snapshot missing (frank-observer)' }
+      $snap = Get-Content -Raw -Path $Pm2Snapshot | ConvertFrom-Json
+      if (-not $snap.available) { throw "pm2 jlist unreadable this pass: $($snap.reason)" }
+      $jl = @($snap.processes)
+    }
+    elseif ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $sanitizer)) {
       $reduced = pm2 jlist 2>$null | node $sanitizer 2>$null
       if ($LASTEXITCODE -eq 0 -and $reduced) { $jl = $reduced | ConvertFrom-Json }
     }
-    if (-not $jl) {
+    if (-not $jl -and -not $Pm2Snapshot) {
       # fallback: raw jlist parse - may hit the duplicate-key crash; caught below
       $raw = pm2 jlist 2>$null
       if ($raw) { $jl = $raw | ConvertFrom-Json | ForEach-Object { [ordered]@{ name = $_.name; pid = $_.pid; status = $_.pm2_env.status; restarts = $_.pm2_env.restart_time; uptime_ms = $_.pm2_env.pm_uptime; mem_bytes = $_.monit.memory; cpu_pct = $_.monit.cpu } } }

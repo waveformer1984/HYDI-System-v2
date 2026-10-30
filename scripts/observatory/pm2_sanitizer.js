@@ -9,12 +9,11 @@
 'use strict';
 const fs = require('fs');
 
-try {
-  const raw = fs.readFileSync(0, 'utf8');
-  const arr = JSON.parse(raw || '[]');
-  const out = arr.map((proc) => {
-    const env = proc.pm2_env || {};
-    const mon = proc.monit || {};
+/** The reduced, env-free record for each PM2 process. */
+function sanitizePm2List(arr) {
+  return (Array.isArray(arr) ? arr : []).map((proc) => {
+    const env = (proc && proc.pm2_env) || {};
+    const mon = (proc && proc.monit) || {};
     return {
       name: proc.name ?? null,
       pid: proc.pid ?? null,
@@ -25,8 +24,16 @@ try {
       cpu_pct: mon.cpu ?? null,
     };
   });
-  process.stdout.write(JSON.stringify(out));
-} catch (e) {
-  console.error('pm2_sanitizer error:', e && e.message ? e.message : e);
-  process.exit(2);
 }
+
+if (require.main === module) {
+  try {
+    const raw = fs.readFileSync(0, 'utf8');
+    process.stdout.write(JSON.stringify(sanitizePm2List(JSON.parse(raw || '[]'))));
+  } catch (e) {
+    console.error('pm2_sanitizer error:', e && e.message ? e.message : e);
+    process.exit(2);
+  }
+}
+
+module.exports = { sanitizePm2List };
