@@ -26,6 +26,8 @@
  *   node scripts/test-ipc-delivery-delay.js --samples=20 --condition=both
  */
 
+const { enforceDestructivePm2TestGuard } = require('./pm2-prod-daemon-guard');
+enforceDestructivePm2TestGuard('test-ipc-delivery-delay.js');
 const { fork, execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');

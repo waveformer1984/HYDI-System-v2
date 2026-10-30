@@ -23,6 +23,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { enforceDestructivePm2TestGuard } from './pm2-prod-daemon-guard.js';
+enforceDestructivePm2TestGuard('qualify-human-proxy-restart.ts');
 import { execSync } from 'child_process';
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config();
