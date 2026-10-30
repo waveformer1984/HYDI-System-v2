@@ -178,6 +178,28 @@
       ]
     },
     {
+      "id": "ursula-local",
+      "label": "Ursula Command Center (Next.js prod build, :3100)",
+      "type": "process",
+      "enabled": false,
+      "required": false,
+      "supervisor": "pm2",
+      "supervisedAs": "ursula-local",
+      "command": "npm",
+      "args": ["run", "start"],
+      "env": {
+        "PORT": "3100"
+      },
+      "port": 3100,
+      "health": {
+        "url": "http://127.0.0.1:3100/api/health",
+        "graceMs": 120000,
+        "intervalMs": 2500
+      },
+      "dependsOn": [],
+      "note": "disabled until Jordan enables it — PM2 ursula-local is the supervisor"
+    },
+    {
       "id": "rezonate-app",
       "label": "Rezonate App (custom generated tracks UI + API, :3001)",
       "type": "process",
