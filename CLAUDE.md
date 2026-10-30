@@ -144,6 +144,18 @@ loopback traffic with forwarding headers, e.g. `tailscale serve`) need a
 paired-device cookie from `/api/pair` or a bearer token
 (`lib/mobile-chat/local-auth.js`). See `docs/HEIDI_SYSTEM_STATUS.md`.
 
+#### No console windows from background processes
+
+Anything PM2 runs must launch child programs with `windowsHide: true`. On
+Frank, a console program started without it (git, gh, node, powershell, or
+cmd.exe when `shell` is on) opens a Windows Terminal window that takes focus,
+and a failed one stays open. That is the "windows keep popping up" problem,
+fixed 2026-10-30. `tests/unit/no-console-popups.test.js` enforces the rule
+for every script in `ecosystem.config.js`, plus `lib/observation`,
+`lib/storage` and `lib/runtime`. Don't add per-user scheduled tasks that run
+console programs: the old `HYDI-Watchdog` task was one, and it is retired.
+See `docs/FRANK_CONSOLE_POPUPS.md`.
+
 #### Stray processes (`lib/observation/strays.js`)
 
 `frank-observer` also checks, every pass on Windows, for processes PM2 has
