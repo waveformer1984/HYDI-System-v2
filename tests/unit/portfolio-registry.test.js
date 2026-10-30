@@ -39,4 +39,30 @@ describe('portfolio registry', () => {
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/cannot read/);
   });
+
+  test('live stripeMode refuses a test identity; only test passes', () => {
+    const { canIssueTestIdentity } = require('../../lib/portfolio/loader');
+    expect(canIssueTestIdentity({ stripeMode: 'live-via-main-app' })).toBe(false);
+    expect(canIssueTestIdentity({ stripeMode: 'none' })).toBe(false);
+    expect(canIssueTestIdentity({ stripeMode: 'test' })).toBe(true);
+    expect(canIssueTestIdentity({})).toBe(false);
+  });
+
+  test('every local healthUrl path exists in that app\'s router — no silent drift', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const ROUTERS = {
+      'rezonate-app': 'protoforge-applications/rezonate/src/api/router.js',
+      'proto-yi': 'protoforge-applications/proto-yi/src/api/router.js',
+    };
+    const r = loadPortfolio();
+    for (const [id, routerFile] of Object.entries(ROUTERS)) {
+      const app = r.apps.find((a) => a.id === id);
+      expect(app).toBeDefined();
+      const routePath = new URL(app.healthUrl).pathname;
+      const src = fs.readFileSync(path.resolve(__dirname, '..', '..', routerFile), 'utf8');
+      // The router must literally register the health path.
+      expect(src).toMatch(new RegExp(`app\\.get\\('${routePath.replace(/\//g, '\\/')}'`));
+    }
+  });
 });

@@ -93,6 +93,11 @@ export default function AppWorkspacePage() {
 
       {/* App pane */}
       <div className="flex-1 flex flex-col">
+        {data && data.app.stripeMode && !['none', 'test'].includes(data.app.stripeMode) && (
+          <div className="px-4 py-2 bg-yellow-900/60 border-b border-yellow-700 text-yellow-200 text-xs">
+            Orders here create REAL checkouts via {data.app.paymentPath || 'heidi-web'} — stripeMode: {data.app.stripeMode}
+          </div>
+        )}
         {running && appUrl && data?.app.embeddable !== false ? (
           <iframe src={appUrl} className="flex-1 w-full border-0" title={data.app.name} />
         ) : (

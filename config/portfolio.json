@@ -11,10 +11,11 @@
       "pm2Name": "rezonate-app",
       "port": 3001,
       "localUrl": "http://localhost:3001",
-      "healthUrl": "http://localhost:3001/api/health",
-      "appPaneUrl": "http://localhost:3001/resonate",
+      "healthUrl": "http://localhost:3001/health",
+      "appPaneUrl": "http://localhost:3001/",
       "devLogin": { "method": "none", "seed": null },
-      "stripeMode": "none",
+      "stripeMode": "live-via-main-app",
+      "paymentPath": "heidi-web /api/revenue/jobs",
       "embeddable": true
     },
     {
