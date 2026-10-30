@@ -145,7 +145,8 @@ describe('background processes never open console windows on Windows', () => {
   });
 
   it('the checker itself catches an unhidden launch and accepts a hidden one', () => {
-    const tmp = path.join(require('os').tmpdir(), `popup-check-${process.pid}.js`);
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'popup-check-'));
+    const tmp = path.join(dir, 'sample.js');
     fs.writeFileSync(tmp, [
       "const { spawn, execFileSync: run } = require('child_process');",
       "const cp = require('node:child_process');",
@@ -154,12 +155,12 @@ describe('background processes never open console windows on Windows', () => {
       "cp.exec('npm test', { shell: true });",
       "/x/.exec('not a launcher');",
       "// spawn('commented', ['out']) and /* exec('also') */ are ignored",
-    ].join('\n'));
+    ].join('\n'), { flag: 'wx', mode: 0o600 });
     try {
       const found = unhiddenLaunches(tmp).map((s) => s.replace(/^.*?:(\d+) /, '$1 '));
       expect(found).toEqual(["3 spawn('git', ['status'], { cwd: '.' }…)", "5 cp.exec('npm test', { shell: true }…)"]);
     } finally {
-      fs.unlinkSync(tmp);
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
