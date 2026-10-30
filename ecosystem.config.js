@@ -746,6 +746,30 @@ module.exports = {
       // Long-lived 60s loop: guarantees a fresh observatory sample, writes
       // the combined snapshot to .runtime/observation/frank.json, and posts
       // #alerts when a critical issue holds for two passes. Read-only.
+      name: 'ursula-local',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start --hostname 127.0.0.1 --port 3100',
+      cwd: 'apps/ursula-frontend',
+      instances: 1,
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production', PORT: '3100' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '600M',
+      min_uptime: '15s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: '../../logs/pm2-ursula-local.err.log',
+      out_file: '../../logs/pm2-ursula-local.out.log',
+      merge_logs: true,
+      time: true,
+      kill_timeout: 5000,
+      wait_ready: false,
+      listen_timeout: 10000
+    },
+    {
       name: 'frank-observer',
       script: 'scripts/frank-observer.js',
       cwd: __dirname,

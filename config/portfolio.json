@@ -1,0 +1,67 @@
+{
+  "description": "Single portfolio registry for the Ursula command center. Source of truth for every app Ursula can launch, frame, or operate on. kind: 'local' (repo app, PM2/script supervised), 'suite' (blueprint under the Ursula Suite Flask server), 'external' (off-host link).",
+  "version": 1,
+  "apps": [
+    {
+      "id": "rezonate-app",
+      "name": "Rezonate",
+      "division": "protoforge",
+      "kind": "local",
+      "repoPath": "protoforge-applications/rezonate",
+      "pm2Name": "rezonate-app",
+      "port": 3001,
+      "localUrl": "http://localhost:3001",
+      "healthUrl": "http://localhost:3001/api/health",
+      "appPaneUrl": "http://localhost:3001/resonate",
+      "devLogin": { "method": "none", "seed": null },
+      "stripeMode": "none",
+      "embeddable": true
+    },
+    {
+      "id": "lead-forge",
+      "name": "Lead Forge",
+      "division": "apps",
+      "kind": "local",
+      "repoPath": "lead-forge",
+      "pm2Name": "lead-forge",
+      "port": null,
+      "localUrl": null,
+      "healthUrl": null,
+      "devLogin": { "method": "none", "seed": null },
+      "stripeMode": "none",
+      "embeddable": true,
+      "note": "Service lands in the lead-forge step (port then registered in .ports.json)."
+    },
+    {
+      "id": "proto-yi",
+      "name": "Proto.I.Y",
+      "division": "protoforge",
+      "kind": "local",
+      "repoPath": "protoforge-applications/proto-yi",
+      "pm2Name": "proto-yi",
+      "port": 3010,
+      "localUrl": "http://localhost:3010",
+      "healthUrl": "http://localhost:3010/health",
+      "devLogin": { "method": "none", "seed": null },
+      "stripeMode": "none",
+      "embeddable": true,
+      "pendingDecision": "canonical pick confirmed: protoforge-applications/proto-yi; Flask suite is its engine (dependency, not an app)",
+      "dependencies": [
+        {
+          "name": "ursula-suite-proto_iy",
+          "kind": "suite",
+          "healthUrl": "http://localhost:5000/health",
+          "probe": {
+            "method": "POST",
+            "url": "http://localhost:5000/proto_iy/project",
+            "note": "manifest engineProbe — engine dependency, health only"
+          }
+        }
+      ]
+    }
+  ],
+  "external": {
+    "comment": "Off-host links live here. Jordan lists these — leave empty until then.",
+    "apps": []
+  }
+}

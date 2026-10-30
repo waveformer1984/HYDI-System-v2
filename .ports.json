@@ -74,6 +74,13 @@
       "description": "Switchboard operator console (moved off 3001 — rezonate-app owns 3001)",
       "depends_on": []
     },
+    "ursula-local": {
+      "port": 3100,
+      "name": "Ursula Command Center (local)",
+      "env_var": "URSULA_PORT",
+      "description": "Ursula portfolio console — next start -p 3100 (production build, PM2 ursula-local)",
+      "depends_on": []
+    },
     "supabase-rest": {
       "port": 3001,
       "name": "Supabase REST API",
