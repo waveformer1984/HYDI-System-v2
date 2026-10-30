@@ -1310,7 +1310,9 @@ class HeidiCore {
         if (this._brainProcess) {
           try { this._brainProcess.kill(); } catch (e) { /* already dead */ }
         }
-        this._brainProcess = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', shell: true });
+        // windowsHide: without it every revive attempt (one per 90s while Ollama
+        // is down) opens a visible "ollama serve" terminal on Frank's desktop.
+        this._brainProcess = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', shell: true, windowsHide: true });
         this._brainProcess.unref();
       } catch (e) {
         console.error('[HEIDI Watchdog]', e.message);

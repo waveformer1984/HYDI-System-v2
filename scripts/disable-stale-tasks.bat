@@ -22,6 +22,11 @@ schtasks /Change /TN "\HYDI Guardian - Daily Sweep" /DISABLE
 schtasks /Change /TN "\HYDI Guardian - Enforce Startup Blocks" /DISABLE
 schtasks /Change /TN "\HYDI_Startup" /DISABLE
 
+REM HYDI-Watchdog opened a terminal window every 2 minutes and duplicated
+REM PM2's hydi-watchdog (see docs\FRANK_CONSOLE_POPUPS.md). Removed, not just
+REM disabled. It is a per-user task, so this line needs no admin rights.
+schtasks /Delete /TN "HYDI-Watchdog" /F
+
 echo.
 echo Done. The following tasks were already disabled (no action needed):
 echo   HeidiAutopilot, HeidiEvolution, HeidiSystem, HYDI AutoStart,
@@ -30,7 +35,7 @@ echo   HYDI Health Monitor, HYDI Status Collector, HYDI System Scanner,
 echo   HYDI Workspace Cleanup, HydiSelfEvolveCycle, HydiSunrise,
 echo   HYDI_Autorun_Backup
 echo.
-echo The only scheduled task you need going forward is:
-echo   HYDI-Watchdog  (installed by scripts\install-watchdog.ps1)
+echo No HYDI scheduled task is needed going forward: PM2 runs the
+echo watchdog (hydi-watchdog) and everything else. See ecosystem.config.js.
 echo.
 pause

@@ -109,7 +109,7 @@ function killChildTree(child) {
   if (!child || child.exitCode !== null) return;
   try {
     if (process.platform === 'win32' && child.pid) {
-      execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore' });
+      execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore', windowsHide: true });
     } else {
       child.kill('SIGKILL');
     }

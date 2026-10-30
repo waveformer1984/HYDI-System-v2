@@ -32,6 +32,10 @@
  * statuses: write" (fine-grained) or `repo:status` (classic). Never logged.
  */
 
+// Every launch passes windowsHide: true. This runs under PM2 on heidi-pc, and
+// on Windows a console program started without it (git, gh, and cmd.exe for
+// npm/npx when shell is on) opens a visible terminal window that steals
+// focus; a failed one stays open. See docs/FRANK_CONSOLE_POPUPS.md.
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -124,7 +128,7 @@ function getToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
   if (process.env.GH_TOKEN) return process.env.GH_TOKEN;
   try {
-    return execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: IS_WINDOWS }).trim();
+    return execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: IS_WINDOWS, windowsHide: true }).trim();
   } catch (_) {
     return null;
   }
@@ -157,7 +161,7 @@ function postStatus(ctx, sha, context, state, description) {
 }
 
 function git(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
 }
 
 /**
@@ -190,7 +194,7 @@ function supabaseCheckEnv(statusOutput, env = process.env) {
 function readLocalSupabaseStatus(cwd) {
   try {
     return execFileSync('npx', ['supabase', 'status', '-o', 'env'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: IS_WINDOWS, timeout: 120000,
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: IS_WINDOWS, timeout: 120000, windowsHide: true,
     });
   } catch (_) {
     return null;
@@ -201,7 +205,7 @@ function readLocalSupabaseStatus(cwd) {
 function run(cmd, args, cwd, logStream, extraEnv = {}) {
   return new Promise((resolve) => {
     logStream.write(`\n$ ${cmd} ${args.join(' ')}\n`);
-    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, env: { ...process.env, ...extraEnv, CI: 'true' } });
+    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, windowsHide: true, env: { ...process.env, ...extraEnv, CI: 'true' } });
     let output = '';
     const onData = (chunk) => {
       output += chunk;
