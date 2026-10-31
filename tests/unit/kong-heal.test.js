@@ -107,3 +107,23 @@ describe('kong-heal', () => {
     expect(calls.filter((c) => c.startsWith('restart'))).toEqual(['restart supabase_kong_X']);
   });
 });
+
+describe('kong-heal log lines', () => {
+  const { sanitizeLogLine } = require('../../lib/supabase/kong-heal');
+
+  it('flattens newlines and control characters so one call is one line', () => {
+    const out = sanitizeLogLine('kong-heal: docker ps failed (boom\n2026-01-01T00:00:00Z kong-heal: recovered\r\u0007)');
+    expect(out).not.toMatch(/[\n\r\u0007]/);
+    expect(out).toContain('boom 2026-01-01T00:00:00Z');
+  });
+
+  it('caps very long lines', () => {
+    const out = sanitizeLogLine('x'.repeat(5000));
+    expect(out.length).toBe(501);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('leaves an ordinary line unchanged', () => {
+    expect(sanitizeLogLine('kong-heal: none (rest reachable (HTTP 200))')).toBe('kong-heal: none (rest reachable (HTTP 200))');
+  });
+});
