@@ -192,7 +192,7 @@ async function runCycle(deps = {}) {
   try {
     const healKong = deps.healKong || require('../lib/supabase/kong-heal').maybeHealKong;
     const heal = await healKong();
-    if (heal && heal.action !== 'none') log(`  kong-heal: ${heal.action} (${heal.reason || heal.container || 'no detail'})`);
+    if (heal) log(`  kong-heal: ${heal.action} (${heal.reason || heal.container || 'no detail'})`);
   } catch (e) {
     log(`  kong-heal probe failed (never fails the cycle): ${e.message}`);
   }
