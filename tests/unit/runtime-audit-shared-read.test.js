@@ -12,7 +12,7 @@
  */
 
 const os = require('os');
-const { collectRuntimeAudit, resetPm2ReadCache } = require('../../lib/runtime/collect');
+const { collectRuntimeAudit, resetPm2ReadCache, readPm2List, execFileText } = require('../../lib/runtime/collect');
 
 const JLIST = JSON.stringify([{
   name: 'hydi-boot',
@@ -115,7 +115,7 @@ describe('shared pm2 jlist read', () => {
     pm2.timeout();
     const res = await p;
     expect(res.overall).toBe('UNKNOWN');
-    expect(res.suggestion).toMatch(/did not answer within 60s/);
+    expect(res.suggestion).toMatch(/did not answer within 120s/);
   });
 
   it('nothing older than the max-stale window is ever served', async () => {
@@ -129,5 +129,45 @@ describe('shared pm2 jlist read', () => {
     const res = await collectRuntimeAudit(base(pm2, clock, { waitMs: 20 }));
     expect(res.overall).toBe('UNKNOWN');
     pm2.answer();
+  });
+
+  it('readPm2List parses the shared read and reports the reason when unreadable', async () => {
+    const pm2 = fakePm2();
+    const clock = { t: 0 };
+    const p = readPm2List({ root: os.tmpdir(), execFile: pm2.execFile, now: () => clock.t, waitMs: 1000 });
+    await tick();
+    pm2.answer();
+    const got = await p;
+    expect(got.list).toHaveLength(1);
+    expect(got.list[0].name).toBe('hydi-boot');
+    resetPm2ReadCache();
+    const bad = readPm2List({ root: os.tmpdir(), execFile: pm2.execFile, now: () => clock.t, waitMs: 1000 });
+    await tick();
+    pm2.answer('not json');
+    expect(await bad).toEqual({ list: null, why: 'pm2 jlist output was not JSON' });
+  });
+});
+
+describe('execFileText tree kill', () => {
+  it('on its own deadline kills the whole tree of a hung launch and reports a timeout', async () => {
+    const killed = [];
+    const execImpl = jest.fn(() => ({ pid: 4242, on() {} })); // never calls back: hung
+    let reason = null;
+    const text = await execFileText(execImpl, 'pm2', ['jlist'], os.tmpdir(), 30, (r) => { reason = r; },
+      { treeKill: true, killImpl: (pid) => killed.push(pid) });
+    expect(text).toBeNull();
+    expect(reason).toBe('timeout');
+    expect(killed).toEqual([4242]);
+    expect(execImpl.mock.calls[0][2].timeout).toBe(0); // Node's own timeout would kill only cmd.exe
+  });
+
+  it('does not kill anything when the launch answers in time', async () => {
+    const killed = [];
+    const execImpl = (_c, _a, _o, cb) => { setImmediate(() => cb(null, '[]')); return { pid: 7, on() {} }; };
+    const text = await execFileText(execImpl, 'pm2', ['jlist'], os.tmpdir(), 1000, null,
+      { treeKill: true, killImpl: (pid) => killed.push(pid) });
+    expect(text).toBe('[]');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(killed).toEqual([]);
   });
 });

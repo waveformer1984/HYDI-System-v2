@@ -119,10 +119,37 @@ describe('frank-observer loop', () => {
       // The real collectStrays spawns powershell + `pm2 jlist` (20s each).
       // These tests exercise the pass logic, not process enumeration.
       collectStrays: async () => [],
+      // The real read spawns `pm2 jlist`; the pass logic is what's tested.
+      readPm2List: async () => ({ list: [], ageMs: 0 }),
       post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
     };
     return { root, posts, collect, opts };
   }
+
+  it('reads PM2 once per pass and shares it: sanitized file for the collector, the list for strays', async () => {
+    const h = harness({ '.observatory/current.json': sample({ ts: iso(2 * 60 * 1000) }) });
+    const list = [{ name: 'heidi-core', pid: 42, pm2_env: { status: 'online', restart_time: 1, SECRET_TOKEN: 'do-not-write' }, monit: { memory: 1, cpu: 0 } }];
+    const readPm2List = jest.fn(async () => ({ list, ageMs: 1234 }));
+    const collectStrays = jest.fn(async () => []);
+    await observer.runObservationPass({ ...h.opts, readPm2List, collectStrays, now: () => NOW });
+    expect(readPm2List).toHaveBeenCalledTimes(1);
+    expect(collectStrays).toHaveBeenCalledWith(h.root, expect.objectContaining({ pm2List: list }));
+    const snapPath = path.join(h.root, '.runtime', 'observation', 'pm2-sanitized.json');
+    expect(h.collect).toHaveBeenCalledWith(h.root, { pm2SnapshotPath: snapPath });
+    const raw = fs.readFileSync(snapPath, 'utf8');
+    expect(raw).not.toContain('do-not-write');
+    expect(raw).not.toContain('SECRET_TOKEN');
+    expect(JSON.parse(raw)).toMatchObject({ available: true, ageMs: 1234, processes: [{ name: 'heidi-core', pid: 42, status: 'online', restarts: 1 }] });
+  });
+
+  it('an unreadable PM2 is written as unavailable with the reason, and strays gets null (no second jlist)', async () => {
+    const h = harness({ '.observatory/current.json': sample({ ts: iso(2 * 60 * 1000) }) });
+    const collectStrays = jest.fn(async () => null);
+    await observer.runObservationPass({ ...h.opts, readPm2List: async () => ({ list: null, why: 'pm2 jlist still answering after 20s' }), collectStrays, now: () => NOW, log: () => {} });
+    expect(collectStrays).toHaveBeenCalledWith(h.root, expect.objectContaining({ pm2List: null }));
+    const snap = JSON.parse(fs.readFileSync(path.join(h.root, '.runtime', 'observation', 'pm2-sanitized.json'), 'utf8'));
+    expect(snap).toMatchObject({ available: false, reason: 'pm2 jlist still answering after 20s', processes: [] });
+  });
 
   it('a fix-list collector that never resolves still lets alerts evaluate and writes a timeout item', async () => {
     const h = harness({ '.observatory/current.json': sample({ pm2: { available: true, processes: [{ name: 'x', status: 'errored' }] } }) });
@@ -143,7 +170,7 @@ describe('frank-observer loop', () => {
 
     const old = harness({ '.observatory/current.json': sample({ ts: iso(2 * 60 * 1000) }) });
     await observer.runObservationPass({ ...old.opts, now: () => NOW });
-    expect(old.collect).toHaveBeenCalledWith(old.root);
+    expect(old.collect).toHaveBeenCalledWith(old.root, expect.objectContaining({ pm2SnapshotPath: expect.any(String) }));
 
     const linux = harness({});
     const { snapshot } = await observer.runObservationPass({ ...linux.opts, platform: 'linux', now: () => NOW });

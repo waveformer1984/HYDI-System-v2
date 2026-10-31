@@ -289,11 +289,14 @@ and the server reads that stamp.
 with `pm2 jlist` and `ecosystem.config.js`. It only reports. `pm2 jlist` can
 take ~30s on Frank under memory pressure, so `lib/runtime/collect.js` runs
 one shared read at a time (bounded by `HYDI_PM2_JLIST_TIMEOUT_MS`, default
-60s), reuses it for `HYDI_PM2_JLIST_CACHE_MS` (60s), serves a result up to
+120s; on timeout the whole `cmd` → `pm2` tree is killed, never left running), reuses it for `HYDI_PM2_JLIST_CACHE_MS` (60s), serves a result up to
 10 minutes old while refreshing (its age is `pm2ReadAgeMs`), and lets each
 caller wait only its own `waitMs` (20s for health probes, 4s for fix-list,
-the full read for the CLI). With nothing recent it is UNKNOWN with the reason. It never
-restarts, kills, or starts a process. Each row is one of:
+the full read for the CLI). With nothing recent it is UNKNOWN with the reason. `frank-observer` takes
+that one read per pass and hands it to the observatory collector
+(`collect.ps1 -Pm2Snapshot`, sanitized, no env values) and the strays check,
+instead of each running its own `pm2 jlist`. The audit never restarts,
+kills, or starts a managed process. Each row is one of:
 
 | Verdict | Meaning |
 |---|---|
