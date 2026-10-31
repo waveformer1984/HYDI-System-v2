@@ -70,6 +70,30 @@ describe('kong-heal', () => {
     expect(docker.mock.calls.filter((c) => c[0] === 'restart')).toEqual([]);
   });
 
+  it('401 from REST counts as reachable - no restart', async () => {
+    const docker = jest.fn();
+    const fetcher = jest.fn(async () => 401);
+    const r = await maybeHealKong(makeDeps({ fetcher, dockerRunner: docker }));
+    expect(r.action).toBe('none');
+    expect(r.reason).toContain('401');
+    expect(docker).not.toHaveBeenCalled();
+  });
+
+  it('timeout + kong Up restarts exactly once', async () => {
+    const calls = [];
+    const docker = jest.fn(async (args) => {
+      calls.push(args.join(' '));
+      if (args[0] === 'ps') return 'supabase_kong_X Up 2 minutes';
+      return 'supabase_kong_X';
+    });
+    const fetcher = jest.fn()
+      .mockRejectedValueOnce(new DOMException('TimeoutError', 'TimeoutError'))
+      .mockResolvedValueOnce(200);
+    const r = await maybeHealKong(makeDeps({ fetcher, dockerRunner: docker, recheckDelayMs: 0 }));
+    expect(r.action).toBe('recovered');
+    expect(calls.filter((c) => c.startsWith('restart'))).toEqual(['restart supabase_kong_X']);
+  });
+
   it('never restarts a non-kong supabase container', async () => {
     const calls = [];
     const docker = jest.fn(async (args) => {
