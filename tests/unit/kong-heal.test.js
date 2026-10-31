@@ -127,3 +127,20 @@ describe('kong-heal log lines', () => {
     expect(sanitizeLogLine('kong-heal: none (rest reachable (HTTP 200))')).toBe('kong-heal: none (rest reachable (HTTP 200))');
   });
 });
+
+describe('kong-heal never reaches the real docker when live actions are disabled', () => {
+  const { maybeHealKong } = require('../../lib/supabase/kong-heal');
+
+  it('refuses before probing when HYDI_DISABLE_LIVE_ACTIONS=1 and no dockerRunner is injected', async () => {
+    const prev = process.env.HYDI_DISABLE_LIVE_ACTIONS;
+    process.env.HYDI_DISABLE_LIVE_ACTIONS = '1';
+    const fetcher = jest.fn(async () => { throw new Error('refused'); });
+    try {
+      const res = await maybeHealKong({ supabaseUrl: 'http://127.0.0.1:54321', fetcher, log: () => {} });
+      expect(res).toEqual({ action: 'none', reason: 'live actions disabled (HYDI_DISABLE_LIVE_ACTIONS)' });
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete process.env.HYDI_DISABLE_LIVE_ACTIONS; else process.env.HYDI_DISABLE_LIVE_ACTIONS = prev;
+    }
+  });
+});
