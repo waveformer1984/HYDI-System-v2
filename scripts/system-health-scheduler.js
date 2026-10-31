@@ -186,6 +186,17 @@ function parseStatus(stdout) {
 async function runCycle(deps = {}) {
   log('--- Health cycle starting ---');
 
+  // Kong-wedge self-heal: if REST is refused while its container reports Up,
+  // restart exactly that container (capped, logged) before the health run so a
+  // recovered forward lets the measurement persist. Injectable for tests.
+  try {
+    const healKong = deps.healKong || require('../lib/supabase/kong-heal').maybeHealKong;
+    const heal = await healKong();
+    if (heal) log(`  kong-heal: ${heal.action} (${heal.reason || heal.container || 'no detail'})`);
+  } catch (e) {
+    log(`  kong-heal probe failed (never fails the cycle): ${e.message}`);
+  }
+
   const runHealth = deps.runHealthScript || runHealthScript;
   let supabase = deps.supabase;
   if (!supabase) {

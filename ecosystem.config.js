@@ -72,7 +72,7 @@ module.exports = {
       // leaves the app errored forever — nothing comes back when the
       // dependency does. Takes effect on `pm2 start/reload`, not on an
       // already-running entry whose PM2 settings have drifted from git.
-      exp_backoff_restart_delay: 1000,
+      exp_backoff_restart_delay: 2000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-hydi-boot.err.log',
       out_file: './logs/pm2-hydi-boot.out.log',
