@@ -712,6 +712,38 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Heidi's phone chat on :3006 (launch-heidi-mobile.js). Until 2026-10-31
+      // it ran only as a hand-started process that nothing restarted, and
+      // boot-agent merely adopted it as external(UNSUPERVISED). PM2 now owns
+      // it; boot.config.json marks the module supervisor:'pm2'.
+      // HEIDI_MOBILE_REQUIRE_TOKEN=1: the server refuses to start (exit 78,
+      // not restarted) unless HEIDI_MOBILE_TOKEN is in the environment, so it
+      // can never come up on the tailnet without device login. The token is
+      // never written here: start it from a shell that has it, with
+      //   pm2 start ecosystem.config.js --only heidi-mobile-chat --update-env
+      name: 'heidi-mobile-chat',
+      script: 'launch-heidi-mobile.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: { NODE_ENV: 'development', HEIDI_MOBILE_PORT: '3006', HEIDI_MOBILE_REQUIRE_TOKEN: '1' },
+      env_production: { NODE_ENV: 'production', HEIDI_MOBILE_PORT: '3006', HEIDI_MOBILE_REQUIRE_TOKEN: '1' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      stop_exit_codes: [78],
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: path.join(__dirname, 'logs', 'pm2-heidi-mobile-chat.err.log'),
+      out_file: path.join(__dirname, 'logs', 'pm2-heidi-mobile-chat.out.log'),
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
       // Declared from LOCAL_CI.md:
       //   pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch --include-main --interval 10
       // Posts local-ci/* commit statuses. Stop it on a machine that should

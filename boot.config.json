@@ -78,6 +78,8 @@
       "type": "process",
       "enabled": true,
       "required": false,
+      "supervisor": "pm2",
+      "supervisedAs": "heidi-mobile-chat",
       "command": "node",
       "args": [
         "launch-heidi-mobile.js"

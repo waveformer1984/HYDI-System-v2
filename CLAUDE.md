@@ -143,6 +143,10 @@ login for `launch-heidi-mobile.js`: off-box `/api/*` calls (including
 loopback traffic with forwarding headers, e.g. `tailscale serve`) need a
 paired-device cookie from `/api/pair` or a bearer token
 (`lib/mobile-chat/local-auth.js`). See `docs/HEIDI_SYSTEM_STATUS.md`.
+The chat on :3006 runs under PM2 as `heidi-mobile-chat` (boot-agent leaves
+it to PM2). Its PM2 env sets `HEIDI_MOBILE_REQUIRE_TOKEN=1`, so without
+`HEIDI_MOBILE_TOKEN` it exits 78 instead of serving the tailnet unlocked;
+start it from a shell that has the token, with `--update-env`.
 
 #### No console windows from background processes
 
