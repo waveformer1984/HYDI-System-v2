@@ -393,6 +393,17 @@ async function streamLMStudio(message, model, systemPrompt, send) {
 // and point these at the resulting files; falls back to plain HTTP for LAN use.
 const TLS_CERT = process.env.HEIDI_TLS_CERT;
 const TLS_KEY = process.env.HEIDI_TLS_KEY;
+
+// Under PM2 (ecosystem.config.js sets HEIDI_MOBILE_REQUIRE_TOKEN=1) the chat
+// is reachable over the tailnet, so starting without HEIDI_MOBILE_TOKEN would
+// silently serve it with no device login. Refuse instead; exit 78 is in the
+// app's stop_exit_codes, so PM2 does not loop on it.
+if (require.main === module && process.env.HEIDI_MOBILE_REQUIRE_TOKEN === '1' && !process.env.HEIDI_MOBILE_TOKEN) {
+    console.error('[heidi-mobile] HEIDI_MOBILE_REQUIRE_TOKEN=1 but HEIDI_MOBILE_TOKEN is not set; refusing to start without device login.');
+    console.error('[heidi-mobile] Start it from a shell that has the token: pm2 start ecosystem.config.js --only heidi-mobile-chat --update-env');
+    process.exit(78);
+}
+
 const useTLS = Boolean(TLS_CERT && TLS_KEY && fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY));
 const protocol = useTLS ? 'https' : 'http';
 
