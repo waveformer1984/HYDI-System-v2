@@ -244,7 +244,7 @@ async function waitForHealth({
 }
 
 function healthText(health) {
-  return (health.results || []).map((result) =>
+  return ((health && health.results) || []).map((result) =>
     `${result.name}:${result.ok ? `ok(${result.status})` : `FAIL(${result.status || 'unreachable'})`}`).join(', ');
 }
 
@@ -555,6 +555,19 @@ async function runAutoDeploy(overrides = {}) {
   return result;
 }
 
+/** One log line for a deploy that changed something. */
+function describeOutcome(result) {
+  const range = result.oldCommit && result.newCommit
+    ? ` ${String(result.oldCommit).slice(0, 8)}→${String(result.newCommit).slice(0, 8)}` : '';
+  if (result.status === 'deployed') {
+    return `deployed${range}; health: ${healthText(result.health)}`;
+  }
+  const why = result.reason
+    ? `deployment error: ${String(result.reason).split(/\r?\n/).slice(0, 3).join(' | ').slice(0, 600)}`
+    : `failed health: ${healthText(result.health)}`;
+  return `rolled_back${range}; ${why}; rollback health: ${healthText(result.rollbackHealth)}`;
+}
+
 function startDeployLoop({
   deploy = runAutoDeploy,
   intervalMs = INTERVAL_MS,
@@ -572,6 +585,12 @@ function startDeployLoop({
       const result = await deploy();
       if (result.status === 'failed' || result.status === 'rollback_failed') {
         log(`[${APP_NAME}] ${result.status}: ${result.reason || ''}`);
+      } else if (result.status === 'rolled_back' || result.status === 'deployed') {
+        // These outcomes used to reach only the board. On 2026-11-02 a
+        // rollback left nothing in the PM2 logs and the board read on Frank
+        // could not show it, so the cause was lost. Log every one.
+        loggedBlockedReasons.clear();
+        log(`[${APP_NAME}] ${describeOutcome(result)}`);
       } else if (result.status === 'blocked') {
         const reason = result.reason || 'unknown';
         if (!loggedBlockedReasons.has(reason)) {
@@ -625,4 +644,5 @@ module.exports = {
   WEB_APP,
   runAutoDeploy,
   startDeployLoop,
+  describeOutcome,
 };

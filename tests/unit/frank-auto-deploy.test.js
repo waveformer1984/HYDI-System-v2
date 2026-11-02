@@ -520,6 +520,45 @@ describe('Frank auto-deploy', () => {
   });
 });
 
+describe('Frank auto-deploy outcome log', () => {
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+  it('logs a rollback with its cause and a deploy with its health, not only to the board', async () => {
+    const log = jest.fn();
+    const results = [
+      { status: 'rolled_back', oldCommit: OLD, newCommit: NEW, reason: 'npm run build failed: JavaScript heap out of memory\nmore', rollbackHealth: { results: [{ name: 'web', ok: true, status: 200 }] } },
+      { status: 'deployed', oldCommit: OLD, newCommit: NEW, health: { results: [{ name: 'web', ok: true, status: 200 }] } },
+      { status: 'rolled_back', oldCommit: OLD, newCommit: NEW, health: { results: [{ name: 'web', ok: false, status: 503 }] }, rollbackHealth: { results: [] } },
+      { status: 'noop' },
+    ];
+    const deploy = jest.fn(async () => results.shift() || { status: 'noop' });
+    const { tick } = startDeployLoop({ deploy, setIntervalFn: () => 0, log });
+    await flush();
+    for (let i = 0; i < 3; i += 1) { await tick(); await flush(); }
+    const lines = log.mock.calls.map((call) => call[0]);
+    expect(lines).toEqual([
+      '[frank-auto-deploy] rolled_back 11111111→22222222; deployment error: npm run build failed: JavaScript heap out of memory | more; rollback health: web:ok(200)',
+      '[frank-auto-deploy] deployed 11111111→22222222; health: web:ok(200)',
+      '[frank-auto-deploy] rolled_back 11111111→22222222; failed health: web:FAIL(503); rollback health: ',
+    ]);
+  });
+
+  it('logs the same blocked reason again after a deploy in between', async () => {
+    const log = jest.fn();
+    const results = [
+      { status: 'blocked', reason: 'low memory' },
+      { status: 'deployed', oldCommit: OLD, newCommit: NEW, health: { results: [] } },
+      { status: 'blocked', reason: 'low memory' },
+    ];
+    const deploy = jest.fn(async () => results.shift() || { status: 'noop' });
+    const { tick } = startDeployLoop({ deploy, setIntervalFn: () => 0, log });
+    await flush();
+    for (let i = 0; i < 2; i += 1) { await tick(); await flush(); }
+    const lines = log.mock.calls.map((call) => call[0]);
+    expect(lines.filter((l) => l === '[frank-auto-deploy] blocked: low memory')).toHaveLength(2);
+  });
+});
+
 describe('Frank auto-deploy restart set', () => {
   const jlist = (apps) => jest.fn(async () => ok(JSON.stringify(apps)));
 
