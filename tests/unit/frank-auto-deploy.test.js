@@ -776,11 +776,14 @@ describe('Frank auto-deploy staged builds', () => {
     expect(h.posts[0].body).toContain('waiting: only 0.3 GB RAM free');
   });
 
-  it('memoryPreflight reads free RAM against HYDI_DEPLOY_MIN_FREE_RAM_GB (default 0.75)', () => {
+  it('memoryPreflight reads free RAM against HYDI_DEPLOY_MIN_FREE_RAM_GB (default 1.5)', () => {
     const { memoryPreflight } = require('../../scripts/frank-auto-deploy');
     const GB = 1024 ** 3;
     expect(memoryPreflight({}, () => 0.5 * GB)).toMatchObject({ ok: false });
+    // 0.75-1.5 GB used to pass and then die in next build
+    expect(memoryPreflight({}, () => 1 * GB)).toMatchObject({ ok: false, reason: 'only 1 GB RAM free, needs 1.5 GB' });
     expect(memoryPreflight({}, () => 2 * GB)).toMatchObject({ ok: true });
+    expect(memoryPreflight({ HYDI_DEPLOY_MIN_FREE_RAM_GB: '0.75' }, () => 1 * GB)).toMatchObject({ ok: true });
     expect(memoryPreflight({ HYDI_DEPLOY_MIN_FREE_RAM_GB: '3' }, () => 2 * GB)).toMatchObject({ ok: false });
   });
 

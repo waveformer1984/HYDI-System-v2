@@ -88,7 +88,8 @@ touches Docker volumes or user files. See `docs/STORAGE_PROGRAM.md`.
 
 PM2 loop (5 min), fast-forward only. Preflights: clean `clean-main`, free
 disk ≥ `HYDI_DEPLOY_MIN_FREE_GB` (5), free RAM ≥
-`HYDI_DEPLOY_MIN_FREE_RAM_GB` (0.75). The Next build runs into
+`HYDI_DEPLOY_MIN_FREE_RAM_GB` (1.5; it was 0.75 until two builds that started
+just above it rolled back on 2026-11-02, most likely out of memory). The Next build runs into
 `.next-staging` (`HYDI_NEXT_DIST_DIR`, read by `next.config.js` and
 `scripts/stamp-hydi-build.js`) while the live site keeps serving `.next`;
 an incomplete build (no `BUILD_ID`/`server/pages-manifest.json`) never goes
