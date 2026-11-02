@@ -58,6 +58,7 @@ interface Proposal {
 // gate. Stored only in this browser; never sent anywhere but this page's
 // own /api/actions/:id.
 const SERVICE_SECRET_KEY = 'hydi.serviceSecret'
+const CONVERSATION_KEY = 'heidi_core_conversation_id'
 
 async function mintServiceToken(secret: string): Promise<string> {
   const ts = Date.now().toString()
@@ -93,6 +94,10 @@ export default function HeidiChat() {
     }
     return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   })
+  // heidi-core conversation id: the dashboard's thread in Heidi's memory
+  // (heidi-core/data/heidi_memory.db), shared with the phone chat's brain.
+  // Kept per browser so a reload continues the same conversation.
+  const conversationIdRef = useRef<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null)
@@ -185,6 +190,39 @@ export default function HeidiChat() {
       .catch(() => setConnectionOk(false))
   }, [])
 
+  // Reload the recent turns of this browser's conversation, so a refresh
+  // shows what was said. Only answers on this PC or with the service token
+  // (pages/api/heidi-core/history.ts); anywhere else the chat still
+  // remembers server-side, it just starts with an empty screen.
+  useEffect(() => {
+    let stored: string | null = null
+    try { stored = localStorage.getItem(CONVERSATION_KEY) } catch { stored = null }
+    if (!stored) return
+    conversationIdRef.current = stored
+    const headers: Record<string, string> = {}
+    const loadHistory = async () => {
+      let secret = ''
+      try { secret = localStorage.getItem(SERVICE_SECRET_KEY) || '' } catch { secret = '' }
+      if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret)
+      const r = await fetch(`/api/heidi-core/history?conversation_id=${encodeURIComponent(stored as string)}&limit=40`, { headers })
+      if (r.status === 404) {
+        try { localStorage.removeItem(CONVERSATION_KEY) } catch { /* private mode */ }
+        conversationIdRef.current = null
+        return
+      }
+      if (!r.ok) return
+      const body = await r.json() as { messages?: { role: 'user' | 'assistant'; content: string; created_at: string | null }[] }
+      const past = (body.messages || []).map((m, i) => ({
+        id: `h-${i}`,
+        role: m.role,
+        content: m.content,
+        timestamp: m.created_at ? new Date(m.created_at) : new Date(),
+      }))
+      if (past.length) setMessages(prev => (prev.length ? prev : past))
+    }
+    loadHistory().catch(() => { /* history is a convenience; chat still works */ })
+  }, [])
+
   // Smooth scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
@@ -236,6 +274,7 @@ export default function HeidiChat() {
           message: text.trim(),
           session_id: sessionId,
           user_id: 'operator',
+          conversation_id: conversationIdRef.current,
         }),
         signal: abortRef.current.signal,
       })
@@ -274,6 +313,10 @@ export default function HeidiChat() {
               )
             } else if (data.type === 'metadata' && data.model_used) {
               setModel(data.model_used)
+              if (typeof data.conversation_id === 'string' && data.conversation_id) {
+                conversationIdRef.current = data.conversation_id
+                try { localStorage.setItem(CONVERSATION_KEY, data.conversation_id) } catch { /* private mode */ }
+              }
             } else if (data.type === 'tool') {
               setMessages(prev =>
                 prev.map(m =>

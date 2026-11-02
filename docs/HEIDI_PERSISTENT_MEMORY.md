@@ -94,6 +94,26 @@ Code lives in `heidi-core/memory/`:
   - Each item is flattened to one line, and anything resembling a
     `<memory>` tag is neutralised.
 
+## The dashboard (heidi-web, :3000)
+
+The dashboard chat (`pages/index.tsx` → `POST /api/chat`) uses the same
+brain. After its quick-answer paths (status, approvals, COO state), a
+general message goes to heidi-core `/chat-tools` through
+`lib/heidi-core-chat.js`, with the dashboard's own `conversation_id`. The
+browser keeps that id in localStorage (`heidi_core_conversation_id`) and
+learns it from the reply's `metadata` event. Phone and dashboard share the
+owner (`HEIDI_OWNER`), so long-term memories saved in one are recalled in
+the other; each keeps its own conversation thread.
+
+- An unknown id (the db was reset) starts a new conversation and the reply
+  says `conversation_reset`.
+- heidi-core's `fallback` reply (no model available) is never shown; the
+  dashboard falls back to the legacy orchestrator instead.
+- `HEIDI_DASHBOARD_CORE_CHAT=false` turns this path off.
+- `GET /api/heidi-core/history?conversation_id=` reloads the last turns on
+  page load. It answers only to a direct request from this PC or one with a
+  valid `x-hydi-service-token`.
+
 ## Memory commands
 
 Type these in Heidi's chat; the 🧠 Memory and 📁 HYDI status buttons send them
