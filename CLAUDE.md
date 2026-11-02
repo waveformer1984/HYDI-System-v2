@@ -113,8 +113,11 @@ Storage is `hm_*` tables in `heidi-core/data/heidi_memory.db` via the
 built-in `node:sqlite` (no in-memory fallback — failures are reported per
 turn). Every query is scoped by owner (`HEIDI_OWNER`, or `x-heidi-owner`
 from an authenticated caller). Chat commands: `memory status|search|recent|
-project <hydi|heidi|protoforge>|audit|forget`. See
-`docs/HEIDI_PERSISTENT_MEMORY.md`.
+project <hydi|heidi|protoforge>|audit|forget`. The dashboard chat on :3000
+uses the same memory: `/api/chat` sends general messages to `/chat-tools`
+with the browser's `conversation_id` (`lib/heidi-core-chat.js`), and
+`/api/heidi-core/history` reloads recent turns (this PC or the service token
+only). See `docs/HEIDI_PERSISTENT_MEMORY.md`.
 
 #### Heidi task lifecycle (`heidi-core/missions/`)
 

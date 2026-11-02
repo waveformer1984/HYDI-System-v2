@@ -31,6 +31,7 @@ import {
   clearFocus,
 } from '../../lib/heidi/ConversationContext';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
+import { streamChat as streamHeidiCoreChat } from '../../lib/heidi-core-chat';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
 import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer';
@@ -192,6 +193,40 @@ interface ChatRequest {
   message: string;
   session_id: string;
   user_id: string;
+  /** heidi-core conversation id (dashboard keeps it in localStorage). */
+  conversation_id?: string | null;
+}
+
+/**
+ * General chat through heidi-core (memory + tools) — the same brain the
+ * phone chat on :3006 uses, so both surfaces share one conversation memory.
+ * An unknown conversation id (e.g. heidi_memory.db was reset) starts a new
+ * one and tells the client. Returns false when heidi-core gave no usable
+ * reply; nothing has been written to `res` in that case.
+ */
+async function answerViaHeidiCore(res: NextApiResponse, message: string, conversationId: string | null): Promise<boolean> {
+  const chunks: string[] = [];
+  let result = await streamHeidiCoreChat({ message, conversationId, onText: (t: string) => chunks.push(t) });
+  let reset = false;
+  if (!result.ok && result.conversationNotFound) {
+    reset = true;
+    result = await streamHeidiCoreChat({ message, conversationId: null, onText: (t: string) => chunks.push(t) });
+  }
+  if (!result.ok) {
+    if (result.reason) console.warn('[chat] heidi-core path unavailable:', result.reason);
+    return false;
+  }
+  sse(res, {
+    type: 'metadata',
+    model_used: result.model,
+    conversation_id: result.conversationId,
+    conversation_reset: reset || undefined,
+    memory_saved: result.persistence ? result.persistence.saved !== false : undefined,
+  });
+  sse(res, { type: 'content', content: chunks.join('') });
+  res.write('data: [DONE]\n\n');
+  res.end();
+  return true;
 }
 
 function sse(res: NextApiResponse, payload: Record<string, unknown>): void {
@@ -463,6 +498,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { message, session_id, user_id }: ChatRequest = req.body;
+  const conversationId = typeof req.body?.conversation_id === 'string' && req.body.conversation_id ? req.body.conversation_id : null;
   const agentId = typeof (req.body as Record<string, unknown>).agent === 'string'
     ? String((req.body as Record<string, unknown>).agent) : null;
   if (!message || !session_id || !user_id) {
@@ -1900,6 +1936,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.warn('Claude agent failed, falling back to orchestrator:', claudeErr instanceof Error ? claudeErr.message : claudeErr);
         // Fall through to legacy orchestrator
       }
+    }
+
+    // heidi-core: conversation history + long-term memory, saved per turn.
+    if (process.env.HEIDI_DASHBOARD_CORE_CHAT !== 'false' && await answerViaHeidiCore(res, message, conversationId)) {
+      return;
     }
 
     // Fallback: legacy non-streaming orchestrator (reuse instance from above)
