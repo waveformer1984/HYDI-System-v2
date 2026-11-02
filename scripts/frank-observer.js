@@ -26,7 +26,14 @@ const board = require('../lib/forge-board/sdk');
 const APP_NAME = 'frank-observer';
 const INTERVAL_MS = 60 * 1000;
 const SAMPLE_MAX_AGE_MS = 75 * 1000;
-const COLLECT_TIMEOUT_MS = 50 * 1000;
+// collect.ps1 runs docker stats/inspect and CIM queries; under memory
+// pressure on Frank that took longer than the old 50s budget, the run was
+// killed, and the sample went stale with nothing in the log. Passes never
+// overlap (startObserverLoop skips a tick while one is in flight), so a
+// budget longer than the 60s interval only delays the next pass.
+const COLLECT_TIMEOUT_MS = Number(process.env.HYDI_OBSERVATORY_COLLECT_TIMEOUT_MS) > 0
+  ? Number(process.env.HYDI_OBSERVATORY_COLLECT_TIMEOUT_MS)
+  : 150 * 1000;
 // How long a pass waits for the shared PM2 read. A slower read keeps going
 // in the background and the next pass uses it.
 const PM2_WAIT_MS = 20 * 1000;
@@ -52,17 +59,45 @@ function sampleAgeMs(root, now) {
   return Number.isFinite(t) ? now - t : Infinity;
 }
 
-function runCollector(root, { pm2SnapshotPath } = {}) {
+function runCollector(root, { pm2SnapshotPath, execImpl = execFile, killImpl, timeoutMs = COLLECT_TIMEOUT_MS, clock = Date.now } = {}) {
   const args = [
     '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', path.join(root, 'scripts', 'observatory', 'collect.ps1'), '-Once', '-Quiet',
   ];
   // collect.ps1 reads PM2 from this file instead of running its own jlist.
   if (pm2SnapshotPath) args.push('-Pm2Snapshot', pm2SnapshotPath);
+  const kill = killImpl || require('../lib/runtime/collect').killTree;
+  const started = clock();
   return new Promise((resolve) => {
-    execFile('powershell.exe', args, { cwd: root, timeout: COLLECT_TIMEOUT_MS, windowsHide: true }, (error) => {
-      resolve(error ? { ok: false, error: error.message } : { ok: true });
-    });
+    let settled = false;
+    let timer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve({ ...result, ms: clock() - started });
+    };
+    let child;
+    try {
+      // This function owns the deadline so the whole tree (powershell plus
+      // its docker/pm2 children) is killed, not just powershell.exe.
+      child = execImpl('powershell.exe', args, { cwd: root, timeout: 0, windowsHide: true }, (error, _stdout, stderr) => {
+        if (!error) return finish({ ok: true });
+        const detail = String((stderr && String(stderr).trim()) || error.message || 'unknown').split(/\r?\n/)[0].slice(0, 300);
+        finish({ ok: false, error: detail });
+      });
+    } catch (e) {
+      finish({ ok: false, error: `spawn failed: ${e && e.message ? e.message : 'unknown'}` });
+      return;
+    }
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        kill(child && child.pid);
+        finish({ ok: false, error: `timed out after ${Math.round(timeoutMs / 1000)}s` });
+      }, timeoutMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    }
   });
 }
 
@@ -116,6 +151,10 @@ async function runObservationPass(overrides = {}) {
   let collected = { ok: true, skipped: 'sample fresh' };
   if (sampleAgeMs(root, now) > SAMPLE_MAX_AGE_MS) {
     collected = platform === 'win32' ? await collect(root, { pm2SnapshotPath }) : { ok: false, skipped: 'collector is Windows-only' };
+    // A failed run used to vanish: the sample just went stale. Say why.
+    if (collected && collected.ok === false && !collected.skipped) {
+      log(`[${APP_NAME}] observatory collector failed: ${collected.error || 'unknown'}`);
+    }
   }
 
   // Processes PM2 lost track of (lib/observation/strays.js). null = could
@@ -267,4 +306,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { APP_NAME, INTERVAL_MS, SAMPLE_MAX_AGE_MS, CONFIRM_PASSES, OWNED_ELSEWHERE, runObservationPass, startObserverLoop };
+module.exports = { APP_NAME, INTERVAL_MS, SAMPLE_MAX_AGE_MS, COLLECT_TIMEOUT_MS, CONFIRM_PASSES, OWNED_ELSEWHERE, runCollector, runObservationPass, startObserverLoop };

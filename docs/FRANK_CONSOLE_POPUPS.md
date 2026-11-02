@@ -30,6 +30,7 @@ windows pile up.
 | Source | How often | Fix |
 |---|---|---|
 | Scheduled task **HYDI-Watchdog** (`scripts/install-watchdog.ps1`) runs `node scripts\watchdog.js --once` as a per-user task on the desktop | every 2 minutes | Task retired. PM2's `hydi-watchdog` already runs the same script continuously and hidden. `install-watchdog.ps1` now removes the task, and `disable-stale-tasks.bat` deletes it |
+| Scheduled task **HYDI-Observatory** runs `scripts/observatory/collect.ps1` with `-WindowStyle Hidden`, which still flashes a console | about every 30 seconds | Disable it (`Disable-ScheduledTask HYDI-Observatory`, not delete) once frank-observer has the 150s collector budget: it runs the same collector hidden whenever the sample is 75s old |
 | **hydi-local-ci** (PM2) launched `cmd` (npm/npx), `git` and `gh` without `windowsHide` | every test pass (on each PR/commit, checking every 10 min) | `windowsHide: true` on all four launches |
 | **heidi-core** brain watchdog runs `ollama serve` through a shell, detached, without `windowsHide` | every 90 s while Ollama is down | `windowsHide: true` |
 | **protoforge-opportunity-scheduler** `taskkill` on child cleanup | when it kills a child | `windowsHide: true` |
