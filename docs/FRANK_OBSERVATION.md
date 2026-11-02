@@ -21,7 +21,12 @@ healthy.
 
 - **`frank-observer`** (PM2, every 60s, read-only): runs `collect.ps1 -Once`
   whenever the last sample is older than 75 seconds, so observation no
-  longer depends on a Task Scheduler job being installed. Writes the
+  longer depends on a Task Scheduler job being installed. A run gets
+  150 seconds (`HYDI_OBSERVATORY_COLLECT_TIMEOUT_MS`); on timeout the whole
+  process tree is killed, and every failed run is logged as
+  `observatory collector failed: <why>` in the err log. The old 50s budget
+  was too short under memory pressure, so with the `HYDI-Observatory`
+  scheduled task disabled the sample went stale with nothing logged. Writes the
   combined snapshot to `.runtime/observation/frank.json`. Posts to
   `#alerts` when a critical issue has held for two passes in a row, once,
   and once more when it clears. Disk alerts are left to the storage guard

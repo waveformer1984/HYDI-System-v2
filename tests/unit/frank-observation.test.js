@@ -163,6 +163,15 @@ describe('frank-observer loop', () => {
     expect(list.items[0]).toMatchObject({ kind: 'fixlist_timeout', level: 'UNKNOWN' });
   });
 
+  it('logs why the collector failed instead of letting the sample go stale silently', async () => {
+    const h = harness({ '.observatory/current.json': sample({ ts: iso(5 * 60 * 1000) }) });
+    h.collect.mockImplementation(async () => ({ ok: false, error: 'timed out after 150s', ms: 150000 }));
+    const lines = [];
+    const { snapshot } = await observer.runObservationPass({ ...h.opts, now: () => NOW, log: (m) => lines.push(m) });
+    expect(snapshot.collector).toMatchObject({ ok: false, error: 'timed out after 150s' });
+    expect(lines.some((l) => l.includes('observatory collector failed: timed out after 150s'))).toBe(true);
+  });
+
   it('runs the collector only when the sample is older than 75s, and only on Windows', async () => {
     const fresh = harness({ '.observatory/current.json': sample() });
     await observer.runObservationPass({ ...fresh.opts, now: () => NOW });
@@ -304,5 +313,36 @@ describe('GET /api/phone/observe evidence location', () => {
     expect(res.code).toBe(200);
     expect(res.body.snapshot.sources.observatory.present).toBe(true);
     expect(res.body.snapshot.level).toBe('OK');
+  });
+});
+
+describe('frank-observer runCollector', () => {
+  it('gives collect.ps1 more than the old 50s by default', () => {
+    expect(observer.COLLECT_TIMEOUT_MS).toBeGreaterThanOrEqual(120 * 1000);
+  });
+
+  it('runs collect.ps1 -Once hidden, without a child-process timeout, and reports success with duration', async () => {
+    let t = 1000;
+    const execImpl = jest.fn((cmd, args, opts, cb) => { t += 4000; setImmediate(() => cb(null, '', '')); return { pid: 42 }; });
+    const r = await observer.runCollector('/repo', { pm2SnapshotPath: '/repo/snap.json', execImpl, killImpl: jest.fn(), clock: () => t });
+    expect(r).toEqual({ ok: true, ms: 4000 });
+    const [cmd, args, opts] = execImpl.mock.calls[0];
+    expect(cmd).toBe('powershell.exe');
+    expect(args).toEqual(expect.arrayContaining(['-Once', '-Quiet', '-Pm2Snapshot', '/repo/snap.json']));
+    expect(opts).toMatchObject({ windowsHide: true, timeout: 0 });
+  });
+
+  it('reports the first stderr line when collect.ps1 fails', async () => {
+    const execImpl = (cmd, args, opts, cb) => { setImmediate(() => cb(new Error('Command failed'), '', 'docker ps exit 1\r\nmore')); return { pid: 7 }; };
+    const r = await observer.runCollector('/repo', { execImpl, killImpl: jest.fn() });
+    expect(r).toMatchObject({ ok: false, error: 'docker ps exit 1' });
+  });
+
+  it('kills the whole process tree when the run outlives its budget', async () => {
+    const killImpl = jest.fn();
+    const execImpl = jest.fn(() => ({ pid: 4242 })); // never calls back
+    const r = await observer.runCollector('/repo', { execImpl, killImpl, timeoutMs: 20 });
+    expect(killImpl).toHaveBeenCalledWith(4242);
+    expect(r).toMatchObject({ ok: false, error: 'timed out after 0s' });
   });
 });
