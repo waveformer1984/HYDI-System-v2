@@ -65,6 +65,25 @@ function memFs(initial = []) {
       }
       ops.push(`rename ${from} -> ${to}`);
     },
+    copy: (a, b) => {
+      const from = norm(a);
+      const to = norm(b);
+      if (api.failCopy && api.failCopy(from, to)) {
+        ops.push(`copy-failed ${from} -> ${to}`);
+        throw new Error('EBUSY');
+      }
+      if (!dirs.has(from)) throw new Error(`ENOENT ${from}`);
+      dirs.add(to);
+      for (const d of [...dirs]) {
+        if (d.startsWith(`${from}/`)) dirs.add(to + d.slice(from.length));
+      }
+      ops.push(`copy ${from} -> ${to}`);
+    },
+    emptyDir: (p) => {
+      const n = norm(p);
+      for (const d of [...dirs]) if (d.startsWith(`${n}/`)) dirs.delete(d);
+      ops.push(`empty ${n}`);
+    },
     produceBuild(root) {
       const r = norm(root);
       dirs.add(`${r}/.next-staging`);
@@ -652,6 +671,55 @@ describe('Frank auto-deploy staged builds', () => {
     const restart = h.calls.find((c) => c.startsWith('pm2.cmd restart'));
     expect(restart).toContain('heidi-web-standalone');
     expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+  });
+
+  it('when the rename is refused even with the web app stopped, copies the build into place', async () => {
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/old-chunk.js`]);
+    fsx.failRename = (from) => from === `${ROOT}/.next`;
+    const h = harness({ fsx });
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.calls).toContain('pm2.cmd stop heidi-web-standalone');
+    expect(h.calls.find((c) => c.startsWith('pm2.cmd restart'))).toContain('heidi-web-standalone');
+    // the old build is kept as .next-prev, the new one is live, old files are gone
+    expect(fsx.exists(`${ROOT}/.next-prev/old-chunk.js`)).toBe(true);
+    expect(fsx.exists(`${ROOT}/.next/old-chunk.js`)).toBe(false);
+    expect(fsx.exists(`${ROOT}/.next/server/pages-manifest.json`)).toBe(true);
+    expect(fsx.exists(`${ROOT}/.next-staging`)).toBe(false);
+    expect(fsx.ops).toContain(`copy ${ROOT}/.next -> ${ROOT}/.next-prev`);
+  });
+
+  it('copySwap puts the old build back when the copy fails partway', () => {
+    const { copySwap } = require('../../scripts/frank-auto-deploy');
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/old-chunk.js`,
+      `${ROOT}/.next-staging`, `${ROOT}/.next-staging/BUILD_ID`]);
+    fsx.failCopy = (from, to) => from === `${ROOT}/.next-staging` && to === `${ROOT}/.next`;
+    expect(() => copySwap({ live: `${ROOT}/.next`, source: `${ROOT}/.next-staging`, keep: `${ROOT}/.next-prev`, fsx }))
+      .toThrow('EBUSY');
+    expect(fsx.exists(`${ROOT}/.next/old-chunk.js`)).toBe(true);
+    expect(fsx.exists(`${ROOT}/.next-staging/BUILD_ID`)).toBe(true);
+  });
+
+  it('copySwap refuses a copied build that is missing its markers and restores the old one', () => {
+    const { copySwap } = require('../../scripts/frank-auto-deploy');
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/server/pages-manifest.json`,
+      `${ROOT}/.next-staging`, `${ROOT}/.next-staging/BUILD_ID`]);
+    expect(() => copySwap({ live: `${ROOT}/.next`, source: `${ROOT}/.next-staging`, keep: `${ROOT}/.next-prev`, fsx }))
+      .toThrow('copy swap incomplete');
+    expect(fsx.exists(`${ROOT}/.next/server/pages-manifest.json`)).toBe(true);
+  });
+
+  it('copies the previous build back on rollback when the rename is refused', async () => {
+    const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/server/pages-manifest.json`, `${ROOT}/.next/old-chunk.js`]);
+    fsx.failRename = (from) => from === `${ROOT}/.next`;
+    const h = harness({ fsx, healthy: () => false });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(fsx.ops).toContain(`copy ${ROOT}/.next-prev -> ${ROOT}/.next`);
+    expect(fsx.exists(`${ROOT}/.next/old-chunk.js`)).toBe(true);
+    // the build that failed health is kept for inspection, not served
+    expect(fsx.exists(`${ROOT}/.next-failed/BUILD_ID`)).toBe(true);
+    expect(h.calls.filter((c) => c === 'npm.cmd run build')).toHaveLength(1);
   });
 
   it('the first staged deploy has no previous build to restore, so rollback rebuilds', async () => {

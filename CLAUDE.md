@@ -96,7 +96,11 @@ live. A finished build is renamed into `.next` and the replaced one kept as
 `.next-prev`, so a failed health check rolls back by renaming — no rebuild
 (rebuilding under memory pressure is what wedged Frank on 2026-10-25). If
 Windows refuses the rename, it stops `heidi-web-standalone`, retries, and
-starts it again. Alerts go to `#alerts` once per distinct reason.
+starts it again. If the rename is still refused with the server stopped (it
+was on 2026-11-01, with no visible handle on `.next`), it copies the build
+into `.next` instead, backing up the old one to `.next-prev` first and
+restoring it if the copy fails or leaves `BUILD_ID`/the pages manifest
+missing. Alerts go to `#alerts` once per distinct reason.
 
 #### Heidi persistent memory (`heidi-core/memory/`)
 
