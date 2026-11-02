@@ -259,6 +259,14 @@ const realFs = Object.freeze({
   rm: (p) => fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 }),
   rename: (a, b) => fs.renameSync(a, b),
   mkdir: (p) => fs.mkdirSync(p, { recursive: true }),
+  // Copies the contents of directory a into directory b (created if needed).
+  copy: (a, b) => fs.cpSync(a, b, { recursive: true, force: true }),
+  // Removes everything inside p but keeps p itself.
+  emptyDir: (p) => {
+    for (const name of fs.readdirSync(p)) {
+      fs.rmSync(path.join(p, name), { recursive: true, force: true, maxRetries: 2 });
+    }
+  },
 });
 
 /** Free RAM gate. A build below this fails partway; better to wait. */
@@ -295,9 +303,39 @@ async function stagedBuild({ run, root, platform, fsx = realFs, env = process.en
 }
 
 /**
+ * Copy fallback for when Windows refuses to rename LIVE_DIR even with the web
+ * app stopped. On Frank (2026-11-01) the rename failed with Access denied
+ * while no process held a handle on it, but replacing the files inside the
+ * directory worked. LIVE_DIR is backed up to `keep` first; if the copy
+ * fails partway, LIVE_DIR is put back from that backup before rethrowing.
+ */
+function copySwap({ live, source, keep, fsx }) {
+  fsx.rm(keep);
+  const hadLive = fsx.exists(live);
+  if (hadLive) fsx.copy(live, keep);
+  try {
+    if (hadLive) fsx.emptyDir(live); else fsx.mkdir(live);
+    fsx.copy(source, live);
+  } catch (error) {
+    if (hadLive) {
+      try { fsx.emptyDir(live); fsx.copy(keep, live); } catch { /* reported below */ }
+    }
+    throw error;
+  }
+  const missing = BUILD_MARKERS.filter((f) => !fsx.exists(path.join(live, f)));
+  if (missing.length) {
+    if (hadLive) { fsx.emptyDir(live); fsx.copy(keep, live); }
+    throw new Error(`copy swap incomplete: ${missing.join(', ')} missing`);
+  }
+  fsx.rm(source);
+}
+
+/**
  * Rename `from` over LIVE_DIR, keeping what was live at `keepAs`. Windows
  * can refuse to rename a directory the running server holds open; then stop
- * the web app, retry, and report it so the caller starts it again.
+ * the web app and retry. If the rename is still refused, copy the files
+ * into place instead (copySwap). Either way the caller starts the web app
+ * again when `stoppedWeb` is true.
  */
 async function swapLive({ run, root, platform, from, keepAs, fsx = realFs }) {
   const live = path.join(root, LIVE_DIR);
@@ -315,11 +353,16 @@ async function swapLive({ run, root, platform, from, keepAs, fsx = realFs }) {
   };
   try {
     attempt();
-    return { stoppedWeb: false };
+    return { stoppedWeb: false, method: 'rename' };
   } catch {
     await run(executable('pm2', platform), ['stop', WEB_APP], { cwd: root, timeout: 60 * 1000 });
-    attempt();
-    return { stoppedWeb: true };
+    try {
+      attempt();
+      return { stoppedWeb: true, method: 'rename' };
+    } catch {
+      copySwap({ live, source, keep, fsx });
+      return { stoppedWeb: true, method: 'copy' };
+    }
   }
 }
 
@@ -574,6 +617,7 @@ module.exports = {
   memoryPreflight,
   stagedBuild,
   swapLive,
+  copySwap,
   rollback,
   LIVE_DIR,
   STAGING_DIR,
