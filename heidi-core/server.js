@@ -355,6 +355,7 @@ class HeidiCore {
           try { context = { ...context, live_diagnostics: await this.getDiagnostics() }; } catch {}
         }
 
+        phase('retrieval_done');
         // GENERATE (streaming)
         if (!options.model) {
           const routed = this.pickModel(input);
@@ -366,12 +367,17 @@ class HeidiCore {
           const msg = this.getUngroundedCapabilityResponse(input);
           send({ t: msg });
           result = { text: msg, model: 'no-tool-available', tokens: { prompt: 0, completion: 0 } };
+          phase('gate_returned');
         } else {
           const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context, turn.context);
+          phase('prompt_built');
           try {
-            result = await this.brain.generateStream(prompt, (t) => send({ t }), options);
+            let firstToken = false;
+            result = await this.brain.generateStream(prompt, (t) => { if (!firstToken) { phase('first_token'); firstToken = true; } send({ t }) }, options);
+            phase('generation_done');
           } catch (e) {
             console.error('[HEIDI] Stream generation failed:', e.message);
+            phase('generation_failed');
             const fb = this.getFallbackResponse(input, memoryContext);
             send({ t: fb });
             result = { text: fb, model: 'fallback', tokens: { prompt: 0, completion: 0 } };
@@ -394,6 +400,7 @@ class HeidiCore {
           confidence,
           latency_ms: Date.now() - startTime,
           memories_retrieved: memoryContext.recent_interactions.length + memoryContext.relevant_facts.length,
+          ...phases({ route: result.model === 'fallback' ? 'fallback' : 'model' }),
           ...this.turnMeta(turn, saved)
         });
         res.end();
@@ -722,6 +729,13 @@ class HeidiCore {
 
         this.stats.requests++;
         const startTime = Date.now();
+        // Correlated phase timing — attributes latency across the request
+        // lifecycle (deterministic vs model-driven). Emitted on `done`.
+        const cid = req.body.request_id || `ct-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const mark = {};
+        const phase = (name) => { mark[name] = Date.now() - startTime; };
+        const phases = (extra = {}) => ({ correlation_id: cid, route: extra.route || 'model', phases: { ...mark, ...extra.phases }, measured: Object.keys(mark) });
+        phase('received');
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -732,6 +746,7 @@ class HeidiCore {
         // Memory commands answer from the store itself, before any model.
         const owner = this.memoryRuntime.resolveOwner(req);
         const requestId = req.body.request_id || null;
+        phase('routes_checked');
         if (isSystemReportQuery(input)) {
           const report = await this.getSystemStatus();
           send({ t: formatSystemStatus(report) });
