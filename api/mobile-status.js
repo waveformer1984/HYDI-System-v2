@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../lib/auth/requireAuth.js';
 import { defaultMetrics as pipelineMetrics } from '../lib/pipeline/metrics.js';
+import { readBillingAlertSync } from '../lib/billing/ops-snapshot.js';
 
 // Constructed lazily (not at module load) so a missing env var surfaces as
 // a graceful 503 from the handler's own try/catch below, instead of
@@ -105,7 +106,7 @@ export default async function handler(req, res) {
 
     const dash = dashResult.data || {};
     const silent = STREAMS.filter(s => !streams[s].last || streams[s].last < cutoff);
-    const alert =
+    let alert =
       dash.escalation_level === 'CRITICAL'
         ? 'CRITICAL escalation active'
         : dash.jobs_failed > 0
@@ -113,6 +114,10 @@ export default async function handler(req, res) {
         : silent.length > 0
         ? `${silent.length} stream(s) silent >24h: ${silent.join(', ')}`
         : null;
+    const billingAlert = readBillingAlertSync(process.cwd());
+    if (billingAlert) {
+      alert = alert ? `${alert}; ${billingAlert}` : billingAlert;
+    }
 
     return res.status(alert && dash.escalation_level === 'CRITICAL' ? 503 : 200).json({
       ok: !alert,

@@ -377,6 +377,37 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Revenue Streams Module: webhook retries + subscription/checkout reconcile.
+      name: 'hydi-billing-worker',
+      script: 'scripts/billing-worker.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        BILLING_WORKER_INTERVAL_SECONDS: '30',
+        BILLING_RECONCILE_INTERVAL_MINUTES: '15',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        BILLING_WORKER_INTERVAL_SECONDS: '30',
+        BILLING_RECONCILE_INTERVAL_MINUTES: '15',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-billing-worker.err.log',
+      out_file: './logs/pm2-billing-worker.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
       // Canonical owner of the legacy Heidi Core HTTP service on :3459.
       // Matches start-heidi-everything.ps1 exactly: node server.js from
       // heidi-core/ with HEIDI_PORT=3459 and execution disabled.

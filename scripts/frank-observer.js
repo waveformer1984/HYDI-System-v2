@@ -244,6 +244,18 @@ async function runObservationPass(overrides = {}) {
       fs.mkdirSync(dir, { recursive: true });
       writeJsonAtomic(path.join(dir, 'current.json'), fixList);
       log(`[${APP_NAME}] fix-list: ${fixList.items.length} item(s) in ${Date.now() - t0}ms`);
+      if (process.env.HEIDI_FIXLIST_MISSIONS === '1' || process.env.HEIDI_FIXLIST_MISSIONS === 'true') {
+        try {
+          const HeidiMemory = require('../heidi-core/memory/sqlite-store');
+          const { proposeMissionsFromFixList } = require('../lib/observation/fix-list-missions');
+          const memory = new HeidiMemory({ dbPath: path.join(root, 'heidi-core/data/heidi_memory.db') });
+          await memory.initialize();
+          const out = await proposeMissionsFromFixList(fixList, { memory, fixlistDir: dir });
+          if (out.proposed) log(`[${APP_NAME}] fix-list missions: proposed ${out.proposed} (ids ${out.ids.join(', ')})`);
+        } catch (missionErr) {
+          log(`[${APP_NAME}] fix-list missions skipped: ${missionErr instanceof Error ? missionErr.message : 'unknown'}`);
+        }
+      }
     } catch (e) {
       const msg = e && e.message ? e.message : 'unknown';
       if (e && e.fixListTimeout) {
