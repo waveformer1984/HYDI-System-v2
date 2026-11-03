@@ -27,6 +27,19 @@ import { randomUUID } from 'crypto';
 import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
+
+// Loopback-only Ollama serve env (MemoryOps policy) — a bare spawn defaults
+// OLLAMA_HOST to 0.0.0.0 and answers on the LAN interface.
+export function ollamaServeEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    OLLAMA_HOST: '127.0.0.1:11434',
+    OLLAMA_MAX_LOADED_MODELS: '1',
+    OLLAMA_CONTEXT_LENGTH: '4096',
+    OLLAMA_NUM_PARALLEL: '1',
+    OLLAMA_KEEP_ALIVE: '2m',
+  };
+}
 import path from 'path';
 import fs from 'fs';
 import type {
@@ -998,7 +1011,7 @@ export class RecoveryEngine {
         // Start Ollama in detached mode
         const child = spawn('ollama', ['serve'], {
           cwd: this.root,
-          env: process.env,
+          env: ollamaServeEnv(),
           shell: true,
           detached: true,
           stdio: 'ignore',
@@ -1011,7 +1024,7 @@ export class RecoveryEngine {
         } catch { /* may not be running */ }
         const child = spawn('ollama', ['serve'], {
           cwd: this.root,
-          env: process.env,
+          env: ollamaServeEnv(),
           shell: true,
           detached: true,
           stdio: 'ignore',

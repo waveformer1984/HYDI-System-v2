@@ -37,6 +37,7 @@ import type { CapabilityHealthReport, CapabilityHealthSummary } from './Capabili
 import type { BlockerResolution, BlockerResolutionResult } from './BlockerResolutionEngine';
 import { BlockerResolutionEngine } from './BlockerResolutionEngine';
 import { liveActionsDisabled } from './live-action-guard';
+import { ollamaServeEnv } from './RecoveryEngine';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -956,9 +957,11 @@ export function createOllamaRepairHandler(options: {
         // On Windows, use `start /B` to run in background; on Unix, use nohup
         const isWindows = process.platform === 'win32';
         if (isWindows) {
-          await execAsync('start /B ollama serve', { timeout: 5000 });
+          // start /B inherits the cmd env — pass the loopback binding so the
+          // respawn doesn't come up on 0.0.0.0 answering LAN requests.
+          await execAsync('start /B ollama serve', { timeout: 5000, env: ollamaServeEnv() });
         } else {
-          await execAsync('nohup ollama serve > /dev/null 2>&1 &', { timeout: 5000 });
+          await execAsync('nohup ollama serve > /dev/null 2>&1 &', { timeout: 5000, env: ollamaServeEnv() });
         }
       } catch (startError) {
         // `ollama serve` might fail if already running or not installed
