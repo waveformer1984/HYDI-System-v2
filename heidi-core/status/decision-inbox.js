@@ -62,24 +62,44 @@ function staleFor(ts) {
 }
 
 function readFixList(root) {
+  const f = path.join(root, '.runtime', 'fixlist', 'current.json');
+  if (!fs.existsSync(f)) return { items: [], state: 'not_produced' };
   try {
-    const list = JSON.parse(fs.readFileSync(path.join(root, '.runtime', 'fixlist', 'current.json'), 'utf8'));
-    return Array.isArray(list.items) ? list.items : [];
-  } catch { return []; }
+    const list = JSON.parse(fs.readFileSync(f, 'utf8'));
+    return { items: Array.isArray(list.items) ? list.items : [], state: 'ok' };
+  } catch { return { items: [], state: 'unavailable' }; }
 }
 
-async function decisionInbox(memory, root) {
-  const [awaiting] = await Promise.all([
-    memory.getMissions('awaiting_approval', 50).catch(() => []),
-  ]);
-  const fixItems = readFixList(root).filter((i) => i.level === 'CRIT');
-  const cards = [
-    ...(awaiting || []).map(missionCard),
-    ...fixItems.slice(0, 5).map(fixCard),
-  ];
+function withTimeout(promise, ms, fallback) {
+  let timer;
+  const timeout = new Promise((r) => { timer = setTimeout(() => r(fallback), ms); if (timer.unref) timer.unref(); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function decisionInbox(memory, root, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const sources = { missions: 'ok', fixList: 'ok' };
+  const awaiting = await withTimeout(
+    memory.getMissions('awaiting_approval', 50).catch(() => null),
+    timeoutMs,
+    null,
+  );
+  if (awaiting === null) sources.missions = 'unavailable';
+  const fix = readFixList(root);
+  if (fix.state === 'unavailable') sources.fixList = 'unavailable';
+  const fixItems = fix.items.filter((i) => i.level === 'CRIT');
+  const fixSubjects = new Set(fixItems.map((i) => String(i.subject || i.id || '')));
+  // Dedup: a mission already represented as a fix item is not a second decision.
+  const missionCards = (awaiting || [])
+    .filter((m) => !fixSubjects.has(String(m.id)) && !fixSubjects.has(String(m.goal || '')))
+    .map(missionCard);
+  const cards = [...missionCards, ...fixItems.slice(0, 5).map(fixCard)];
   return {
     generatedAt: new Date().toISOString(),
+    sources,
     counts: { awaitingApproval: (awaiting || []).length, fixListCrit: fixItems.length },
+    empty: cards.length === 0,
+    unavailable: sources.missions !== 'ok' || sources.fixList !== 'ok',
     cards,
   };
 }
