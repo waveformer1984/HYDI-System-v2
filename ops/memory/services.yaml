@@ -1,0 +1,157 @@
+# MemoryOps — service inventory & memory policy
+# Program owner: Heidi (hydi-daemon). Each service owner keeps to budget or files a justification.
+# Source: live audit 2026-11-02/03. Sizes are measured private bytes unless noted.
+version: 1
+
+policy:
+  headroom_target_gb: 2.0          # preferred before normal generation
+  admission_min_gb: 1.5            # interactive generation gate (measured, may tune)
+  model_residency: 1               # OLLAMA_MAX_LOADED_MODELS
+  concurrent_generation: 1         # OLLAMA_NUM_PARALLEL
+  reclaim_order: [cancel-speculative, defer-jobs, trim-caches, unload-idle-model, stop-opted-in-dev]
+  never_auto: [active-editors, databases-for-headroom, running-generation, wsl-restart-routine]
+
+groups:
+  essential-control-plane:
+    - name: heidi-core
+      owner: heidi
+      kind: pm2
+      pm2_app: heidi-core
+      port: 3459
+      class: essential
+      startup: always-on
+      health: "GET http://127.0.0.1:3459/health"
+      priv_mb_idle: ~120
+      budget_mb_warn: 400
+      consequences_of_stop: all chat/tool governance down
+    - name: heidi-mobile-chat
+      owner: heidi
+      kind: pm2
+      pm2_app: heidi-mobile-chat
+      port: 3006
+      class: essential
+      startup: always-on
+      env_gate: HEIDI_MOBILE_TOKEN
+      health: "GET http://127.0.0.1:3006/api/health"
+      priv_mb_idle: ~140
+      consequences_of_stop: mobile path down
+    - name: frank-observer
+      owner: frank
+      kind: pm2
+      pm2_app: frank-observer
+      class: essential
+      startup: always-on
+      cadence: 60s
+      health: .runtime/observation/frank.json
+      priv_mb_idle: ~90
+      consequences_of_stop: frank health card stale
+
+  generation:
+    - name: ollama
+      owner: heidi
+      kind: process
+      launcher: "%LOCALAPPDATA%/Programs/Ollama/ollama app.exe"
+      port: 11434
+      class: interactive
+      startup: on-demand
+      env:
+        OLLAMA_HOST: "127.0.0.1:11434"     # desired loopback; running process was 0.0.0.0 — pending restart
+        OLLAMA_MAX_LOADED_MODELS: "1"      # desired; running showed 3
+        OLLAMA_CONTEXT_LENGTH: "4096"
+        OLLAMA_NUM_PARALLEL: "1"
+        OLLAMA_KEEP_ALIVE: "2m"
+      priv_mb_model_loaded: ~1200          # qwen2.5-coder:1.5b at ctx 4096
+      budget_mb_warn: 2500
+      consequences_of_stop: no local generation
+
+  workspace:
+    - name: ursula-local
+      owner: ursula
+      kind: pm2
+      pm2_app: ursula-local
+      port: 3100
+      class: deferrable
+      startup: manual          # intentionally not started; entry MISSING in ecosystem
+      route: /workspace
+      consequences_of_stop: workspace UI down; services unaffected
+    - name: ursula-suite
+      owner: ursula
+      kind: docker
+      containers: [ursula-hub, ursula-flask, ursula-postgres, ursula-redis]
+      port: 5000
+      class: deferrable
+      startup: scheduled
+      health: "GET http://127.0.0.1:5000/"
+      consequences_of_stop: flask command-center down
+
+  data:
+    - name: supabase-stack
+      owner: hydi
+      kind: docker
+      containers: [supabase_db, supabase_kong, supabase_auth, supabase_realtime, supabase_rest, supabase_storage]
+      ports: [54321, 54322]
+      class: essential
+      startup: always-on
+      note: studio/inbucket/pg-meta stopped under A8 — dev-only
+      consequences_of_stop: all persistence + REST down
+
+  background-automation:
+    # B3 target: merge into one hydi-schedulers process (~0.7 GB PM2 overhead)
+    - name: hydi-daemon
+      pm2_app: hydi-daemon
+      class: essential
+      startup: always-on
+      note: operator lease + resolver; PM2-supervised after B1
+    - name: hydi-system-health
+      pm2_app: hydi-system-health
+      class: essential
+      startup: always-on
+      cadence: 5min
+      note: kong-heal lives here
+    - name: schedulers-for-merge
+      pm2_apps: [hydi-watchdog, hydi-model-prep-executor, hydi-daily-loop, hydi-protoforge-scout, hydi-stuck-job-scheduler, hydi-revenue-reconciliation, hydi-failed-webhook-retry, hydi-stripe-webhook-listener, hydi-revenue-autopilot-tick]
+      class: deferrable
+      startup: scheduled
+      target: hydi-schedulers (B3)
+
+  development:
+    - name: language_server
+      kind: process
+      priv_mb: ~1942
+      class: development-only
+      startup: manual
+      rule: never auto-stop while an editing session is attached
+    - name: claude
+      kind: process
+      priv_mb: ~1167
+      class: development-only
+      startup: manual
+    - name: Devin
+      kind: process
+      priv_mb: ~1751
+      class: development-only
+      startup: manual
+    - name: WindowsTerminal
+      kind: process
+      priv_mb: ~919
+      class: development-only
+      startup: manual
+      note: historySize=3000 set; restarts clear accumulated buffers
+
+  supporting:
+    - name: vmmemWSL
+      kind: vm
+      priv_mb: ~5112
+      wsl_memory_cap: 6GB           # .wslconfig memory=6GB; proposal 4GB pending measurement
+      autoMemoryReclaim: dropCache  # added 2026-11-02
+      note: host-view — do NOT add container usage on top (double-count)
+    - name: vmmem (cowork-vm-0b56dc31)
+      kind: vm
+      priv_mb: ~4104
+      owner: codex-sandbox
+      class: development-only
+      note: packaged-app VM; dies with ChatGPT app; not independently killable
+    - name: docker-backend
+      kind: process
+      priv_mb: ~240
+      class: supporting
