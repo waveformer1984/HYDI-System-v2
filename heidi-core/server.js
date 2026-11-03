@@ -723,24 +723,49 @@ class HeidiCore {
     // The model can call tools from the ToolRegistry; each call is
     // permission-checked against agent_registry (Heidi acts at her own level).
     this.app.post('/chat-tools', async (req, res) => {
+      const startTime = Date.now();
+      const cid = (req.body && req.body.request_id) || `ct-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const mark = {};
+      const phase = (name) => { mark[name] = Date.now() - startTime; };
+      const phases = (extra = {}) => ({ correlation_id: cid, route: extra.route || 'model', phases: { ...mark, ...extra.phases }, measured: Object.keys(mark) });
+      // Terminal record — exactly one bounded chat_tools_terminal line per
+      // request, even if the SSE done packet never reaches the client.
+      const terminal = { state: null, route: null };
+      const finish = (state, route, reason) => {
+        if (terminal.state) return; // single guarded finalization
+        terminal.state = state;
+        terminal.route = route || terminal.route || 'model';
+        const keys = Object.keys(mark);
+        try {
+          console.log(JSON.stringify({
+            event: 'chat_tools_terminal',
+            correlation_id: cid,
+            route: terminal.route,
+            last_phase: keys.length ? keys[keys.length - 1] : null,
+            elapsed_ms: Date.now() - startTime,
+            state,
+            reason: reason ? String(reason).slice(0, 120) : undefined,
+          }));
+        } catch { /* logging must not crash the handler */ }
+      };
+      let clientGone = false;
+      res.on('close', () => {
+        if (terminal.state || res.writableEnded) return; // normal completion, not cancel
+        clientGone = true;
+        finish('cancelled', terminal.route, 'client_disconnected');
+      });
       try {
         const { input, options = {} } = req.body;
-        if (!input) return res.status(400).json({ error: 'input is required' });
+        if (!input) { finish('failed', 'validation', 'missing_input'); return res.status(400).json({ error: 'input is required' }); }
 
         this.stats.requests++;
-        const startTime = Date.now();
-        // Correlated phase timing — attributes latency across the request
-        // lifecycle (deterministic vs model-driven). Emitted on `done`.
-        const cid = req.body.request_id || `ct-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-        const mark = {};
-        const phase = (name) => { mark[name] = Date.now() - startTime; };
-        const phases = (extra = {}) => ({ correlation_id: cid, route: extra.route || 'model', phases: { ...mark, ...extra.phases }, measured: Object.keys(mark) });
         phase('received');
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
-        const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+        const send = (d) => { if (clientGone || res.writableEnded || res.destroyed) return; res.write(`data: ${JSON.stringify(d)}\n\n`); };
+        const done = (route, reason) => { finish(reason ? 'failed' : 'completed', route, reason); return res.end(); };
 
         // Persistent conversation + memory (see memory/memory-runtime.js).
         // Memory commands answer from the store itself, before any model.
@@ -751,39 +776,39 @@ class HeidiCore {
           const report = await this.getSystemStatus();
           send({ t: formatSystemStatus(report) });
           send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return res.end();
+          return done('deterministic');
         }
         if (isFixListQuery(input)) {
           let list = null;
           try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
           send({ t: formatFixList(list) });
           send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return res.end();
+          return done('deterministic');
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {
           const text = await this.memoryRuntime.runCommand({ owner, conversationId: req.body.conversation_id || null, input, diagnostics: () => this.getMemoryDiagnostics() });
           send({ t: text });
           send({ done: true, model: 'memory', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return res.end();
+          return done('deterministic');
         }
         const taskCmd = lifecycle.parseTaskCommand(input);
         if (taskCmd) {
           send({ t: await this.runTaskChat(owner, taskCmd) });
           send({ done: true, model: 'tasks', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return res.end();
+          return done('deterministic');
         }
         const traceCmd = lifecycle.parseTraceCommand(input);
         if (traceCmd) {
           const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
           send({ t: text });
           send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return res.end();
+          return done('deterministic');
         }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
         if (!turn.ok) {
           // Never silently start a blank conversation in place of one we couldn't load.
           send({ error: turn.error, conversation_not_found: true, done: true });
-          return res.end();
+          return done('failed', 'turn_rejected');
         }
 
         // Deterministic fast-path: skip the LLM tool-loop entirely for the
@@ -806,7 +831,7 @@ class HeidiCore {
             .catch(() => {});
           const saved = this.memoryRuntime.endTurn(turn, { owner, input, answer: finalText, requestId });
           send({ done: true, model: 'fast-path', tools_used: [fastPath.tool], latency_ms: Date.now() - startTime, ...this.turnMeta(turn, saved) });
-          return res.end();
+          return done('deterministic');
         }
 
         // Tools require a function-calling-capable model. A user-picked model
@@ -904,9 +929,10 @@ class HeidiCore {
           latency_ms: Date.now() - startTime,
           ...this.turnMeta(turn, saved)
         });
-        res.end();
+        done('model');
       } catch (error) {
         console.error('[HEIDI] Chat-tools error:', error.message);
+        finish('failed', terminal.route, error.code || 'handler_error');
         try {
           res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
           res.end();
