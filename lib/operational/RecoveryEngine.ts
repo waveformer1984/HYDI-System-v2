@@ -1003,6 +1003,24 @@ export class RecoveryEngine {
    */
   private async restartOllama(): Promise<void> {
     try {
+      // PM2 owns the Ollama lifecycle via ollama-serve. If a server already
+      // answers on :11434, recovery is a no-op — taskkill+spawn would either
+      // kill the supervised serve or start a port-conflicting duplicate.
+      try {
+        const res = await fetch('http://127.0.0.1:11434/api/version', { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          this.stateModel.logEvent({
+            id: randomUUID(),
+            timestamp: new Date().toISOString(),
+            type: 'recovery_step',
+            component: 'ollama',
+            action: 'ollama_restart',
+            actionResult: 'skipped',
+            detail: { reason: 'server already answering on :11434' },
+          });
+          return;
+        }
+      } catch { /* no listener — fall through to the respawn */ }
       if (process.platform === 'win32') {
         // Kill existing Ollama process, then start a new one
         try {
