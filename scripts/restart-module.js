@@ -40,7 +40,10 @@ function findPidOnPort(port) {
       const line = out.split('\n').find((l) => l.includes(`:${port} `) && /LISTENING/.test(l));
       if (!line) return null;
       const parts = line.trim().split(/\s+/);
-      return parts[parts.length - 1];
+      const n = Number(parts[parts.length - 1]);
+      // netstat can yield '0' for kernel/reserved sockets — '0' is truthy as
+      // a string but is never a valid target for taskkill.
+      return Number.isSafeInteger(n) && n > 0 ? String(n) : null;
     }
     const out = cp.execFileSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' }).trim();
     return out.split('\n')[0] || null;
@@ -50,10 +53,12 @@ function findPidOnPort(port) {
 }
 
 function stopPid(pid) {
+  const n = Number(pid);
+  if (!Number.isSafeInteger(n) || n <= 0) return; // never taskkill a non-pid
   if (process.platform === 'win32') {
-    cp.execFileSync('taskkill', ['/PID', pid, '/F']);
+    cp.execFileSync('taskkill', ['/PID', String(n), '/F']);
   } else {
-    cp.execFileSync('kill', ['-9', pid]);
+    cp.execFileSync('kill', ['-9', String(n)]);
   }
 }
 
