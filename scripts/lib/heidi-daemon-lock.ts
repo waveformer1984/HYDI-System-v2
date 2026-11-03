@@ -38,7 +38,7 @@ export function readProcessCommandLine(pid: number): string | null {
         '-NonInteractive',
         '-Command',
         `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`,
-      ], { encoding: 'utf8', timeout: 2000, windowsHide: true }).trim() || null;
+      ], { encoding: 'utf8', timeout: 5000, windowsHide: true }).trim() || null;
     }
     const procPath = `/proc/${pid}/cmdline`;
     if (fs.existsSync(procPath)) {
@@ -54,7 +54,8 @@ export function readProcessCommandLine(pid: number): string | null {
 }
 
 export function isHeidiDaemonCommand(commandLine: string): boolean {
-  return /(?:^|[\\/])heidi-daemon(?:-launcher\.js|\.ts)(?=["'\s]|$)/i.test(commandLine);
+  return /(?:^|[\\/])heidi-daemon(?:-launcher\.js|\.ts)(?=["'\s]|$)/i.test(commandLine)
+      || /ProcessContainerFork\.js/i.test(commandLine);
 }
 
 export function acquireHeidiDaemonLock(
