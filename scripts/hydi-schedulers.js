@@ -35,7 +35,8 @@ const JOBS = [
   { name: 'hydi-stuck-job-scheduler',    script: 'scripts/stuck-job-scheduler.js',              intervalMs: envMs('STUCK_JOB_INTERVAL_MS', 3600000),  timeoutMs: envMs('STUCK_JOB_TIMEOUT_MS', 120000) },
   { name: 'hydi-revenue-reconciliation', script: 'scripts/revenue-reconciliation-scheduler.js', intervalMs: envMs('RECONCILIATION_INTERVAL_MS', 86400000), timeoutMs: envMs('RECONCILIATION_TIMEOUT_MS', 180000) },
   { name: 'hydi-failed-webhook-retry',   script: 'scripts/failed-webhook-scheduler.js',         intervalMs: envMs('WEBHOOK_RETRY_INTERVAL_MS', 1800000), timeoutMs: envMs('WEBHOOK_RETRY_TIMEOUT_MS', 120000) },
-  { name: 'hydi-revenue-autopilot-tick', script: 'scripts/revenue-autopilot-tick.ts',           intervalMs: envMs('REVENUE_AUTOPILOT_INTERVAL_MS', 3600000), timeoutMs: envMs('REVENUE_AUTOPILOT_TIMEOUT_MS', 120000), tsx: true },
+  // revenue-autopilot-tick is a loop too (isDirectRun → run loop, no --once
+  // CLI) — it stays its own PM2 app like stripe-webhook-listener.
 ];
 
 const root = path.join(__dirname, '..');
