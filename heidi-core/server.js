@@ -60,6 +60,7 @@ const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList } = require('./status/system-status');
+const { decisionInbox, brief } = require('./status/decision-inbox');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -556,6 +557,25 @@ class HeidiCore {
         res.status(report.overall === 'UNAVAILABLE' ? 503 : 200).json({ ...report, text: formatSystemStatus(report) });
       } catch (error) {
         res.status(500).json({ overall: 'UNKNOWN', error: error.message });
+      }
+    });
+
+    // DECISION INBOX + BRIEF — read-only composition of missions + fix-list
+    // into the cards the owner decides on (status/decision-inbox.js).
+    this.app.get('/decision-inbox', async (req, res) => {
+      try {
+        const inbox = await decisionInbox(this.memory, this.root || process.cwd());
+        res.json(inbox);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    this.app.get('/brief', async (req, res) => {
+      try {
+        const b = await brief(this.memory, this.root || process.cwd());
+        res.json(b);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
       }
     });
 
