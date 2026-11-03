@@ -33,6 +33,14 @@ function loadModule(id, configPath = path.join(ROOT, 'boot.config.json')) {
   return mod;
 }
 
+function toPid(raw) {
+  const n = Number(String(raw || '').trim());
+  // A pid is a positive integer — '0', '', 'abc', '12x', '-5' are never
+  // valid targets for taskkill/kill. '0' is truthy as a string, which is
+  // how taskkill /PID 0 fired before.
+  return Number.isSafeInteger(n) && n > 0 ? String(n) : null;
+}
+
 function findPidOnPort(port) {
   try {
     if (process.platform === 'win32') {
@@ -40,20 +48,22 @@ function findPidOnPort(port) {
       const line = out.split('\n').find((l) => l.includes(`:${port} `) && /LISTENING/.test(l));
       if (!line) return null;
       const parts = line.trim().split(/\s+/);
-      return parts[parts.length - 1];
+      return toPid(parts[parts.length - 1]);
     }
     const out = cp.execFileSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' }).trim();
-    return out.split('\n')[0] || null;
+    return toPid(out.split('\n')[0]);
   } catch {
     return null; // nothing listening, or the lookup tool isn't available
   }
 }
 
 function stopPid(pid) {
+  const n = Number(pid);
+  if (!Number.isSafeInteger(n) || n <= 0) return; // never taskkill a non-pid
   if (process.platform === 'win32') {
-    cp.execFileSync('taskkill', ['/PID', pid, '/F']);
+    cp.execFileSync('taskkill', ['/PID', String(n), '/F']);
   } else {
-    cp.execFileSync('kill', ['-9', pid]);
+    cp.execFileSync('kill', ['-9', String(n)]);
   }
 }
 

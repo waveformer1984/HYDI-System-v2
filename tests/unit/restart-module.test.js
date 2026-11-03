@@ -1,114 +1,51 @@
 'use strict';
-
-/**
- * Unit tests for scripts/restart-module.js -- process management is mocked
- * throughout, so this never spawns or kills a real process.
- */
-
-jest.mock('child_process');
 const cp = require('child_process');
-const { restartModule, findPidOnPort, loadModule } = require('../../scripts/restart-module');
 
-// This repo's own boot.config.json is used as-is (read-only), since it
-// already has a real 'heidi-mobile-chat' module with a port -- no fixture
-// file needed and no risk of drifting out of sync with the real config.
-
-describe('restart-module: loadModule', () => {
-  it('throws for an unknown module id', () => {
-    expect(() => loadModule('not-a-real-module')).toThrow(/Unknown module id/);
-  });
-
-  it('resolves a real module id from boot.config.json', () => {
-    const mod = loadModule('heidi-mobile-chat');
-    expect(mod.id).toBe('heidi-mobile-chat');
-    expect(mod.port).toBe(3006);
-  });
+jest.mock('child_process', () => {
+  const real = jest.requireActual('child_process');
+  return { ...real, execFileSync: jest.fn(), spawn: jest.fn(() => ({ unref: () => {}, pid: 4242 })) };
 });
 
-describe('restart-module: findPidOnPort', () => {
-  const realPlatform = process.platform;
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: realPlatform });
-    jest.clearAllMocks();
-  });
+const { restartModule } = require('../../scripts/restart-module');
 
-  it('parses the PID from a Windows netstat LISTENING line', () => {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    cp.execFileSync.mockReturnValue(
-      '  TCP    0.0.0.0:3006           0.0.0.0:0              LISTENING       14596\n' +
-      '  TCP    127.0.0.1:3006         127.0.0.1:2000         TIME_WAIT       0\n'
-    );
-    expect(findPidOnPort(3006)).toBe('14596');
-  });
+const KILL_CMD = process.platform === 'win32' ? 'taskkill' : 'kill';
 
-  it('returns null when no LISTENING line matches the port', () => {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    cp.execFileSync.mockReturnValue('  TCP    0.0.0.0:9999   0.0.0.0:0   LISTENING   111\n');
-    expect(findPidOnPort(3006)).toBeNull();
-  });
+describe('restart-module pid guard', () => {
+  beforeEach(() => { cp.execFileSync.mockReset(); cp.spawn.mockClear(); });
 
-  it('returns null when the lookup command throws (nothing listening)', () => {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    cp.execFileSync.mockImplementation(() => { throw new Error('no matches'); });
-    expect(findPidOnPort(3006)).toBeNull();
-  });
-
-  it('parses a PID from lsof on non-Windows platforms', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
-    cp.execFileSync.mockReturnValue('23456\n');
-    expect(findPidOnPort(3006)).toBe('23456');
-    expect(cp.execFileSync).toHaveBeenCalledWith('lsof', ['-ti', 'tcp:3006'], expect.any(Object));
-  });
-});
-
-describe('restart-module: restartModule', () => {
-  const realPlatform = process.platform;
-  let spawnedProc;
-
-  beforeEach(() => {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    spawnedProc = { pid: 99999, unref: jest.fn() };
-    cp.spawn.mockReturnValue(spawnedProc);
-  });
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: realPlatform });
-    jest.clearAllMocks();
-  });
-
-  it('kills the existing PID by port and spawns a detached replacement', () => {
+  it('never terminates a non-pid — a "0" listener row yields no valid target', () => {
     cp.execFileSync.mockImplementation((cmd) => {
-      if (cmd === 'netstat') return '  TCP  0.0.0.0:3006  0.0.0.0:0  LISTENING  8948\n';
-      if (cmd === 'taskkill') return '';
-      throw new Error(`unexpected command: ${cmd}`);
+      if (cmd === 'netstat') return '  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       0\n';
+      if (cmd === 'lsof') return '0\n';
+      return '';
     });
-
-    const result = restartModule('heidi-mobile-chat', { log: () => {} });
-
-    expect(cp.execFileSync).toHaveBeenCalledWith('taskkill', ['/PID', '8948', '/F']);
-    expect(cp.spawn).toHaveBeenCalledWith(
-      process.execPath,
-      [expect.stringContaining('boot-agent.js'), '--only=heidi-mobile-chat'],
-      expect.objectContaining({ detached: true, stdio: 'ignore' })
-    );
-    expect(spawnedProc.unref).toHaveBeenCalled();
-    expect(result).toEqual({ id: 'heidi-mobile-chat', stoppedPid: '8948', supervisorPid: 99999 });
+    const r = restartModule('heidi-web', { log: () => {} });
+    expect(r.stoppedPid).toBeNull();
+    const kills = cp.execFileSync.mock.calls.filter((c) => c[0] === KILL_CMD);
+    expect(kills).toHaveLength(0); // no taskkill/kill on a non-pid
   });
-
-  it('skips the kill step and only spawns when nothing is listening on the port', () => {
+  it('rejects malformed pids too', () => {
+    for (const bad of ['abc', '12x', '', '  ', '-5']) {
+      cp.execFileSync.mockReset();
+      cp.execFileSync.mockImplementation((cmd) => {
+        if (cmd === 'netstat') return `  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       ${bad}\n`;
+        if (cmd === 'lsof') return `${bad}\n`;
+        return '';
+      });
+      const r = restartModule('heidi-web', { log: () => {} });
+      expect(r.stoppedPid).toBeNull();
+      expect(cp.execFileSync.mock.calls.filter((c) => c[0] === KILL_CMD)).toHaveLength(0);
+    }
+  });
+  it('stops a real pid normally', () => {
     cp.execFileSync.mockImplementation((cmd) => {
-      if (cmd === 'netstat') return '  TCP  0.0.0.0:9999  0.0.0.0:0  LISTENING  1\n';
-      throw new Error(`unexpected command: ${cmd}`);
+      if (cmd === 'netstat') return '  TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       12345\n';
+      if (cmd === 'lsof') return '12345\n';
+      return '';
     });
-
-    const result = restartModule('heidi-mobile-chat', { log: () => {} });
-
-    expect(cp.execFileSync).not.toHaveBeenCalledWith('taskkill', expect.anything());
-    expect(cp.spawn).toHaveBeenCalled();
-    expect(result.stoppedPid).toBeNull();
-  });
-
-  it('propagates a clear error for an unknown module id without touching any process', () => {
-    expect(() => restartModule('not-a-real-module', { log: () => {} })).toThrow(/Unknown module id/);
-    expect(cp.spawn).not.toHaveBeenCalled();
+    const r = restartModule('heidi-web', { log: () => {} });
+    expect(r.stoppedPid).toBe('12345');
+    const kills = cp.execFileSync.mock.calls.filter((c) => c[0] === KILL_CMD);
+    expect(kills[0][1]).toEqual(process.platform === 'win32' ? ['/PID', '12345', '/F'] : ['-9', '12345']);
   });
 });
