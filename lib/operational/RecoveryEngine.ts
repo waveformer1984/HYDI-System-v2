@@ -27,6 +27,19 @@ import { randomUUID } from 'crypto';
 import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
+
+// Loopback-only Ollama serve env (MemoryOps policy) — a bare spawn defaults
+// OLLAMA_HOST to 0.0.0.0 and answers on the LAN interface.
+export function ollamaServeEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    OLLAMA_HOST: '127.0.0.1:11434',
+    OLLAMA_MAX_LOADED_MODELS: '1',
+    OLLAMA_CONTEXT_LENGTH: '4096',
+    OLLAMA_NUM_PARALLEL: '1',
+    OLLAMA_KEEP_ALIVE: '2m',
+  };
+}
 import path from 'path';
 import fs from 'fs';
 import type {
@@ -990,6 +1003,24 @@ export class RecoveryEngine {
    */
   private async restartOllama(): Promise<void> {
     try {
+      // PM2 owns the Ollama lifecycle via ollama-serve. If a server already
+      // answers on :11434, recovery is a no-op — taskkill+spawn would either
+      // kill the supervised serve or start a port-conflicting duplicate.
+      try {
+        const res = await fetch('http://127.0.0.1:11434/api/version', { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          this.stateModel.logEvent({
+            id: randomUUID(),
+            timestamp: new Date().toISOString(),
+            type: 'recovery_step',
+            component: 'ollama',
+            action: 'ollama_restart',
+            actionResult: 'skipped',
+            detail: { reason: 'server already answering on :11434' },
+          });
+          return;
+        }
+      } catch { /* no listener — fall through to the respawn */ }
       if (process.platform === 'win32') {
         // Kill existing Ollama process, then start a new one
         try {
@@ -998,7 +1029,7 @@ export class RecoveryEngine {
         // Start Ollama in detached mode
         const child = spawn('ollama', ['serve'], {
           cwd: this.root,
-          env: process.env,
+          env: ollamaServeEnv(),
           shell: true,
           detached: true,
           stdio: 'ignore',
@@ -1011,7 +1042,7 @@ export class RecoveryEngine {
         } catch { /* may not be running */ }
         const child = spawn('ollama', ['serve'], {
           cwd: this.root,
-          env: process.env,
+          env: ollamaServeEnv(),
           shell: true,
           detached: true,
           stdio: 'ignore',

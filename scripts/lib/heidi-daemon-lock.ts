@@ -6,10 +6,17 @@ interface LockMetadata {
   commit: string | null;
 }
 
+interface ProcessInfo {
+  commandLine: string;
+  /** Process creation time in ms since epoch — guards PID reuse. */
+  creationDateMs: number | null;
+}
+
 interface LockDeps {
   pid?: number;
   isAlive?: (pid: number) => boolean;
   commandLine?: (pid: number) => string | null;
+  processInfo?: (pid: number) => ProcessInfo | null;
   log?: (message: string) => void;
   error?: (message: string) => void;
 }
@@ -38,7 +45,7 @@ export function readProcessCommandLine(pid: number): string | null {
         '-NonInteractive',
         '-Command',
         `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`,
-      ], { encoding: 'utf8', timeout: 2000, windowsHide: true }).trim() || null;
+      ], { encoding: 'utf8', timeout: 5000, windowsHide: true }).trim() || null;
     }
     const procPath = `/proc/${pid}/cmdline`;
     if (fs.existsSync(procPath)) {
@@ -53,8 +60,50 @@ export function readProcessCommandLine(pid: number): string | null {
   }
 }
 
+export function readProcessInfo(pid: number): ProcessInfo | null {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+  try {
+    if (process.platform === 'win32') {
+      const out = execFileSync('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}") | Select-Object CommandLine,CreationDate | ConvertTo-Json -Compress`,
+      ], { encoding: 'utf8', timeout: 5000, windowsHide: true }).trim();
+      if (!out) return null;
+      const info = JSON.parse(out) as { CommandLine?: string; CreationDate?: string };
+      if (!info.CommandLine) return null;
+      let creationDateMs: number | null = null;
+      if (info.CreationDate) {
+        // CIM serializes as "/Date(1762200551000)/" or ISO — handle both.
+        const m = /Date\((\d+)\)/.exec(info.CreationDate);
+        creationDateMs = m ? Number(m[1]) : (Date.parse(info.CreationDate) || null);
+      }
+      return { commandLine: info.CommandLine, creationDateMs };
+    }
+    const cmdline = readProcessCommandLine(pid);
+    return cmdline ? { commandLine: cmdline, creationDateMs: null } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isHeidiDaemonCommand(commandLine: string): boolean {
   return /(?:^|[\\/])heidi-daemon(?:-launcher\.js|\.ts)(?=["'\s]|$)/i.test(commandLine);
+}
+
+/** ProcessContainerFork cmdlines are identical across PM2 apps — a bare
+ *  substring match can't prove the wrapper is OUR daemon. It counts as a
+ *  live daemon owner only when its creation time aligns with the lock's
+ *  startedAt (PID-reuse / wrong-app protection). */
+const FORK_CMD_RE = /ProcessContainerFork\.js/i;
+const FORK_TIME_TOLERANCE_MS = 60_000;
+
+export function isDaemonOwner(commandLine: string, lockStartedAtMs: number | null, creationDateMs: number | null): boolean {
+  if (isHeidiDaemonCommand(commandLine)) return true;
+  if (!FORK_CMD_RE.test(commandLine)) return false;
+  if (creationDateMs === null || lockStartedAtMs === null) return false; // can't prove it's ours
+  return Math.abs(creationDateMs - lockStartedAtMs) <= FORK_TIME_TOLERANCE_MS;
 }
 
 export function acquireHeidiDaemonLock(
@@ -64,7 +113,8 @@ export function acquireHeidiDaemonLock(
 ): boolean {
   const pid = deps.pid ?? process.pid;
   const alive = deps.isAlive ?? isProcessAlive;
-  const commandLine = deps.commandLine ?? readProcessCommandLine;
+  const processInfo = deps.processInfo ?? readProcessInfo;
+  const commandLine = deps.commandLine ?? ((p: number) => processInfo(p)?.commandLine ?? null);
   const log = deps.log ?? ((message: string) => console.log(message));
   const error = deps.error ?? ((message: string) => console.error(message));
   const lockData = JSON.stringify({ pid, startedAt: new Date().toISOString(), ...metadata });
@@ -98,15 +148,17 @@ export function acquireHeidiDaemonLock(
     if (!content) {
       log('[daemon] Empty daemon lock is stale, removing');
     } else {
-      const lockInfo = JSON.parse(content) as { pid?: number };
+      const lockInfo = JSON.parse(content) as { pid?: number; startedAt?: string };
       const ownerPid = Number(lockInfo.pid);
+      const lockStartedAtMs = lockInfo.startedAt ? Date.parse(lockInfo.startedAt) || null : null;
       if (alive(ownerPid)) {
-        const ownerCommand = commandLine(ownerPid);
+        const info = processInfo(ownerPid);
+        const ownerCommand = info?.commandLine ?? commandLine(ownerPid);
         if (ownerCommand === null) {
           error(`[daemon] Cannot verify live lock owner PID ${ownerPid}; refusing to start`);
           return false;
         }
-        if (isHeidiDaemonCommand(ownerCommand)) {
+        if (isDaemonOwner(ownerCommand, lockStartedAtMs, info?.creationDateMs ?? null)) {
           error(`[daemon] Another daemon is already running (PID: ${ownerPid})`);
           return false;
         }

@@ -269,10 +269,18 @@ const realFs = Object.freeze({
   },
 });
 
-/** Free RAM gate. A build below this fails partway; better to wait. */
+/**
+ * Free RAM gate. A build below this fails partway; better to wait.
+ * The default was 0.75 GB until 2026-11-02, when two unattended deploys of
+ * the same commit passed this gate, rolled back about 8-15 minutes into the
+ * build, and left Frank at 0.2-0.5 GB free: most likely out of memory in
+ * `next build`. The last hand build that finished started with 1.9 GB free.
+ */
+const DEFAULT_MIN_FREE_RAM_GB = 1.5;
+
 function memoryPreflight(env = process.env, freemem = os.freemem) {
   const n = Number(env.HYDI_DEPLOY_MIN_FREE_RAM_GB);
-  const minGb = Number.isFinite(n) && n > 0 ? n : 0.75;
+  const minGb = Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN_FREE_RAM_GB;
   const freeGb = Math.round((freemem() / GIB) * 100) / 100;
   return freeGb >= minGb
     ? { ok: true, freeGb, reason: 'ok' }

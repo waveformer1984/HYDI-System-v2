@@ -283,7 +283,12 @@ describe('GET /api/phone/observe', () => {
     expect((await call(handler, { method: 'POST', auth: 'Bearer read-test' })).code).toBe(405);
     const ok = await call(handler, { auth: 'Bearer read-test' });
     expect(ok.code).toBe(200);
-    expect(ok.body).toEqual({ ok: true, snapshot: { device: 'frank', level: 'OK' }, fixList: null });
+    expect(ok.body).toEqual({
+      ok: true,
+      snapshot: { device: 'frank', level: 'OK' },
+      fixList: null,
+      billingOps: { alert: null, lastReconcileErrors: null, ts: null },
+    });
     expect(ok.headers['Cache-Control']).toBe('no-store');
     expect(JSON.stringify(ok.body)).not.toContain('read-test');
   });
