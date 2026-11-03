@@ -92,18 +92,31 @@ export function isHeidiDaemonCommand(commandLine: string): boolean {
   return /(?:^|[\\/])heidi-daemon(?:-launcher\.js|\.ts)(?=["'\s]|$)/i.test(commandLine);
 }
 
-/** ProcessContainerFork cmdlines are identical across PM2 apps — a bare
- *  substring match can't prove the wrapper is OUR daemon. It counts as a
- *  live daemon owner only when its creation time aligns with the lock's
- *  startedAt (PID-reuse / wrong-app protection). */
+export type OwnerClass = 'daemon' | 'unrelated' | 'unknown';
+
 const FORK_CMD_RE = /ProcessContainerFork\.js/i;
+/** hydi-daemon's PM2 `script args` — unique in ecosystem.config.js, so its
+ *  presence in a fork cmdline is real app identity (not just timing). */
+const DAEMON_ARGS_RE = /--no-stabilization/i;
 const FORK_TIME_TOLERANCE_MS = 60_000;
 
-export function isDaemonOwner(commandLine: string, lockStartedAtMs: number | null, creationDateMs: number | null): boolean {
-  if (isHeidiDaemonCommand(commandLine)) return true;
-  if (!FORK_CMD_RE.test(commandLine)) return false;
-  if (creationDateMs === null || lockStartedAtMs === null) return false; // can't prove it's ours
-  return Math.abs(creationDateMs - lockStartedAtMs) <= FORK_TIME_TOLERANCE_MS;
+/**
+ * Classify a live lock-owner candidate. A ProcessContainerFork cmdline is
+ * only app-identifying through the app's script args — timestamp proximity
+ * alone is not ownership.
+ */
+export function classifyDaemonOwner(commandLine: string, lockStartedAtMs: number | null, creationDateMs: number | null): OwnerClass {
+  if (isHeidiDaemonCommand(commandLine)) return 'daemon';
+  if (!FORK_CMD_RE.test(commandLine)) return 'unrelated';
+  if (DAEMON_ARGS_RE.test(commandLine)) {
+    // Right signature — corroborate with creation time when both stamps exist.
+    if (creationDateMs === null || lockStartedAtMs === null) return 'daemon';
+    return Math.abs(creationDateMs - lockStartedAtMs) <= FORK_TIME_TOLERANCE_MS ? 'daemon' : 'unknown';
+  }
+  // A fork WITHOUT the daemon's args: it's a different PM2 app — or we can't
+  // tell. Nonempty non-daemon args identify a sibling app; empty is ambiguous.
+  const args = commandLine.split(/ProcessContainerFork\.js/i)[1]?.trim() ?? '';
+  return args.length > 0 ? 'unrelated' : 'unknown';
 }
 
 export function acquireHeidiDaemonLock(
@@ -158,8 +171,13 @@ export function acquireHeidiDaemonLock(
           error(`[daemon] Cannot verify live lock owner PID ${ownerPid}; refusing to start`);
           return false;
         }
-        if (isDaemonOwner(ownerCommand, lockStartedAtMs, info?.creationDateMs ?? null)) {
+        const cls = classifyDaemonOwner(ownerCommand, lockStartedAtMs, info?.creationDateMs ?? null);
+        if (cls === 'daemon') {
           error(`[daemon] Another daemon is already running (PID: ${ownerPid})`);
+          return false;
+        }
+        if (cls === 'unknown') {
+          error(`[daemon] Lock owner PID ${ownerPid} is ambiguous — preserving lock and refusing to start (manual reconciliation)`);
           return false;
         }
         log(`[daemon] Stale lock from PID ${ownerPid} (process is not hydi-daemon), removing`);
