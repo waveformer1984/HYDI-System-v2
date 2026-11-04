@@ -110,10 +110,27 @@ either keep the Claude desktop app open there so Claude sessions can use the
 linked computer, or enable Windows OpenSSH Server and reach it over the tailnet
 only. If you take the second route, restrict it with a grant, as in section 2.
 
+## Heidi chat not loading on the phone
+
+Run on **heidi-pc** (diagnose, then fix):
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+powershell -ExecutionPolicy Bypass -File scripts\tailscale\diagnose-phone-access.ps1
+powershell -ExecutionPolicy Bypass -File scripts\tailscale\diagnose-phone-access.ps1 -Fix
+```
+
+`-Fix` runs `scripts/tailscale/serve-heidi-web.ps1`: restarts `heidi-web-standalone` (or
+`hydi-boot`) if `:3000/api/health` fails, then `tailscale serve --bg --https=443 http://127.0.0.1:3000`.
+
+Phone chat URL: **`https://heidi-pc.tailc50af2.ts.net/heidi`** (requires Tailscale + pairing).
+
 ## Verify
 
 ```powershell
 tailscale serve status
+curl.exe -s -o NUL -w "local health %{http_code}\n" http://127.0.0.1:3000/api/health
+curl.exe -s -o NUL -w "tailnet /heidi %{http_code}\n" https://heidi-pc.tailc50af2.ts.net/heidi
 curl.exe -s https://heidi-pc.tailc50af2.ts.net:8470/healthz
 curl.exe -s -o NUL -w "%{http_code}" -X POST https://heidi-pc.tailc50af2.ts.net:8470/mcp   # expect 401
 ```
