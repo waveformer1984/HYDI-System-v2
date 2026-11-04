@@ -745,10 +745,12 @@ class HeidiCore {
             elapsed_ms: Date.now() - startTime,
             state,
             reason: reason ? String(reason).slice(0, 120) : undefined,
+            loop: loopEvents.length ? loopEvents : undefined,
           }));
         } catch { /* logging must not crash the handler */ }
       };
       let clientGone = false;
+      const loopEvents = []; // bounded tool-loop op timing — populated on the model path only
       res.on('close', () => {
         if (terminal.state || res.writableEnded) return; // normal completion, not cancel
         clientGone = true;
@@ -868,20 +870,39 @@ class HeidiCore {
         const toolsUsed = [];
         let result = null;
         let hitMaxWithPendingTools = false;
+        let loopStop = null;
         const MAX_ROUNDS = 5;
+        // Bounded per-operation timing inside the tool loop. Each event is
+        // {op, r(ound), dur_ms, outcome} — no prompts/args/results logged.
+        const loopMark = (op, extra = {}) => {
+          phase(`loop_${op}`);
+          if (loopEvents.length < 24) loopEvents.push({ op, ...extra });
+        };
 
+        phase('prompt_built');
         for (let round = 0; round < MAX_ROUNDS; round++) {
-          result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
+          const mT = Date.now();
+          try {
+            result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
+            loopMark('model_call', { r: round, dur_ms: Date.now() - mT, outcome: 'ok' });
+          } catch (e) {
+            loopMark('model_call', { r: round, dur_ms: Date.now() - mT, outcome: 'error', reason: e.code || e.message?.slice(0, 60) });
+            throw e;
+          }
 
           if (!result.tool_calls || result.tool_calls.length === 0) {
+            const xT = Date.now();
             const extracted = this.toolRegistry.extractToolCalls(result.text);
             if (extracted && extracted.length) {
+              loopMark('extract', { r: round, dur_ms: Date.now() - xT, outcome: 'recovered' });
               result.tool_calls = extracted;
             } else {
+              loopMark('extract', { r: round, dur_ms: Date.now() - xT, outcome: 'none' });
+              loopStop = 'no_tool_calls';
               break;
             }
           }
-          if (round === MAX_ROUNDS - 1) { hitMaxWithPendingTools = true; break; }
+          if (round === MAX_ROUNDS - 1) { hitMaxWithPendingTools = true; loopStop = 'max_rounds'; break; }
 
           messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.tool_calls });
           for (const call of result.tool_calls) {
@@ -890,11 +911,21 @@ class HeidiCore {
             if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = {}; } }
 
             send({ t: `⚙️ ${name}…\n` });
-            const toolResult = await this.toolRegistry.execute(name, args, 'Heidi');
-            toolsUsed.push(name);
-            messages.push({ role: 'tool', tool_name: name, content: JSON.stringify(toolResult) });
+            const tT = Date.now();
+            try {
+              const toolResult = await this.toolRegistry.execute(name, args, 'Heidi');
+              const outcome = toolResult && (toolResult.denied || toolResult.error) ? (toolResult.denied ? 'denied' : 'error') : 'ok';
+              loopMark('tool', { r: round, tool: name, dur_ms: Date.now() - tT, outcome });
+              toolsUsed.push(name);
+              messages.push({ role: 'tool', tool_name: name, content: JSON.stringify(toolResult) });
+            } catch (e) {
+              loopMark('tool', { r: round, tool: name, dur_ms: Date.now() - tT, outcome: 'error', reason: e.code || e.message?.slice(0, 60) });
+              throw e;
+            }
           }
         }
+        if (!loopStop) loopStop = hitMaxWithPendingTools ? 'max_rounds' : 'loop_end';
+        loopMark('loop_done', { stop: loopStop });
 
         // Force a final synthesis: if the model still wanted tools (hit the cap)
         // or returned no text after tool calls, ask once more WITHOUT tools so
@@ -903,13 +934,16 @@ class HeidiCore {
         let finalText = (result && result.text) ? result.text.trim() : '';
         if (!finalText || hitMaxWithPendingTools) {
           try {
+            const sT = Date.now();
             const synth = await this.brain.chatWithTools(
               [...messages, { role: 'user', content: 'Now answer my question in plain text using the tool results above. Do not call any more tools.' }],
               [], // no tools offered — forces a text answer
               { model, temperature: 0 }
             );
             if (synth.text && synth.text.trim()) finalText = synth.text.trim();
+            loopMark('synthesis', { dur_ms: Date.now() - sT, outcome: finalText ? 'ok' : 'empty' });
           } catch (e) {
+            loopMark('synthesis', { dur_ms: Date.now() - sT, outcome: 'error', reason: e.code || e.message?.slice(0, 60) });
             console.error('[HEIDI] Tool synthesis failed:', e.message);
           }
         }

@@ -24,7 +24,7 @@ function stubCore() {
   heidi.retrieveProceduralMemory = async () => [];
   heidi.runTaskChat = async () => 'task output';
   heidi.traceReport = async () => ({ text: 'trace' });
-  heidi.toolRegistry = { toOllamaTools: () => [], execute: async () => ({ ok: true }) };
+  heidi.toolRegistry = { toOllamaTools: () => [], extractToolCalls: () => [], execute: async () => ({ ok: true }) };
   heidi.brain = {
     chatWithTools: async () => ({ text: 'ok answer', toolCalls: [] }),
     generateStream: async (prompt, onTok) => { onTok('tok'); return { text: 'tok', model: 'qwen2.5:3b' }; },
@@ -92,6 +92,27 @@ describe('/chat-tools terminal record', () => {
     const t = terminal();
     expect(t).toHaveLength(1);
     expect(t[0].state).toBe('cancelled');
+  });
+
+  it('model+tool path emits per-op loop timing in the terminal record', async () => {
+    const heidi = stubCore();
+    heidi.brain.chatWithTools = jest.fn()
+      .mockResolvedValueOnce({ text: 'calling tool', tool_calls: [{ function: { name: 'system_status', arguments: '{}' } }] })
+      .mockResolvedValueOnce({ text: 'final answer', tool_calls: [] });
+    const { server, port } = await listen(heidi);
+    await post(port, { input: 'check the system status please' });
+    server.close();
+    const t = terminal();
+    expect(t).toHaveLength(1);
+    expect(t[0].state).toBe('completed');
+    expect(Array.isArray(t[0].loop)).toBe(true);
+    const ops = t[0].loop.map((e) => e.op);
+    expect(ops).toContain('model_call');
+    expect(ops).toContain('tool');
+    const toolEv = t[0].loop.find((e) => e.op === 'tool');
+    expect(toolEv.tool).toBe('system_status');
+    expect(toolEv.outcome).toBe('ok');
+    expect(typeof toolEv.dur_ms).toBe('number');
   });
 
   it('handler failure emits one failed record with bounded reason', async () => {
