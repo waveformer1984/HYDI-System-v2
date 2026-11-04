@@ -59,7 +59,7 @@ const MissionWorker = require('./missions/mission-worker');
 const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
 const { MemoryRuntime } = require('./memory/memory-runtime');
-const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList } = require('./status/system-status');
+const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
 const { decisionInbox, brief } = require('./status/decision-inbox');
 
 class HeidiCore {
@@ -731,7 +731,7 @@ class HeidiCore {
       // Terminal record — exactly one bounded chat_tools_terminal line per
       // request, even if the SSE done packet never reaches the client.
       const terminal = { state: null, route: null };
-      const finish = (state, route, reason) => {
+      const finish = (state, route, reason, matched) => {
         if (terminal.state) return; // single guarded finalization
         terminal.state = state;
         terminal.route = route || terminal.route || 'model';
@@ -745,6 +745,7 @@ class HeidiCore {
             elapsed_ms: Date.now() - startTime,
             state,
             reason: reason ? String(reason).slice(0, 120) : undefined,
+            matched,
             loop: loopEvents.length ? loopEvents : undefined,
           }));
         } catch { /* logging must not crash the handler */ }
@@ -767,18 +768,19 @@ class HeidiCore {
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => { if (clientGone || res.writableEnded || res.destroyed) return; res.write(`data: ${JSON.stringify(d)}\n\n`); };
-        const done = (route, reason) => { finish(reason ? 'failed' : 'completed', route, reason); return res.end(); };
+        const done = (route, reason, matched) => { finish(reason ? 'failed' : 'completed', route, reason, matched); return res.end(); };
 
         // Persistent conversation + memory (see memory/memory-runtime.js).
         // Memory commands answer from the store itself, before any model.
         const owner = this.memoryRuntime.resolveOwner(req);
         const requestId = req.body.request_id || null;
         phase('routes_checked');
-        if (isSystemReportQuery(input)) {
+        const reportMatch = isSystemReportQuery(input) ? 'exact' : matchSystemReportParaphrase(input);
+        if (reportMatch) {
           const report = await this.getSystemStatus();
           send({ t: formatSystemStatus(report) });
-          send({ done: true, model: 'system-status', overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
-          return done('deterministic');
+          send({ done: true, model: 'system-status', matched: reportMatch, overall: report.overall, conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic', null, reportMatch);
         }
         if (isFixListQuery(input)) {
           let list = null;

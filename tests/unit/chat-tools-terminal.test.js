@@ -67,6 +67,30 @@ describe('/chat-tools terminal record', () => {
     expect(t[0].correlation_id).toBeTruthy();
   });
 
+  it('paraphrase "run the system report tool now" is deterministic — zero model calls, matched id recorded', async () => {
+    const heidi = stubCore();
+    const brainSpy = jest.spyOn(heidi.brain, 'chatWithTools');
+    const { server, port } = await listen(heidi);
+    const r = await post(port, { input: 'run the system report tool now' });
+    server.close();
+    expect(brainSpy).not.toHaveBeenCalled(); // zero model invocations
+    expect(r.data).toContain('system-status');
+    const t = terminal();
+    expect(t).toHaveLength(1);
+    expect(t[0].route).toBe('deterministic');
+    expect(t[0].matched).toBe('system_report_paraphrase');
+  });
+
+  it('mixed intent "run the system report and restart heidi" does NOT match deterministic', async () => {
+    const heidi = stubCore();
+    heidi.brain.chatWithTools = async () => ({ text: 'ok', toolCalls: [] });
+    const { server, port } = await listen(heidi);
+    await post(port, { input: 'run the system report and restart heidi' });
+    server.close();
+    const t = terminal();
+    expect(t[0].route).not.toBe('deterministic'); // fell through to model/other path
+  });
+
   it('model path emits one completed record', async () => {
     const heidi = stubCore();
     const { server, port } = await listen(heidi);
