@@ -23,10 +23,17 @@ substring matching, no inference.
 Read-only report/status intents only:
 
 ```
-system report   ::= "run|get|show|give me|generate" [ "the" ] "system report" [ "tool"|"please"|"now" ]
-system status   ::= "system status" | "status report" | "health report" | "health check" [ "please"|"now" ]
-fix list        ::= "fix list" | "fixlist" | "fix-list" | "/fixlist" | "show the fix list"
+report request  ::= VERB [ "the" ] NOUN report|status|check [ "tool" ] [ "please" ] [ "now" ]
+bare check      ::= system|status|health "check" [ "please" ] [ "now" ]
+  VERB  ::= run | get | show | give me | generate | make | do
+  NOUN  ::= system | status | health | full
+exact forms     ::= system report | status report | health report | /status | full status
+fix list        ::= fix list | fixlist | fix-list | /fixlist
 ```
+
+Notes: `give me a system report` does NOT match — the article must be
+"the" or absent (conservative non-match → model path). Suffixes are
+optional and order-free within the listed set.
 
 Whole-utterance match after normalization (lowercase, collapse whitespace,
 strip trailing punctuation). The utterance must match a pattern **completely** —
@@ -56,6 +63,19 @@ Request → existing `x-heidi-secret`/loopback auth → JSON validation →
 normalized whole-command match → existing governed tool/status executor →
 deterministic renderer → response. No new authorization surface; a matched
 request does exactly what an exact-command request does today.
+
+**Executor-path audit:** a matched paraphrase invokes `this.getSystemStatus()`
++ `formatSystemStatus()` — byte-for-byte the same functions the exact
+`system report` command calls. There is no second tool path: the match only
+selects *which existing code runs*, identical to how `isSystemReportQuery`
+already behaved. Authorization happens before matching (middleware rejects
+non-loopback requests without `x-heidi-secret`); the matcher sees only
+`req.body.input` and cannot reach tool arguments, process control, or any
+mutating executor. `toolRegistry.execute` is never invoked by this branch —
+no permission level changes, no `run_command` surface, no audit gaps:
+every match emits `route: deterministic` + `matched` pattern id in the
+`chat_tools_terminal` record and `model: "system-status"` in the SSE done
+packet, same audit trail as the exact command.
 
 ## Telemetry
 

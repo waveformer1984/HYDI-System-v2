@@ -20,7 +20,7 @@ describe('matchSystemReportParaphrase — bounded grammar', () => {
     'run the system report and restart heidi', 'run the system report then restart heidi',
     'run the sales report', 'run git status', 'run git status in the repo',
     'restart the system report service', 'write me a report about the weather in paris',
-    'run the report', 'run the system repor',
+    'run the report', 'run the system repor', 'give me a system report', 'run my system report',
     'run the system report, then delete files',
     'delete the system report', 'update the system report',
     'run the system report please now and also fix things',
