@@ -1467,7 +1467,7 @@ class HeidiCore {
         assigned_agent: 'Heidi', // required by create_mission when an action is attached
         // heidi-core's process.cwd() is heidi-core/, not the repo root —
         // target the repo explicitly rather than inherit the wrong package.
-        action: { type: 'run_command', command: 'npm', args: ['--prefix', require('path').resolve(__dirname, '..'), 'test'] },
+        action: { type: 'run_command', command: 'npm', args: ['--prefix', require('path').resolve(__dirname, '..'), 'test'], timeout_ms: 600000 },
         success: { exitCode: 0 },
       }),
     },
