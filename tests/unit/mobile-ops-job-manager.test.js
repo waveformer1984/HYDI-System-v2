@@ -257,10 +257,16 @@ posix('JobManager with real processes', () => {
   });
 });
 
+function sampleJobArgs(kind) {
+  if (kind === 'tests.suite') return { suite: 'mobile-ops' };
+  if (kind === 'evolution.improvement') return { run_id: 'fixture-run-id' };
+  return {};
+}
+
 describe('job catalog', () => {
   it('every job has a fixed, non-empty argv and a permission', () => {
     for (const [kind, def] of Object.entries(JOBS)) {
-      const steps = def.steps(kind === 'tests.suite' ? { suite: 'mobile-ops' } : {}, '/repo');
+      const steps = def.steps(sampleJobArgs(kind), '/repo');
       expect(Array.isArray(steps)).toBe(true);
       for (const s of steps) {
         expect(typeof s.cmd).toBe('string');
@@ -270,8 +276,13 @@ describe('job catalog', () => {
         // so the test checks intent (inside the repo root), not the host OS.
         expect(s.cwd.replace(/\\/g, '/').startsWith('/repo')).toBe(true);
       }
-      expect(def.permission).toMatch(/^ops:/);
+      expect(def.permission).toMatch(/^(ops:|fabric:)/);
     }
+  });
+
+  it('evolution.improvement requires run_id', () => {
+    expect(JOBS['evolution.improvement'].steps({}, '/repo')).toMatchObject({ error: 'run_id_required' });
+    expect(JOBS['evolution.improvement'].permission).toBe('fabric:control');
   });
 
   it('suite names are an allowlist; anything else is rejected', () => {
