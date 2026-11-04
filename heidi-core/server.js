@@ -886,7 +886,15 @@ class HeidiCore {
           const mT = Date.now();
           try {
             result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
-            loopMark('model_call', { r: round, dur_ms: Date.now() - mT, outcome: 'ok' });
+            const p = result.provider || {};
+            loopMark('model_call', {
+              r: round, dur_ms: Date.now() - mT, outcome: 'ok',
+              // provider total/load/prompt-eval/eval (ms) when supplied —
+              // round-trip time is NOT pure inference: it also includes
+              // client queueing and any unmeasured gap between them.
+              load_ms: p.load_ms, prompt_eval_ms: p.prompt_eval_ms, eval_ms: p.eval_ms,
+              ptoks: result.tokens?.prompt, etoks: result.tokens?.completion,
+            });
           } catch (e) {
             loopMark('model_call', { r: round, dur_ms: Date.now() - mT, outcome: 'error', reason: e.code || e.message?.slice(0, 60) });
             throw e;
@@ -943,7 +951,12 @@ class HeidiCore {
               { model, temperature: 0 }
             );
             if (synth.text && synth.text.trim()) finalText = synth.text.trim();
-            loopMark('synthesis', { dur_ms: Date.now() - sT, outcome: finalText ? 'ok' : 'empty' });
+            const sp = (synth && synth.provider) || {};
+            loopMark('synthesis', {
+              dur_ms: Date.now() - sT, outcome: finalText ? 'ok' : 'empty',
+              load_ms: sp.load_ms, prompt_eval_ms: sp.prompt_eval_ms, eval_ms: sp.eval_ms,
+              ptoks: synth.tokens?.prompt, etoks: synth.tokens?.completion,
+            });
           } catch (e) {
             loopMark('synthesis', { dur_ms: Date.now() - sT, outcome: 'error', reason: e.code || e.message?.slice(0, 60) });
             console.error('[HEIDI] Tool synthesis failed:', e.message);
