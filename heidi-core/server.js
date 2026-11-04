@@ -1464,6 +1464,7 @@ class HeidiCore {
       args: () => ({
         goal: 'Run the project FULL jest suite (npm test at repo root) and report the failures',
         priority: 1,
+        assigned_agent: 'Heidi', // required by create_mission when an action is attached
         // heidi-core's process.cwd() is heidi-core/, not the repo root —
         // target the repo explicitly rather than inherit the wrong package.
         action: { type: 'run_command', command: 'npm', args: ['--prefix', require('path').resolve(__dirname, '..'), 'test'] },
@@ -1576,7 +1577,9 @@ class HeidiCore {
         return '📋 Missions:\n' + result.map((m) => `  #${m.id} [${m.status}] (pri ${m.priority}) ${m.goal}`).join('\n');
       }
       case 'create_mission': {
-        if (result && result.id) return `📋 Mission #${result.id} created: ${result.goal || 'task'} — say "task approve ${result.id}" to run it, then "task ${result.id}" for the result.`;
+        // create_mission returns {created, task_id, state} — no goal field,
+        // so the scope warning is stated here where Jordan actually sees it.
+        if (result && result.task_id) return `📋 Mission #${result.task_id} created: run the FULL jest suite via npm test at the repo root (~8 minutes observed). Say "task approve ${result.task_id}" to run it, then "task ${result.task_id}" for the result.`;
         return JSON.stringify(result);
       }
       case 'run_command': {
