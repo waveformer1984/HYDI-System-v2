@@ -284,14 +284,26 @@ class OllamaClient {
     });
 
     const msg = response.data.message || {};
+    const d = response.data;
     return {
       text: msg.content || '',
       tool_calls: msg.tool_calls || [],
-      model: response.data.model,
+      model: d.model,
       latency_ms: Date.now() - startTime,
       tokens: {
-        prompt: response.data.prompt_eval_count || 0,
-        completion: response.data.eval_count || 0
+        prompt: d.prompt_eval_count || 0,
+        completion: d.eval_count || 0
+      },
+      // Provider-side timing (nanoseconds) — distinguishes model load,
+      // prompt evaluation, and generation inside the client-observed
+      // round trip. Undefined when the provider does not supply them.
+      provider: {
+        total_ms: d.total_duration != null ? Math.round(d.total_duration / 1e6) : undefined,
+        load_ms: d.load_duration != null ? Math.round(d.load_duration / 1e6) : undefined,
+        prompt_eval_ms: d.prompt_eval_duration != null ? Math.round(d.prompt_eval_duration / 1e6) : undefined,
+        eval_ms: d.eval_duration != null ? Math.round(d.eval_duration / 1e6) : undefined,
+        cached_prompt_tokens: d.prompt_eval_cached_count != null ? d.prompt_eval_cached_count : undefined,
+        done_reason: d.done_reason || undefined
       }
     };
   }
