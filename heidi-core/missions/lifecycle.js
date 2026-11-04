@@ -185,7 +185,9 @@ function approvalPolicy(action, { env = process.env, moduleIds = bootModuleIds()
 function redactOutput(text, max = 1500) {
   const lines = String(text || '').split(/\r?\n/).map((l) => (containsSecret(l) ? '[line hidden: looked like a credential]' : l));
   const joined = lines.join('\n').trim();
-  return joined.length > max ? `${joined.slice(0, max)}… (${joined.length - max} more chars)` : joined;
+  // Keep the TAIL: test summaries and failure names live at the end of a run —
+  // a head-truncated log would show setup noise and lose the actual result.
+  return joined.length > max ? `(${joined.length - max} earlier chars elided)… ${joined.slice(-max)}` : joined;
 }
 
 /**
