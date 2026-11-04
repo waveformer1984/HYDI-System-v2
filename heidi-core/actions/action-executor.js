@@ -74,7 +74,7 @@ class ActionExecutor {
           result = await this.runScript(action.target, action.args);
           break;
         case 'run_command':
-          result = await this.runCommand(action.command, action.args);
+          result = await this.runCommand(action.command, action.args, { timeout_ms: action.timeout_ms });
           break;
         case 'write_file':
           result = await this.writeFile(action.target, action.content);
@@ -184,7 +184,7 @@ class ActionExecutor {
    * Run a command directly. Hardened: the binary must be whitelisted AND no
    * argument may smuggle in an inline-eval flag or shell metacharacters.
    */
-  async runCommand(command, args = []) {
+  async runCommand(command, args = [], opts = {}) {
     // Only a bare binary name is allowed — no inline args baked into `command`.
     if (/\s/.test(command)) {
       throw new Error(`Command must be a bare executable name, got: '${command}'`);
@@ -213,7 +213,20 @@ class ActionExecutor {
       return { stdout: args.map(String).join(' ') + '\n', stderr: '', exitCode: 0 };
     }
 
-    return this.spawnProcess(command, args, { shell: false });
+    // On Windows `npm` is a .cmd batch file — spawn() with shell:false cannot
+    // resolve it (mission #3885: spawn npm ENOENT). Run the same npm CLI
+    // through the Node binary directly instead: shell-free, no .cmd needed.
+    // The launcher still enforces the allowlist on 'npm' itself — this only
+    // changes HOW the approved command executes, never WHICH command runs.
+    if (cmd === 'npm' && process.platform === 'win32') {
+      const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+      if (!fs.existsSync(npmCli)) {
+        throw new Error(`npm launch adapter: npm-cli.js not found at ${npmCli}`);
+      }
+      return this.spawnProcess(process.execPath, [npmCli, ...args.map(String)], opts);
+    }
+
+    return this.spawnProcess(command, args, opts);
   }
 
   /**
@@ -221,10 +234,12 @@ class ActionExecutor {
    */
   spawnProcess(command, args, options = {}) {
     return new Promise((resolve, reject) => {
+      // Bounded timeout — an action may carry timeout_ms up to 10 minutes
+      // (a full jest suite needs ~8; shorter work keeps the 30s default).
+      const timeout = Math.min(Math.max(Number(options.timeout_ms) || 30000, 1000), 600000);
       const child = spawn(command, args, {
-        ...options,
         shell: false,   // never route through a shell — args stay literal
-        timeout: 30000, // 30 second timeout
+        timeout,
         env: { ...process.env, NODE_ENV: 'production' }
       });
 
