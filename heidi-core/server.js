@@ -1462,9 +1462,11 @@ class HeidiCore {
       tool: 'create_mission',
       pattern: /^\s*(?:run|execute|do|start)\s+(?:the\s+)?(?:tests?|test suite|unit tests?)(?:\s+(?:for|on|in)\s+(?:this|the)\s+(?:project|repo|codebase|repository))?[.!?]?\s*$/i,
       args: () => ({
-        goal: 'Run the project test suite and report the failures',
+        goal: 'Run the project FULL jest suite (npm test at repo root) and report the failures',
         priority: 1,
-        action: { type: 'run_command', command: 'npm', args: ['test'] },
+        // heidi-core's process.cwd() is heidi-core/, not the repo root —
+        // target the repo explicitly rather than inherit the wrong package.
+        action: { type: 'run_command', command: 'npm', args: ['--prefix', require('path').resolve(__dirname, '..'), 'test'] },
         success: { exitCode: 0 },
       }),
     },
