@@ -32,7 +32,14 @@ async function main() {
   const plan = engine.generatePlan();
   console.log('Top backlog item:', plan.backlog?.[0]?.title);
 
-  const runId = randomBytes(4).toString('hex');
+  const store = engine._components.runStore;
+  const tag = randomBytes(4).toString('hex');
+  const { run } = store.createRun({
+    idempotency_key: `demo-${tag}`,
+    item_id: plan.backlog?.[0]?.id,
+    initiator: 'vertical-slice-demo',
+  });
+  const runId = run.run_id;
   const jm = getJobManager();
   const job = jm.start({
     kind: 'evolution.improvement',
@@ -48,7 +55,27 @@ async function main() {
     actor: 'vertical-slice-demo',
   });
 
-  console.log(JSON.stringify({ job, poll: `evolution.run_status run_id=${runId}`, evidence_dir: '.runtime/evolution/evidence' }, null, 2));
+  const summary = {
+    job,
+    run_id: runId,
+    poll: `evolution.run_status with run_id=${runId}`,
+    evidence_dir: path.join(repoRoot, '.runtime/evolution/evidence'),
+  };
+  if (job.ok && job.job) {
+    const deadline = Date.now() + 180_000;
+    while (Date.now() < deadline) {
+      const j = jm.get({ id: job.job.id, role: 'owner', since: 0 });
+      if (j.ok && j.job && ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(j.job.state)) {
+        summary.job_final = j.job;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const finalRun = store.get(runId);
+    summary.run_final = finalRun;
+    if (finalRun?.evidence_path) summary.evidence_file = finalRun.evidence_path;
+  }
+  console.log(JSON.stringify(summary, null, 2));
 }
 
 main().catch((e) => {
