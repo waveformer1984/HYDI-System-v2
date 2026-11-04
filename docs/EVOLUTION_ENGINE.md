@@ -20,6 +20,16 @@ Persistent self-improvement for HYDI / Heidi: observe → audit → plan → exe
 
 Long-running goal execution and Supabase-backed cycles remain in `evolution/self-evolve-cycle.js` and `evolution/heidi-goals.js`. The engine does **not** replace execution-fabric; mobile ops invoke typed actions and objectives.
 
+## Control plane
+
+- Protected write boundaries: `protected-boundaries.js` (RBAC, migrations, control-plane modules).
+- Approval contract per run: base SHA, allowed paths, frozen verification, TTL, `implement_only` scope.
+- Durable runs: `run-store.js` (idempotency, leases, lifecycle); poll via `evolution.run_status`.
+- Emergency stop: `evolution.emergency_stop` or `.runtime/evolution/EMERGENCY_STOP`.
+- Evidence manifests: `evidence/<run_id>.json` with completeness check.
+- Trend metrics: `metrics.jsonl` (`not_measured` when unavailable).
+- Blocking architecture map: `node scripts/evolution-architecture-audit.js`.
+
 ## Operator gates
 
 - `EVOLUTION_ALLOW_EXECUTE=true` — apply workspace patches (never `clean-main` directly).

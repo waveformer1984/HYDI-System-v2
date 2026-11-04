@@ -83,6 +83,7 @@ describe('evolution engine cycle (hermetic)', () => {
       approved: true,
       simulatePatch: true,
       regressionProbe: () => true,
+      regressionInjected: true,
     });
     expect(failRun.ok).toBe(false);
     expect(failRun.outcome).toBe('rolled_back');
