@@ -49,9 +49,13 @@ node scripts/evolution-engine.js verify --suite evolution
 
 ## Mobile
 
-Typed actions: `evolution.status`, `evolution.audit`, `evolution.plan`, `evolution.history`, `evolution.execute`, `evolution.rollback`, `evolution.verify`.
+Typed actions: `evolution.status`, `evolution.audit`, `evolution.plan`, `evolution.history`, `evolution.execute`, `evolution.execute_async`, `evolution.run_status`, `evolution.rollback`, `evolution.verify`, `evolution.emergency_stop`.
 
-Objective template: `ops.evolution-audit` (status → audit → plan → history).
+Jobs: `job.evolution.improvement` (runs `scripts/evolution-execute.js`).
+
+Objectives: `ops.evolution-audit` (read-only bundle); `ops.evolution-vertical-slice` (audit → plan → async execute).
+
+See [EVOLUTION_VERTICAL_SLICE.md](./EVOLUTION_VERTICAL_SLICE.md) for Frank operator steps.
 
 ## Tests
 
