@@ -60,3 +60,34 @@ describe('runCommand npm launch + timeout', () => {
     await expect(ex.runCommand('npm', ['test', '&&', 'del', '/s', 'c:\\'])).rejects.toThrow(/unsafe argument/);
   });
 });
+
+// Real-launch fixture — no mock: proves the adapter actually starts the
+// resolved npm CLI and captures a harmless result. `npm --version` is
+// read-only and fast.
+describe('npm adapter real launch (fixture)', () => {
+  (process.platform === 'win32' ? it : it.skip)('npm --version launches and captures output', async () => {
+    jest.unmock('child_process');
+    const { spawn } = jest.requireActual('child_process');
+    const ex = new ActionExecutor({});
+    ex.spawnProcess = function (cmd, args, opts) {
+      return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, { shell: false, timeout: 30000, env: process.env });
+        let out = '';
+        child.stdout.on('data', (d) => (out += d));
+        child.on('close', (code) => resolve({ stdout: out, exitCode: code }));
+        child.on('error', reject);
+      });
+    };
+    const r = await ex.runCommand('npm', ['--version']);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/\d+\.\d+\.\d+/);
+  }, 30000);
+  it('invalid timeout_ms falls back to 30s default', async () => {
+    spawn.mockImplementation(() => fakeChild());
+    const ex = new ActionExecutor({});
+    await ex.runCommand('git', ['status'], { timeout_ms: 'abc' });
+    expect(spawn.mock.calls[0][2].timeout).toBe(30000); // NaN → 30s default
+    await ex.runCommand('git', ['status'], { timeout_ms: -5 });
+    expect(spawn.mock.calls[1][2].timeout).toBe(1000); // clamps to the 1s floor
+  });
+});
