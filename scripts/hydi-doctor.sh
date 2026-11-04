@@ -191,8 +191,13 @@ else
     ANY_CHECKED=1
     code=$(curl -sS -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${port}/" 2>/dev/null || true)
     [ -n "$code" ] || code=000
+    health_code=000
     if [ "$code" != "000" ]; then
-      say "port $port ($label): listening HTTP $code"
+      health_code=$(curl -sS -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${port}/api/health" 2>/dev/null || true)
+      [ -n "$health_code" ] || health_code=000
+    fi
+    if [ "$code" != "000" ]; then
+      say "port $port ($label): listening HTTP $code (api/health ${health_code})"
       case $label in
         hydi.py) PY_PORT=$port ;;
         # llama.cpp answers HTTP too, but it is an inference backend — the
@@ -217,6 +222,21 @@ elif [ -n "$RUN_PORT" ]; then
   OPEN_PORT=$RUN_PORT
 elif [ -n "$CONF_PORT" ]; then
   OPEN_PORT=$CONF_PORT
+fi
+
+say ""
+say "== ollama (local :11434)"
+if command -v curl >/dev/null 2>&1; then
+  otags=$(curl -sS -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:11434/api/tags" 2>/dev/null || true)
+  [ -n "$otags" ] || otags=000
+  say "ollama /api/tags: HTTP $otags"
+else
+  say "curl missing; ollama not probed"
+fi
+if command -v ollama >/dev/null 2>&1; then
+  ollama list 2>/dev/null | head -n 8 || say "ollama list failed (daemon not running?)"
+else
+  say "ollama CLI not on PATH"
 fi
 
 say ""
@@ -408,6 +428,14 @@ if command -v df >/dev/null 2>&1; then
   df -h "$HOME" 2>/dev/null || df -h .
 else
   say "df: not on PATH"
+fi
+if command -v du >/dev/null 2>&1; then
+  say "top storage (MiB, read-only):"
+  for d in "$HOME/.ollama" "$HOME/.cache" "$HOME/.npm" "$HOME/HYDI-System-v2/node_modules" "$HOME/models"; do
+    [ -e "$d" ] || continue
+    du -sm "$d" 2>/dev/null | awk -v p="$d" '{ printf "  %s: %s MiB\n", p, $1 }'
+  done
+  say "full ranked audit: sh termux/hydi-storage-audit.sh"
 fi
 oom_model=""
 if [ -n "${HYDI_MODEL:-}" ] && [ -f "${HYDI_MODEL:-}" ]; then
