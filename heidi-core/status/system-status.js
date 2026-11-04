@@ -228,6 +228,28 @@ function isSystemReportQuery(input) {
   return t === 'system report' || t === 'status report' || t === 'health report' || t === '/status' || t === 'full status';
 }
 
+/**
+ * Bounded paraphrase matcher (docs/DETERMINISTIC_ROUTING_PROPOSAL.md).
+ * Whole-utterance match only — returns a stable pattern id or null.
+ * Negated, quoted, meta, and mixed-intent utterances are NEVER matched.
+ */
+function matchSystemReportParaphrase(input) {
+  const raw = String(input || '').trim();
+  const t = raw.toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;]+$/, '');
+  if (!t || t !== t.slice(0, 80)) return null;                    // sane bound
+  if (/["'`“”]/.test(t)) return null;                             // quoted/meta use
+  if (/\b(don't|do not|dont|never|cannot|can't|wont|won't)\b/.test(t)) return null; // negated
+  if (/^(explain|what|why|how|who|when|where|describe|tell me (what|why|how|about))/.test(t)) return null; // meta question
+  if (/\b(and|then|also|after|before|plus|restart|stop|start|kill|delete|remove|update|create|write)\b/.test(t)) return null; // mixed/mutating intent
+  // run|get|show|give me|generate|make|do [the] system|status|health report|status|check [tool|please|now]
+  if (/^(?:run|get|show|give me|generate|make|do)(?: the)? (?:system|status|health|full) (?:report|status|check)(?: tool)?(?: please)?(?: now)?$/.test(t)) {
+    return 'system_report_paraphrase';
+  }
+  // bare forms: "health check", "status check", "system check" (+ please/now)
+  if (/^(?:system|status|health) check(?: please| now)?$/.test(t)) return 'health_check';
+  return null;
+}
+
 /** Chat phrases that ask for the ranked fix list (read-only; lib/observation/fix-list.js). */
 function isFixListQuery(input) {
   const t = String(input || '').trim().toLowerCase();
@@ -245,4 +267,4 @@ function formatFixList(list) {
   return [head, ...lines].join('\n');
 }
 
-module.exports = { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, STATES };
+module.exports = { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase, STATES };
