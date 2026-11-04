@@ -1,24 +1,17 @@
 'use strict';
-// Static regression: the report-selection guidance must reach the model —
-// via the system_status tool description AND the /chat-tools prompt rules.
+// Regression for the deterministic paraphrase route — the matcher exists,
+// is exported, and the /chat-tools handler invokes it before the model path.
 const fs = require('fs');
 const path = require('path');
-const ToolRegistry = require('../../heidi-core/tools/tool-registry.js');
+const statusMod = require('../../heidi-core/status/system-status.js');
 
-describe('system-report tool selection guidance', () => {
-  it('system_status description mentions system report', () => {
-    const tools = new ToolRegistry({}).toOllamaTools();
-    const ss = tools.find((t) => t.function.name === 'system_status');
-    expect(ss).toBeTruthy();
-    expect(ss.function.description.toLowerCase()).toMatch(/system report/);
+describe('deterministic report routing wiring', () => {
+  it('exports the paraphrase matcher', () => {
+    expect(typeof statusMod.matchSystemReportParaphrase).toBe('function');
   });
-  it('the chat-tools prompt maps reports to system_status before run_command', () => {
+  it('the chat-tools handler calls the matcher on the deterministic branch', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../heidi-core/server.js'), 'utf8');
-    const reportRule = src.indexOf('call system_status');
-    const shellRule = src.indexOf('call run_command');
-    expect(reportRule).toBeGreaterThan(-1);
-    expect(shellRule).toBeGreaterThan(-1);
-    expect(reportRule).toBeLessThan(shellRule); // status/report rule precedes shell rule
-    expect(src).toMatch(/word "run" does not make it a shell command/);
+    expect(src).toMatch(/matchSystemReportParaphrase/);
+    expect(src).toMatch(/model: 'system-status', matched/); // done packet carries the pattern id
   });
 });
