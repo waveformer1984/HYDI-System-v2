@@ -92,12 +92,20 @@ describe('matchFastPath: routing', () => {
     // in approved list" error instead of a normal conversational answer.
     it.each([
       'run this by the team first',
-      'run the tests',
       'run for president',
       'execute the plan',
       'run away',
     ])('does NOT fast-path ordinary English that happens to start with run/execute: "%s"', (input) => {
       expect(matchFastPath(input)).toBeNull();
+    });
+
+    // "run the tests" is deliberately NOT ordinary English anymore — the
+    // task-intent route maps it to a governed create_mission npm-test action.
+    it('routes "run the tests" to create_mission with the governed action', () => {
+      const m = matchFastPath('run the tests');
+      expect(m.tool).toBe('create_mission');
+      expect(m.args.action.command).toBe('npm');
+      expect(m.args.assigned_agent).toBe('Heidi');
     });
 
     it('falls back to not-a-match when no actions/approvedCommands context is available (fail closed)', () => {

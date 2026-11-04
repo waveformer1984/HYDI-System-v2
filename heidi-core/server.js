@@ -1456,6 +1456,22 @@ class HeidiCore {
   // correct answer instead of the other, never a wrong one.
   static FAST_PATH_ROUTES = [
     {
+      // "run the tests (for this project)" — create a governed mission that
+      // runs the documented test command via run_command, not a raw shell.
+      // The worker plans, approval-gates, executes, and verifies it.
+      tool: 'create_mission',
+      pattern: /^\s*(?:run|execute|do|start)\s+(?:the\s+)?(?:tests?|test suite|unit tests?)(?:\s+(?:for|on|in)\s+(?:this|the)\s+(?:project|repo|codebase|repository))?[.!?]?\s*$/i,
+      args: () => ({
+        goal: 'Run the project FULL jest suite (npm test at repo root) and report the failures',
+        priority: 1,
+        assigned_agent: 'Heidi', // required by create_mission when an action is attached
+        // heidi-core's process.cwd() is heidi-core/, not the repo root —
+        // target the repo explicitly rather than inherit the wrong package.
+        action: { type: 'run_command', command: 'npm', args: ['--prefix', require('path').resolve(__dirname, '..'), 'test'] },
+        success: { exitCode: 0 },
+      }),
+    },
+    {
       tool: 'run_command',
       pattern: /^\s*(?:run|execute)\s+(\S+)(?:\s+(.*))?\s*$/i,
       args: (input) => {
@@ -1559,6 +1575,12 @@ class HeidiCore {
       case 'list_missions': {
         if (!Array.isArray(result) || result.length === 0) return '📋 No missions in the queue.';
         return '📋 Missions:\n' + result.map((m) => `  #${m.id} [${m.status}] (pri ${m.priority}) ${m.goal}`).join('\n');
+      }
+      case 'create_mission': {
+        // create_mission returns {created, task_id, state} — no goal field,
+        // so the scope warning is stated here where Jordan actually sees it.
+        if (result && result.task_id) return `📋 Mission #${result.task_id} created: run the FULL jest suite via npm test at the repo root (~8 minutes observed). Say "task approve ${result.task_id}" to run it, then "task ${result.task_id}" for the result.`;
+        return JSON.stringify(result);
       }
       case 'run_command': {
         if (result && typeof result.stdout === 'string') {
