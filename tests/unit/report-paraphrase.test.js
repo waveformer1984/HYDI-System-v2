@@ -34,4 +34,17 @@ describe('matchSystemReportParaphrase — bounded grammar', () => {
     expect(matchSystemReportParaphrase('run the system report')).toBe('system_report_paraphrase');
     expect(matchSystemReportParaphrase('health check')).toBe('health_check');
   });
+
+  it('handles long trailing punctuation in linear time (ReDoS regression)', () => {
+    const base = 'run the system report';
+    const evil = `${base}${'!'.repeat(8000)}`;
+    const t0 = Date.now();
+    expect(matchSystemReportParaphrase(evil)).toBe('system_report_paraphrase');
+    expect(Date.now() - t0).toBeLessThan(200);
+  });
+
+  it('rejects overlong utterances before matching', () => {
+    const long = `run the system report ${'x'.repeat(100)}`;
+    expect(matchSystemReportParaphrase(long)).toBeNull();
+  });
 });
