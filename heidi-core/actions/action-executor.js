@@ -209,17 +209,90 @@ class ActionExecutor {
     /\.\.[\/\\]/          // path traversal in an arg
   ];
 
-  // `git` is whitelisted for local, reviewable work (status/diff/commit/log).
-  // `push`/`merge` land changes on a remote or a protected branch — with a
-  // mission worker or chat tool now able to reach run_command at permission
-  // level 3, an unreviewed self-merge is exactly the failure mode this
-  // blocks. gh/hub aren't in approvedCommands at all, so `gh pr merge` is
-  // already refused upstream of this check.
-  static BLOCKED_GIT_SUBCOMMANDS = new Set(['push', 'merge']);
+  /**
+   * Per-binary command table — default deny. Binary allowlisting alone is not
+   * enough: `git -c core.sshCommand=...` or `npm exec` turn a safe binary into
+   * an exec primitive. Each entry validates the FULL argv and builds the
+   * allowed argv itself — a user string never reaches spawn unchecked.
+   *
+   * `runCommand(command, args)` calls `validators[cmd](args)` → argv | throws.
+   */
+  getApprovedRoots() {
+    return (this.config || {}).approvedRoots || [path.resolve(__dirname, '../..')];
+  }
+
+  npmValidate(args) {
+    const a = args.map(String);
+    let prefix = null;
+    const rest = [];
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] === '--prefix') {
+        if (!a[i + 1]) throw new Error('npm: --prefix requires a path');
+        const resolved = path.resolve(a[++i]);
+        const inRoot = this.getApprovedRoots().some((r) => resolved === r || resolved.startsWith(r + path.sep));
+        if (!inRoot) throw new Error(`npm: --prefix path outside approved roots: ${a[i]}`);
+        prefix = resolved;
+      } else rest.push(a[i]);
+    }
+    const blockedFlags = /^--(userconfig|registry|globalconfig|ignore-scripts|script-shell|init-|location)/i;
+    for (const f of rest) {
+      if (blockedFlags.test(f)) throw new Error(`npm: flag not permitted: ${f}`);
+      // --version/-v are allowed forms handled by the subcommand check below.
+      if (f.startsWith('-') && f !== '--version' && f !== '-v') throw new Error(`npm: unknown flag: ${f}`);
+    }
+    const sub = rest[0];
+    const out = prefix ? ['--prefix', prefix] : [];
+    if (sub === '--version' || sub === '-v') {
+      if (rest.length > 1) throw new Error('npm: --version takes no extra args');
+      return [...out, '--version'];
+    }
+    if (sub === 'test') {
+      if (rest.length > 1) throw new Error(`npm: 'test' takes no extra args (got ${rest.slice(1).join(' ')})`);
+      return [...out, 'test'];
+    }
+    if (sub === 'run' || sub === 'run-script') {
+      const script = rest[1];
+      if (!script || rest.length > 2) throw new Error('npm: run requires exactly one script name');
+      const pkgDir = prefix || this.getApprovedRoots()[0];
+      const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+      if (!pkg.scripts || !pkg.scripts[script]) throw new Error(`npm: script '${script}' not found in ${pkgDir}/package.json`);
+      return [...out, 'run', script];
+    }
+    throw new Error(`npm: subcommand not permitted: ${sub || '(none)'} — only test / run <script> / --version`);
+  }
+
+  gitValidate(args) {
+    const a = args.map(String);
+    if (!a.length) throw new Error('git: subcommand required');
+    // Read-only subcommands only — no state mutation through run_command.
+    const allowed = new Set(['status', 'log', 'diff', 'rev-parse', 'show']);
+    const sub = a[0].toLowerCase();
+    if (!allowed.has(sub)) {
+      throw new Error(`git: subcommand not permitted: ${sub} — read-only only (status/log/diff/rev-parse/show)`);
+    }
+    const blocked = /^(-c|--exec$|--upload-pack$|--receive-pack$|--config-env)/i;
+    for (const f of a.slice(1)) {
+      if (blocked.test(f)) throw new Error(`git: flag not permitted: ${f}`);
+    }
+    return [sub, ...a.slice(1)];
+  }
+
+  // Resolve a bare command name through PATH+PATHEXT; refuse .cmd/.bat —
+  // a batch file interprets args through a shell layer we do not control.
+  resolveOnPath(cmd) {
+    const pathext = (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';');
+    for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+      for (const ext of pathext) {
+        const p = path.join(dir, cmd.toUpperCase().endsWith(ext) ? cmd : cmd + ext.toLowerCase());
+        if (fs.existsSync(p)) return p;
+      }
+    }
+    return null;
+  }
 
   /**
-   * Run a command directly. Hardened: the binary must be whitelisted AND no
-   * argument may smuggle in an inline-eval flag or shell metacharacters.
+   * Run a command directly. Hardened: the binary must be in the command table
+   * AND its full argv validated — a bare allowlist is argument-injectable.
    */
   async runCommand(command, args = [], opts = {}) {
     // Only a bare binary name is allowed — no inline args baked into `command`.
@@ -227,12 +300,16 @@ class ActionExecutor {
       throw new Error(`Command must be a bare executable name, got: '${command}'`);
     }
     const cmd = command.toLowerCase();
-    if (!this.approvedCommands.has(cmd)) {
-      throw new Error(`Command '${cmd}' is not in approved list`);
-    }
-
-    if (cmd === 'git' && args.length && ActionExecutor.BLOCKED_GIT_SUBCOMMANDS.has(String(args[0]).toLowerCase())) {
-      throw new Error(`Refused: 'git ${args[0]}' requires human execution (landing changes on a remote/protected branch is never autonomous)`);
+    const validators = {
+      npm: () => this.npmValidate(args),
+      git: () => this.gitValidate(args),
+      cat: () => args.map(String),
+      ls: () => args.map(String),
+      dir: () => args.map(String),
+      echo: () => null, // handled in-process below
+    };
+    if (!validators[cmd]) {
+      throw new Error(`Command '${cmd}' is not in the command table`);
     }
 
     // Vet every argument.
@@ -240,6 +317,17 @@ class ActionExecutor {
       const s = String(a);
       if (ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(s))) {
         throw new Error(`Refused unsafe argument to '${cmd}': ${s}`);
+      }
+    }
+
+    const argv = validators[cmd](); // validated argv built from the table
+
+    // Windows: refuse if the resolved binary is a batch file — .cmd/.bat
+    // routes args through cmd.exe, bypassing the table's guarantees.
+    if (process.platform === 'win32' && cmd !== 'npm' && cmd !== 'echo') {
+      const resolved = this.resolveOnPath(cmd);
+      if (resolved && /\.(cmd|bat)$/i.test(resolved)) {
+        throw new Error(`Refused: '${cmd}' resolves to a batch file (${resolved}) — args would route through cmd.exe`);
       }
     }
 
@@ -260,10 +348,10 @@ class ActionExecutor {
       if (!fs.existsSync(npmCli)) {
         throw new Error(`npm launch adapter: npm-cli.js not found at ${npmCli}`);
       }
-      return this.spawnProcess(process.execPath, [npmCli, ...args.map(String)], opts);
+      return this.spawnProcess(process.execPath, [npmCli, ...argv], opts);
     }
 
-    return this.spawnProcess(command, args, opts);
+    return this.spawnProcess(command, argv, opts);
   }
 
   /**

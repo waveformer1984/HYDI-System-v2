@@ -48,7 +48,7 @@ describe('runCommand npm launch + timeout', () => {
 
   (IS_WIN ? it : it.skip)('npm adapts to node + npm-cli.js on Windows', async () => {
     spawn.mockImplementation(fakeSpawn());
-    await ex.runCommand('npm', ['--prefix', 'C:\\x', 'test']);
+    await ex.runCommand('npm', ['--prefix', require('path').resolve(__dirname, '..', '..'), 'test']);
     const [bin, argv] = spawn.mock.calls[0];
     expect(bin).toBe(process.execPath);
     expect(argv[0]).toMatch(/npm-cli\.js$/);
@@ -67,7 +67,7 @@ describe('runCommand npm launch + timeout', () => {
   });
 
   it('unapproved command still refused', async () => {
-    await expect(ex.runCommand('curl', [])).rejects.toThrow(/not in approved/);
+    await expect(ex.runCommand('curl', [])).rejects.toThrow(/command table|not in approved/);
   });
   it('shell-metachar args still refused even through the npm adapter', async () => {
     await expect(ex.runCommand('npm', ['test', '&&', 'del', '/s', 'c:\\'])).rejects.toThrow(/unsafe argument/);
