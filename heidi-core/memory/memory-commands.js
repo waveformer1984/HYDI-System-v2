@@ -128,7 +128,7 @@ function status(ctx, now) {
 }
 
 /** Safe, repeatable self-test on throwaway owners; cleans up after itself. */
-function audit(store, now) {
+function runStructuredMemoryAudit(store, now = Date.now()) {
   const tag = crypto.randomBytes(4).toString('hex');
   const owner = `__audit__${tag}`;
   const other = `__audit_other__${tag}`;
@@ -163,7 +163,19 @@ function audit(store, now) {
     try { store.forget(owner, `audit color ${tag}`); } catch { /* nothing left */ }
   }
   const passed = results.filter((r) => r[1] === 'PASS').length;
-  return [`🧪 Memory audit ${passed}/${results.length} passed (${new Date(now).toISOString()})`, ...results.map(([n, r]) => `${r === 'PASS' ? '✅' : '❌'} ${n}: ${r}`)].join('\n');
+  const total = results.length;
+  return {
+    passed,
+    total,
+    results,
+    memory_retrieval_accuracy: total ? passed / total : null,
+    ts: new Date(now).toISOString(),
+  };
 }
 
-module.exports = { parseMemoryCommand, runMemoryCommand };
+function audit(store, now) {
+  const r = runStructuredMemoryAudit(store, now);
+  return [`🧪 Memory audit ${r.passed}/${r.total} passed (${r.ts})`, ...r.results.map(([n, res]) => `${res === 'PASS' ? '✅' : '❌'} ${n}: ${res}`)].join('\n');
+}
+
+module.exports = { parseMemoryCommand, runMemoryCommand, runStructuredMemoryAudit };

@@ -1,0 +1,36 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+
+describe('Termux recovery scripts', () => {
+  const scripts = [
+    'termux/hydi-storage-audit.sh',
+    'termux/hydi-storage-recover.sh',
+    'termux/hydi-recovery.sh',
+  ];
+
+  for (const rel of scripts) {
+    it(`${rel} exists and is non-empty`, () => {
+      const p = path.join(ROOT, rel);
+      expect(fs.existsSync(p)).toBe(true);
+      expect(fs.readFileSync(p, 'utf8').length).toBeGreaterThan(100);
+    });
+  }
+
+  it('storage recover refuses unrestricted rm -rf home', () => {
+    const body = fs.readFileSync(path.join(ROOT, 'termux/hydi-storage-recover.sh'), 'utf8');
+    expect(body).not.toMatch(/rm\s+-rf\s+["']?\$HOME["']?\s/);
+    expect(body).toMatch(/\.ollama/);
+    expect(body).toMatch(/heidi_memory\.db/);
+    expect(body).toMatch(/--dry-run/);
+  });
+
+  it('hydi-doctor probes api/health on listening ports', () => {
+    const body = fs.readFileSync(path.join(ROOT, 'scripts/hydi-doctor.sh'), 'utf8');
+    expect(body).toMatch(/\/api\/health/);
+    expect(body).toMatch(/11434\/api\/tags/);
+  });
+});

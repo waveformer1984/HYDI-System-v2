@@ -249,7 +249,7 @@ class MissionWorker {
     const to = evidence.outcome === 'failed' ? 'failed' : 'completed';
     const summary = evidence.outcome === 'dry_run'
       ? { dryRun: true, wouldExecute: action }
-      : { outcome: evidence.outcome, checks: evidence.checks };
+      : { outcome: evidence.outcome, checks: evidence.checks, output: evidence.output || null };
     await this.move(id, to, evidence.outcome === 'dry_run' ? 'dry run: all gates passed, nothing executed' : `verification ${evidence.outcome}`, {
       from: 'verifying', patch: { evidence, result: summary },
     });

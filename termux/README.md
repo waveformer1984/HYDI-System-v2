@@ -8,6 +8,15 @@ answers the chat API by talking straight to Supabase.
 Phone browser ──► hydi-chat-server.js (Termux, :8787) ──► Supabase REST
 ```
 
+## Recovery (storage / services / Ollama)
+
+If the phone is low on storage or hydi.py / Ollama stop responding, see
+**[docs/TERMUX_ANDROID_RECOVERY.md](../docs/TERMUX_ANDROID_RECOVERY.md)** and run:
+
+```bash
+cd ~/HYDI-System-v2 && sh termux/hydi-recovery.sh
+```
+
 ## Thin client (recommended)
 
 Run the phone as a thin client of the HYDI PC over Tailscale, instead of

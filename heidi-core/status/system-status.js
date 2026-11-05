@@ -228,15 +228,52 @@ function isSystemReportQuery(input) {
   return t === 'system report' || t === 'status report' || t === 'health report' || t === '/status' || t === 'full status';
 }
 
+/** Max normalized utterance length for paraphrase routing (whole-command only). */
+const PARAPHRASE_INPUT_MAX = 80;
+/** Scan cap — bounds work on pathological trailing punctuation (ReDoS-safe). */
+const PARAPHRASE_RAW_SCAN_MAX = 200;
+
+/**
+ * Normalize user chat input for paraphrase matching — linear time, no trailing-punct regex
+ * (CodeQL js/redos: polynomial `/[.!?,;]+$/` on uncontrolled input).
+ * @param {unknown} input
+ * @returns {string|null}
+ */
+function normalizeParaphraseUtterance(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const bounded = raw.length > PARAPHRASE_RAW_SCAN_MAX ? raw.slice(0, PARAPHRASE_RAW_SCAN_MAX) : raw;
+  let t = bounded.toLowerCase();
+  let out = '';
+  let prevSpace = false;
+  for (let i = 0; i < t.length; i += 1) {
+    const ch = t[i];
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      if (!prevSpace && out.length > 0) {
+        out += ' ';
+        prevSpace = true;
+      }
+    } else {
+      out += ch;
+      prevSpace = false;
+    }
+  }
+  const TRAIL = '.!?,;';
+  while (out.length > 0 && TRAIL.includes(out[out.length - 1])) {
+    out = out.slice(0, -1);
+  }
+  if (!out.length || out.length > PARAPHRASE_INPUT_MAX) return null;
+  return out;
+}
+
 /**
  * Bounded paraphrase matcher (docs/DETERMINISTIC_ROUTING_PROPOSAL.md).
  * Whole-utterance match only — returns a stable pattern id or null.
  * Negated, quoted, meta, and mixed-intent utterances are NEVER matched.
  */
 function matchSystemReportParaphrase(input) {
-  const raw = String(input || '').trim();
-  const t = raw.toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;]+$/, '');
-  if (!t || t !== t.slice(0, 80)) return null;                    // sane bound
+  const t = normalizeParaphraseUtterance(input);
+  if (!t) return null;
   if (/["'`“”]/.test(t)) return null;                             // quoted/meta use
   if (/\b(don't|do not|dont|never|cannot|can't|wont|won't)\b/.test(t)) return null; // negated
   if (/^(explain|what|why|how|who|when|where|describe|tell me (what|why|how|about))/.test(t)) return null; // meta question
