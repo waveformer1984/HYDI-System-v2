@@ -17,6 +17,19 @@ function fakeChild(code = 0, out = 'ok\n', err = '') {
   return c;
 }
 
+// The descendant sweep calls spawn('powershell', ...) and parses a PID/PPID
+// dump — an undersized or empty dump is now (correctly) inconclusive, so the
+// mock must emit a realistic process table for the sweep call.
+function fakeSpawn() {
+  return (...args) => {
+    if (args[0] === 'powershell') {
+      const dump = Array.from({ length: 150 }, (_, i) => `${1000 + i} 4`).join('\n');
+      return fakeChild(0, dump + '\n');
+    }
+    return fakeChild();
+  };
+}
+
 const IS_WIN = process.platform === 'win32';
 
 describe('runCommand npm launch + timeout', () => {
@@ -27,14 +40,14 @@ describe('runCommand npm launch + timeout', () => {
   });
 
   it('spawns the real command directly for non-npm', async () => {
-    spawn.mockReturnValue(fakeChild());
+    spawn.mockImplementation(fakeSpawn()); // fresh child per call — the descendant sweep also calls spawn
     const p = ex.runCommand('git', ['status']);
     await expect(p).resolves.toHaveProperty('exitCode', 0);
     expect(spawn.mock.calls[0][0]).toBe('git');
   });
 
   (IS_WIN ? it : it.skip)('npm adapts to node + npm-cli.js on Windows', async () => {
-    spawn.mockReturnValue(fakeChild());
+    spawn.mockImplementation(fakeSpawn());
     await ex.runCommand('npm', ['--prefix', 'C:\\x', 'test']);
     const [bin, argv] = spawn.mock.calls[0];
     expect(bin).toBe(process.execPath);
@@ -44,7 +57,7 @@ describe('runCommand npm launch + timeout', () => {
   });
 
   it('owned deadline: spawn opts do not use Node timeout (tree kill owns the cap)', async () => {
-    spawn.mockImplementation(() => fakeChild());
+    spawn.mockImplementation(fakeSpawn());
     await ex.runCommand('git', ['status'], { timeout_ms: 5000 });
     expect(spawn.mock.calls[0][2].timeout).toBeUndefined();
     await ex.runCommand('git', ['status'], { timeout_ms: 9999999 });
@@ -83,7 +96,7 @@ describe('npm adapter real launch (fixture)', () => {
     expect(r.stdout).toMatch(/\d+\.\d+\.\d+/);
   }, 30000);
   it('invalid timeout_ms still spawns without Node timeout (owned deadline clamps internally)', async () => {
-    spawn.mockImplementation(() => fakeChild());
+    spawn.mockImplementation(fakeSpawn());
     const ex = new ActionExecutor({});
     await ex.runCommand('git', ['status'], { timeout_ms: 'abc' });
     expect(spawn.mock.calls[0][2].timeout).toBeUndefined();

@@ -347,21 +347,61 @@ class ActionExecutor {
       // execution's descendants recursively by ParentProcessId — PID-scoped,
       // never image-name. Kill each, confirm, and report honestly.
       const descendants = () => new Promise((res) => {
-        const ps = spawn('powershell', ['-NoProfile', '-Command',
-          `$r=@(${'$'}pid);$seen=@{};while($r){$p=$r|Select-Object -First 1;$r=$r[1..($r.Count-1)];` +
-          `Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue|` +
-          `Where-Object{-not $seen.ContainsKey($_.ProcessId)}|ForEach-Object{$seen[$_.ProcessId]=$true;$r+=$_.ProcessId;$_.ProcessId}}`],
-          { shell: false });
-        let ids = '';
-        ps.stdout.on('data', (d) => (ids += d));
-        ps.on('close', () => res(ids.trim().split(/\r?\n/).map(Number).filter(Boolean)));
-        ps.on('error', () => res([]));
+        try {
+          // Dump every PID/PPID once; the BFS runs in Node — doing it inside
+          // PowerShell was O(processes × descendants) and stalled under load.
+          const ps = spawn('powershell', ['-NoProfile', '-Command',
+            `Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|ForEach-Object{"$([int]$_.ProcessId) $([int]$_.ParentProcessId)"}`],
+            { shell: false });
+          if (!ps || !ps.stdout) return res([]); // spawn failed to produce a child — no sweep
+          let raw = '';
+          ps.stdout.on('data', (d) => (raw += d));
+          ps.on('close', (psCode) => {
+            const ppid = new Map();
+            for (const line of raw.trim().split(/\r?\n/)) {
+              const m = line.trim().split(/\s+/).map(Number);
+              if (m.length >= 2 && Number.isFinite(m[0]) && Number.isFinite(m[1])) ppid.set(m[0], m[1]);
+            }
+            // A live Windows box enumerates hundreds of processes — an empty
+            // or tiny dump means the sweep itself failed, not that the tree
+            // is clean. Distinguish "no descendants" from "sweep inconclusive".
+            if (psCode !== 0 || ppid.size < 100) return res(null);
+            const out = [];
+            const queue = [child.pid];
+            const seen = new Set([child.pid]);
+            while (queue.length) {
+              const p = queue.shift();
+              for (const [pid, pp] of ppid) {
+                if (pp === p && !seen.has(pid)) { seen.add(pid); out.push(pid); queue.push(pid); }
+              }
+            }
+            res(out);
+          });
+          ps.on('error', () => res(null));
+        } catch { res([]); }
       });
 
       child.on('close', (code) => {
         if (process.platform === 'win32') {
+          // close already means the parent exited — the deadline is moot for
+          // termination. The sweep below is settlement bookkeeping; a child
+          // that exits at T-ε must report its exit code, not "deadline".
+          clearTimeout(deadline);
           const parentPid = child.pid;
-          descendants().then(async (kids) => {
+          // The sweep is bounded too — a hung powershell cannot block settlement.
+          // 30s: powershell+CIM is genuinely slow on a loaded Frank (~5-15s
+          // observed); settlement latency is cheap insurance vs. false hangs.
+          const sweep = Promise.race([
+            descendants(),
+            new Promise((r) => setTimeout(() => r(null), 30000)),
+          ]);
+          sweep.then(async (kids) => {
+            if (kids === null) {
+              // Sweep inconclusive — cannot confirm the tree is clean; do not
+              // report a false success.
+              const base = code === 0 ? `parent exited 0` : `Process exited with code ${code}`;
+              return finish(() => reject(new Error(`${base} — descendant sweep inconclusive; orphans possible and NOT confirmed stopped`)));
+            }
             const killed = [], alive = [];
             for (const pid of kids) {
               try { process.kill(pid, 'SIGKILL'); } catch { /* may already be gone */ }
@@ -381,6 +421,9 @@ class ActionExecutor {
                 reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
               }
             });
+          }).catch(() => {
+            // Sweep itself failed — still settle once, honestly.
+            finish(() => reject(new Error('descendant sweep failed — outcome not confirmed')));
           });
           return;
         }

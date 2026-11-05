@@ -34,7 +34,7 @@ describe('spawnProcess deadline enforcement', () => {
     expect(r.ok).toBe(false);
     expect(r.e).toMatch(/deadline exceeded after 3000ms/); // deadline classification wins
     // exactly one settlement — the promise resolved a single outcome
-  }, 15000);
+  }, 60000); // sweep via powershell+CIM is genuinely slow on a loaded host
 
   (WIN ? it : it.skip)('taskkill targets the spawned pid, never an image name', async () => {
     const ex = new ActionExecutor({});
@@ -48,7 +48,7 @@ describe('spawnProcess deadline enforcement', () => {
       expect(k.args).toContain('/PID');
       expect(k.args.every((a) => a !== 'node.exe' && a !== 'node')).toBe(true); // pid-scoped only
     }
-  }, 15000);
+  }, 60000);
 
   it('natural exit resolves once with exitCode 0 and no deadline path', async () => {
     const ex = new ActionExecutor({});
@@ -58,7 +58,7 @@ describe('spawnProcess deadline enforcement', () => {
     expect(r.stdout).toBe('hi');
     // no taskkill was launched for a clean run
     expect(spawn.mock.calls.filter((c) => c[0] === 'taskkill')).toHaveLength(0);
-  });
+  }, 60000);
 
   it('nonzero exit rejects distinctly — not labeled as deadline', async () => {
     const ex = new ActionExecutor({});
@@ -67,7 +67,7 @@ describe('spawnProcess deadline enforcement', () => {
     expect(r.ok).toBe(false);
     expect(r.e).toMatch(/exited with code 3/);
     expect(r.e).not.toMatch(/deadline/);
-  });
+  }, 60000);
 });
 
 (POSIX ? describe : describe.skip)('spawnProcess deadline enforcement (Linux/POSIX)', () => {

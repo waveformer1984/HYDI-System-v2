@@ -1,8 +1,8 @@
 'use strict';
-// The REAL #3942 shape: parent spawns a grandchild holding stdout, then the
-// parent exits immediately. taskkill /T /PID <parent> only reaches a LIVE
-// parent — an early-exited parent leaves the grandchild orphaned and
-// unreachable by the tree kill. Proves whether cleanup catches the orphan.
+// The real survivor shape: Node's spawn on Windows assigns children to a Job
+// Object (KILL_ON_JOB_CLOSE) — non-detached descendants die automatically when
+// the parent exits (proven: non-detached grandchild gone at t+0). A DETACHED
+// grandchild escapes the job and survives — the sweep must catch that one.
 jest.mock('child_process', () => {
   const real = jest.requireActual('child_process');
   return { ...real, spawn: jest.fn(real.spawn) };
@@ -16,7 +16,7 @@ const os = require('os');
 const WIN = process.platform === 'win32';
 const pidFile = path.join(os.tmpdir(), `dl-orphan-${process.pid}.txt`);
 // parent writes the grandchild's PID to pidFile, inherits stdio, then exits.
-const ORPHAN = `const fs=require('fs');const g=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1e6)'],{stdio:'inherit'});fs.writeFileSync(${JSON.stringify(pidFile)},String(g.pid));setTimeout(()=>process.exit(0),300);`;
+const ORPHAN = `const fs=require('fs');const g=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1e6)'],{stdio:'ignore',detached:true});fs.writeFileSync(${JSON.stringify(pidFile)},String(g.pid));setTimeout(()=>process.exit(0),300);`;
 const settle = (p) => p.then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message }));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -39,8 +39,9 @@ describe('deadline — parent exits early, grandchild orphaned', () => {
       expect(r.e).toMatch(/NOT confirmed stopped|cleanup FAILED/);
       try { process.kill(gpid, 'SIGKILL'); } catch { /* cleanup fixture */ }
     } else {
-      expect(r.e).toMatch(/deadline exceeded/);
+      // sweep caught and killed the detached orphan — honest not-success
+      expect(r.e).toMatch(/orphaned descendant\(s\) killed by PID|deadline exceeded/);
     }
     console.log(JSON.stringify({ gpid, orphanAlive, ms: Date.now() - t0, err: r.e.slice(0, 100) }));
-  }, 20000);
+  }, 60000);
 });
