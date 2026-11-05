@@ -302,7 +302,11 @@ describe.each(BACKENDS)('task lifecycle on the %s store', (_name, ram) => {
       await worker.recover();
       expect((await reload(p)).status).toBe('queued');
       expect((await reload(r)).status).toBe('failed');
-      expect(lifecycle.parseJson((await reload(r)).evidence).error).toMatch(/interrupted by a restart while running/);
+      const ev = lifecycle.parseJson((await reload(r)).evidence);
+      expect(ev.error).toMatch(/interrupted by a restart while running/);
+      expect(ev.interrupted_state).toBe('running');
+      expect(ev).toHaveProperty('previous_started_at');
+      expect(ev).toHaveProperty('heidi_core_commit');
       expect((await reload(v)).status).toBe('failed');
       expect(actions.execute).not.toHaveBeenCalled();
     });
