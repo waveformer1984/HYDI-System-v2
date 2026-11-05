@@ -92,7 +92,16 @@ class MissionWorker {
       if (st === 'planning') {
         await this.move(m.id, 'queued', 'restarted during planning; nothing had run', { from: 'planning' });
       } else {
-        const evidence = { ...(lifecycle.parseJson(m.evidence) || {}), outcome: 'failed', error: `interrupted by a restart while ${st}; not retried because the action may have partly run` };
+        // Record enough to explain itself later: the state it died in, when
+        // the run started, and which heidi-core build restarted over it.
+        const evidence = {
+          ...(lifecycle.parseJson(m.evidence) || {}),
+          outcome: 'failed',
+          error: `interrupted by a restart while ${st}; not retried because the action may have partly run`,
+          interrupted_state: st,
+          previous_started_at: m.started_at || m.updated_at || null,
+          heidi_core_commit: process.env.HEIDI_CORE_COMMIT || process.env.GIT_SHA || null,
+        };
         await this.move(m.id, 'failed', `interrupted while ${st}`, { from: st, patch: { evidence, result: evidence } });
       }
       this.log(`[MISSION WORKER] recovered task ${m.id} (was ${st})`);
