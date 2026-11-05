@@ -8,41 +8,72 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-/** Best-effort descendant enumeration (Linux /proc). Used only on non-win32 tree cleanup. */
-function posixChildPids(parentPid) {
+/** Linux/POSIX: process-group cleanup (primary). /proc pgrp scan is fallback only. */
+function posixPidsInGroup(pgid) {
   const out = [];
+  if (!Number.isInteger(pgid) || pgid <= 0) return out;
+  let entries;
   try {
-    const raw = fs.readFileSync(`/proc/${parentPid}/task/${parentPid}/children`, 'utf8').trim();
-    for (const part of raw.split(/\s+/)) {
-      const n = Number(part);
-      if (Number.isInteger(n) && n > 0) out.push(n);
-    }
+    entries = fs.readdirSync('/proc');
   } catch {
-    /* process gone or /proc unavailable */
+    return out;
+  }
+  for (const ent of entries) {
+    if (!/^\d+$/.test(ent)) continue;
+    try {
+      const stat = fs.readFileSync(`/proc/${ent}/stat`, 'utf8');
+      const rparen = stat.lastIndexOf(')');
+      if (rparen < 0) continue;
+      const pgrp = Number(stat.slice(rparen + 2).split(' ')[2]);
+      if (pgrp === pgid) out.push(Number(ent));
+    } catch {
+      /* process vanished */
+    }
   }
   return out;
 }
 
-function killPosixTree(rootPid) {
-  const tree = new Set();
-  const collect = (pid) => {
-    if (!pid || tree.has(pid)) return;
-    tree.add(pid);
-    for (const child of posixChildPids(pid)) collect(child);
-  };
-  collect(rootPid);
-  for (const pid of [...tree].sort((a, b) => b - a)) {
+function posixSignal0Alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e && e.code !== 'ESRCH';
+  }
+}
+
+function posixGroupHasMembers(pgid) {
+  if (!Number.isInteger(pgid) || pgid <= 0) return false;
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (e) {
+    return e && e.code !== 'ESRCH';
+  }
+}
+
+function posixGroupIsEmpty(pgid) {
+  return !posixGroupHasMembers(pgid);
+}
+
+function posixKillProcessGroup(pgid) {
+  if (!Number.isInteger(pgid) || pgid <= 0) return;
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch {
+    /* group kill failed — fall back to per-pid in the group */
+  }
+  for (const pid of posixPidsInGroup(pgid)) {
     try {
-      process.kill(-pid, 'SIGKILL');
+      process.kill(pid, 'SIGKILL');
     } catch {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        /* already dead */
-      }
+      /* already dead */
     }
   }
-  return tree;
+}
+
+function posixGroupSurvivors(pgid) {
+  return posixPidsInGroup(pgid).filter((p) => posixSignal0Alive(p));
 }
 
 class ActionExecutor {
@@ -306,18 +337,15 @@ class ActionExecutor {
           killer.on('close', (code) => res({ ok: code === 0 || code === 128, code }));
           killer.on('error', () => res({ ok: false, code: null }));
         } else {
-          const alive = (pid) => {
-            try {
-              process.kill(pid, 0);
-              return true;
-            } catch (e) {
-              return e && e.code !== 'ESRCH';
-            }
-          };
-          const tree = killPosixTree(child.pid);
+          const pgid = child.pid;
+          posixKillProcessGroup(pgid);
           setTimeout(() => {
-            const survivors = [...tree].filter((p) => alive(p));
-            res({ ok: survivors.length === 0, code: null, survivors });
+            const survivors = posixGroupSurvivors(pgid);
+            res({
+              ok: survivors.length === 0 && posixGroupIsEmpty(pgid),
+              code: null,
+              survivors,
+            });
           }, 100);
         }
       });
@@ -427,11 +455,30 @@ class ActionExecutor {
           });
           return;
         }
-        finish(() => {
-          if (deadlineFired) reject(new Error(`deadline exceeded after ${timeout}ms`));
-          else if (code === 0) resolve({ stdout, stderr, exitCode: code });
-          else reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
-        });
+        const pgid = child.pid;
+        (async () => {
+          if (posixGroupHasMembers(pgid)) {
+            const orphans = posixPidsInGroup(pgid).filter((p) => posixSignal0Alive(p));
+            posixKillProcessGroup(pgid);
+            await new Promise((r) => setTimeout(r, 100));
+            const survivors = posixGroupSurvivors(pgid);
+            finish(() => {
+              if (survivors.length) {
+                reject(new Error(`cleanup FAILED — NOT confirmed stopped (pid ${survivors.join(', ')})`));
+              } else {
+                reject(new Error(`parent exited ${code}; ${orphans.length} orphaned descendant(s) killed — not a clean success`));
+              }
+            });
+            return;
+          }
+          finish(() => {
+            if (deadlineFired) reject(new Error(`deadline exceeded after ${timeout}ms`));
+            else if (code === 0 && posixGroupIsEmpty(pgid)) resolve({ stdout, stderr, exitCode: code });
+            else if (code === 0) {
+              reject(new Error('cleanup FAILED — NOT confirmed stopped (process group not empty)'));
+            } else reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+          });
+        })();
       });
 
       child.on('error', (error) => {
