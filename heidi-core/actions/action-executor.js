@@ -281,7 +281,48 @@ class ActionExecutor {
       child.stdout.on('data', (data) => { stdout += data.toString(); });
       child.stderr.on('data', (data) => { stderr += data.toString(); });
 
+      // Descendant sweep at settle: a parent that exits early leaves orphans
+      // Windows' close does not report (the #3942 shape). Enumerate THIS
+      // execution's descendants recursively by ParentProcessId — PID-scoped,
+      // never image-name. Kill each, confirm, and report honestly.
+      const descendants = () => new Promise((res) => {
+        const ps = spawn('powershell', ['-NoProfile', '-Command',
+          `$r=@(${'$'}pid);$seen=@{};while($r){$p=$r|Select-Object -First 1;$r=$r[1..($r.Count-1)];` +
+          `Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue|` +
+          `Where-Object{-not $seen.ContainsKey($_.ProcessId)}|ForEach-Object{$seen[$_.ProcessId]=$true;$r+=$_.ProcessId;$_.ProcessId}}`],
+          { shell: false });
+        let ids = '';
+        ps.stdout.on('data', (d) => (ids += d));
+        ps.on('close', () => res(ids.trim().split(/\r?\n/).map(Number).filter(Boolean)));
+        ps.on('error', () => res([]));
+      });
+
       child.on('close', (code) => {
+        if (process.platform === 'win32') {
+          const parentPid = child.pid;
+          descendants().then(async (kids) => {
+            const killed = [], alive = [];
+            for (const pid of kids) {
+              try { process.kill(pid, 'SIGKILL'); } catch { /* may already be gone */ }
+              await new Promise((r) => setTimeout(r, 200));
+              try { process.kill(pid, 0); alive.push(pid); } catch { killed.push(pid); }
+            }
+            finish(() => {
+              if (alive.length) {
+                reject(new Error(`cleanup FAILED — NOT confirmed stopped: orphaned descendants survive at PIDs ${alive.join(',')} (parent ${parentPid})`));
+              } else if (killed.length) {
+                reject(new Error(`parent exited ${code}; ${killed.length} orphaned descendant(s) killed by PID (${killed.join(',')}) — not a clean success`));
+              } else if (deadlineFired) {
+                reject(new Error(`deadline exceeded after ${timeout}ms`));
+              } else if (code === 0) {
+                resolve({ stdout, stderr, exitCode: code });
+              } else {
+                reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+              }
+            });
+          });
+          return;
+        }
         finish(() => {
           if (deadlineFired) reject(new Error(`deadline exceeded after ${timeout}ms`));
           else if (code === 0) resolve({ stdout, stderr, exitCode: code });
