@@ -8,6 +8,43 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+/** Best-effort descendant enumeration (Linux /proc). Used only on non-win32 tree cleanup. */
+function posixChildPids(parentPid) {
+  const out = [];
+  try {
+    const raw = fs.readFileSync(`/proc/${parentPid}/task/${parentPid}/children`, 'utf8').trim();
+    for (const part of raw.split(/\s+/)) {
+      const n = Number(part);
+      if (Number.isInteger(n) && n > 0) out.push(n);
+    }
+  } catch {
+    /* process gone or /proc unavailable */
+  }
+  return out;
+}
+
+function killPosixTree(rootPid) {
+  const tree = new Set();
+  const collect = (pid) => {
+    if (!pid || tree.has(pid)) return;
+    tree.add(pid);
+    for (const child of posixChildPids(pid)) collect(child);
+  };
+  collect(rootPid);
+  for (const pid of [...tree].sort((a, b) => b - a)) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already dead */
+      }
+    }
+  }
+  return tree;
+}
+
 class ActionExecutor {
   constructor(config = {}) {
     // Approved action types - everything else gets rejected
@@ -240,10 +277,15 @@ class ActionExecutor {
       // Own the deadline: kill the process TREE, tear down the pipes, and
       // settle once — never wait indefinitely on inherited handles.
       const timeout = Math.min(Math.max(Number(options.timeout_ms) || 30000, 1000), 600000);
-      const child = spawn(command, args, {
+      const spawnOpts = {
         shell: false,   // never route through a shell — args stay literal
-        env: { ...process.env, NODE_ENV: 'production' }
-      });
+        env: { ...process.env, NODE_ENV: 'production' },
+      };
+      if (process.platform !== 'win32') {
+        // Own process group so kill(-pid) reaches grandchildren (mobile-ops parity).
+        spawnOpts.detached = true;
+      }
+      const child = spawn(command, args, spawnOpts);
 
       let stdout = '';
       let stderr = '';
@@ -264,8 +306,19 @@ class ActionExecutor {
           killer.on('close', (code) => res({ ok: code === 0 || code === 128, code }));
           killer.on('error', () => res({ ok: false, code: null }));
         } else {
-          try { process.kill(-child.pid, 'SIGKILL'); res({ ok: true, code: 0 }); }
-          catch { try { process.kill(child.pid, 'SIGKILL'); res({ ok: true, code: 0 }); } catch { res({ ok: false, code: null }); } }
+          const alive = (pid) => {
+            try {
+              process.kill(pid, 0);
+              return true;
+            } catch (e) {
+              return e && e.code !== 'ESRCH';
+            }
+          };
+          const tree = killPosixTree(child.pid);
+          setTimeout(() => {
+            const survivors = [...tree].filter((p) => alive(p));
+            res({ ok: survivors.length === 0, code: null, survivors });
+          }, 100);
         }
       });
 
@@ -274,7 +327,15 @@ class ActionExecutor {
         deadlineFired = true; // set BEFORE the kill so a racing close() reports the deadline
         const k = await killTree();
         try { child.stdout.destroy(); child.stderr.destroy(); } catch { /* pipes may already be gone */ }
-        const note = k.ok ? 'owned process tree killed' : `cleanup FAILED (taskkill ${k.code}) — surviving work NOT confirmed stopped`;
+        let note;
+        if (k.ok) {
+          note = 'owned process tree killed';
+        } else if (process.platform === 'win32') {
+          note = `cleanup FAILED (taskkill ${k.code}) — surviving work NOT confirmed stopped`;
+        } else {
+          const pidNote = k.survivors && k.survivors.length ? ` (pid ${k.survivors.join(', ')})` : '';
+          note = `cleanup FAILED — NOT confirmed stopped${pidNote}`;
+        }
         finish(() => reject(new Error(`deadline exceeded after ${timeout}ms — ${note}`)));
       }, timeout);
 

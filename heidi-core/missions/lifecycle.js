@@ -185,7 +185,9 @@ function approvalPolicy(action, { env = process.env, moduleIds = bootModuleIds()
 function redactOutput(text, max = 1500) {
   const lines = String(text || '').split(/\r?\n/).map((l) => (containsSecret(l) ? '[line hidden: looked like a credential]' : l));
   const joined = lines.join('\n').trim();
-  return joined.length > max ? `${joined.slice(0, max)}… (${joined.length - max} more chars)` : joined;
+  if (joined.length <= max) return joined;
+  const tail = joined.slice(-max);
+  return `… (earlier chars elided)\n${tail}`;
 }
 
 /**

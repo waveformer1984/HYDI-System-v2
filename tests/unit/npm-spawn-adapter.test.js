@@ -43,14 +43,14 @@ describe('runCommand npm launch + timeout', () => {
     expect(argv[3]).toBe('test');
   });
 
-  it('bounded timeout: default 30s, cap 10min', async () => {
+  it('owned deadline: spawn opts do not use Node timeout (tree kill owns the cap)', async () => {
     spawn.mockImplementation(() => fakeChild());
     await ex.runCommand('git', ['status'], { timeout_ms: 5000 });
-    expect(spawn.mock.calls[0][2].timeout).toBe(5000);
+    expect(spawn.mock.calls[0][2].timeout).toBeUndefined();
     await ex.runCommand('git', ['status'], { timeout_ms: 9999999 });
-    expect(spawn.mock.calls[1][2].timeout).toBe(600000);
+    expect(spawn.mock.calls[1][2].timeout).toBeUndefined();
     await ex.runCommand('git', ['status']);
-    expect(spawn.mock.calls[2][2].timeout).toBe(30000);
+    expect(spawn.mock.calls[2][2].timeout).toBeUndefined();
   });
 
   it('unapproved command still refused', async () => {
@@ -82,12 +82,12 @@ describe('npm adapter real launch (fixture)', () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toMatch(/\d+\.\d+\.\d+/);
   }, 30000);
-  it('invalid timeout_ms falls back to 30s default', async () => {
+  it('invalid timeout_ms still spawns without Node timeout (owned deadline clamps internally)', async () => {
     spawn.mockImplementation(() => fakeChild());
     const ex = new ActionExecutor({});
     await ex.runCommand('git', ['status'], { timeout_ms: 'abc' });
-    expect(spawn.mock.calls[0][2].timeout).toBe(30000); // NaN → 30s default
+    expect(spawn.mock.calls[0][2].timeout).toBeUndefined();
     await ex.runCommand('git', ['status'], { timeout_ms: -5 });
-    expect(spawn.mock.calls[1][2].timeout).toBe(1000); // clamps to the 1s floor
+    expect(spawn.mock.calls[1][2].timeout).toBeUndefined();
   });
 });
