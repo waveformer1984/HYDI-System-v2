@@ -659,11 +659,13 @@ class ActionExecutor {
         case 'run_command': {
           if (!action.command || /\s/.test(action.command)) return false;
           const cmd = action.command.toLowerCase();
-          if (!this.approvedCommands.has(cmd)) return false;
           const args = action.args || [];
-          if (cmd === 'git' && args.length && ActionExecutor.BLOCKED_GIT_SUBCOMMANDS.has(String(args[0]).toLowerCase())) {
-            return false;
-          }
+          // Same gate runCommand uses: command-table validators, fail-closed.
+          try {
+            if (cmd === 'npm') this.npmValidate(args);
+            else if (cmd === 'git') this.gitValidate(args);
+            else if (!['cat', 'ls', 'dir', 'echo'].includes(cmd)) return false;
+          } catch { return false; }
           return args.every(a =>
             !ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(String(a))));
         }

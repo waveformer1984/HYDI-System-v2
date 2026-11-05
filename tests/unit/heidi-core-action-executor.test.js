@@ -15,17 +15,17 @@ describe('ActionExecutor', () => {
   describe('git push/merge guard', () => {
     it('runCommand refuses git push', async () => {
       await expect(exec.runCommand('git', ['push', 'origin', 'main']))
-        .rejects.toThrow(/requires human execution/);
+        .rejects.toThrow(/not permitted/);
     });
 
     it('runCommand refuses git merge', async () => {
       await expect(exec.runCommand('git', ['merge', 'feature-branch']))
-        .rejects.toThrow(/requires human execution/);
+        .rejects.toThrow(/not permitted/);
     });
 
     it('runCommand refuses git push regardless of case', async () => {
       await expect(exec.runCommand('git', ['PUSH', 'origin', 'main']))
-        .rejects.toThrow(/requires human execution/);
+        .rejects.toThrow(/not permitted/);
     });
 
     it('isSafe returns false for git push', () => {
@@ -51,7 +51,7 @@ describe('ActionExecutor', () => {
   describe('baseline allowlist behavior (regression guard)', () => {
     it('rejects a command not on the approved list', async () => {
       await expect(exec.runCommand('curl', ['http://example.com']))
-        .rejects.toThrow(/not in approved list/);
+        .rejects.toThrow(/command table/);
     });
 
     it('rejects a command string containing whitespace (no inline args)', async () => {
@@ -61,7 +61,7 @@ describe('ActionExecutor', () => {
 
     it('rejects dangerous arguments even for an approved command', async () => {
       await expect(exec.runCommand('node', ['-e', 'process.exit(1)']))
-        .rejects.toThrow(/Refused unsafe argument/);
+        .rejects.toThrow(/command table|Refused unsafe argument/);
     });
 
     it('emulates echo in-process (no shell spawn)', async () => {
@@ -79,3 +79,4 @@ describe('ActionExecutor', () => {
     });
   });
 });
+
