@@ -8,6 +8,43 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+/** Best-effort descendant enumeration (Linux /proc). Used only on non-win32 tree cleanup. */
+function posixChildPids(parentPid) {
+  const out = [];
+  try {
+    const raw = fs.readFileSync(`/proc/${parentPid}/task/${parentPid}/children`, 'utf8').trim();
+    for (const part of raw.split(/\s+/)) {
+      const n = Number(part);
+      if (Number.isInteger(n) && n > 0) out.push(n);
+    }
+  } catch {
+    /* process gone or /proc unavailable */
+  }
+  return out;
+}
+
+function killPosixTree(rootPid) {
+  const tree = new Set();
+  const collect = (pid) => {
+    if (!pid || tree.has(pid)) return;
+    tree.add(pid);
+    for (const child of posixChildPids(pid)) collect(child);
+  };
+  collect(rootPid);
+  for (const pid of [...tree].sort((a, b) => b - a)) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already dead */
+      }
+    }
+  }
+  return tree;
+}
+
 class ActionExecutor {
   constructor(config = {}) {
     // Approved action types - everything else gets rejected
@@ -234,36 +271,171 @@ class ActionExecutor {
    */
   spawnProcess(command, args, options = {}) {
     return new Promise((resolve, reject) => {
-      // Bounded timeout — an action may carry timeout_ms up to 10 minutes
-      // (a full jest suite needs ~8; shorter work keeps the 30s default).
+      // Bounded timeout — an action may carry timeout_ms up to 10 minutes.
+      // spawn's own `timeout` only kills the DIRECT child; a grandchild
+      // inheriting stdio keeps `close` from firing (mission #3942 ran ~18h).
+      // Own the deadline: kill the process TREE, tear down the pipes, and
+      // settle once — never wait indefinitely on inherited handles.
       const timeout = Math.min(Math.max(Number(options.timeout_ms) || 30000, 1000), 600000);
-      const child = spawn(command, args, {
+      const spawnOpts = {
         shell: false,   // never route through a shell — args stay literal
-        timeout,
-        env: { ...process.env, NODE_ENV: 'production' }
-      });
+        env: { ...process.env, NODE_ENV: 'production' },
+      };
+      if (process.platform !== 'win32') {
+        // Own process group so kill(-pid) reaches grandchildren (mobile-ops parity).
+        spawnOpts.detached = true;
+      }
+      const child = spawn(command, args, spawnOpts);
 
       let stdout = '';
       let stderr = '';
+      let settled = false;
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+      const finish = (fn) => {
+        if (settled) return; // exactly one terminal outcome
+        settled = true;
+        clearTimeout(deadline);
+        fn();
+      };
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve({ stdout, stderr, exitCode: code });
+      // Owned-tree kill: taskkill /T targets this process's descendants only —
+      // never a broad image-name match. Report cleanup failure explicitly.
+      const killTree = () => new Promise((res) => {
+        if (process.platform === 'win32') {
+          const killer = spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], { shell: false });
+          killer.on('close', (code) => res({ ok: code === 0 || code === 128, code }));
+          killer.on('error', () => res({ ok: false, code: null }));
         } else {
-          reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+          const alive = (pid) => {
+            try {
+              process.kill(pid, 0);
+              return true;
+            } catch (e) {
+              return e && e.code !== 'ESRCH';
+            }
+          };
+          const tree = killPosixTree(child.pid);
+          setTimeout(() => {
+            const survivors = [...tree].filter((p) => alive(p));
+            res({ ok: survivors.length === 0, code: null, survivors });
+          }, 100);
         }
       });
 
+      let deadlineFired = false;
+      const deadline = setTimeout(async () => {
+        deadlineFired = true; // set BEFORE the kill so a racing close() reports the deadline
+        const k = await killTree();
+        try { child.stdout.destroy(); child.stderr.destroy(); } catch { /* pipes may already be gone */ }
+        let note;
+        if (k.ok) {
+          note = 'owned process tree killed';
+        } else if (process.platform === 'win32') {
+          note = `cleanup FAILED (taskkill ${k.code}) — surviving work NOT confirmed stopped`;
+        } else {
+          const pidNote = k.survivors && k.survivors.length ? ` (pid ${k.survivors.join(', ')})` : '';
+          note = `cleanup FAILED — NOT confirmed stopped${pidNote}`;
+        }
+        finish(() => reject(new Error(`deadline exceeded after ${timeout}ms — ${note}`)));
+      }, timeout);
+
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      // Descendant sweep at settle: a parent that exits early leaves orphans
+      // Windows' close does not report (the #3942 shape). Enumerate THIS
+      // execution's descendants recursively by ParentProcessId — PID-scoped,
+      // never image-name. Kill each, confirm, and report honestly.
+      const descendants = () => new Promise((res) => {
+        try {
+          // Dump every PID/PPID once; the BFS runs in Node — doing it inside
+          // PowerShell was O(processes × descendants) and stalled under load.
+          const ps = spawn('powershell', ['-NoProfile', '-Command',
+            `Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|ForEach-Object{"$([int]$_.ProcessId) $([int]$_.ParentProcessId)"}`],
+            { shell: false });
+          if (!ps || !ps.stdout) return res([]); // spawn failed to produce a child — no sweep
+          let raw = '';
+          ps.stdout.on('data', (d) => (raw += d));
+          ps.on('close', (psCode) => {
+            const ppid = new Map();
+            for (const line of raw.trim().split(/\r?\n/)) {
+              const m = line.trim().split(/\s+/).map(Number);
+              if (m.length >= 2 && Number.isFinite(m[0]) && Number.isFinite(m[1])) ppid.set(m[0], m[1]);
+            }
+            // A live Windows box enumerates hundreds of processes — an empty
+            // or tiny dump means the sweep itself failed, not that the tree
+            // is clean. Distinguish "no descendants" from "sweep inconclusive".
+            if (psCode !== 0 || ppid.size < 100) return res(null);
+            const out = [];
+            const queue = [child.pid];
+            const seen = new Set([child.pid]);
+            while (queue.length) {
+              const p = queue.shift();
+              for (const [pid, pp] of ppid) {
+                if (pp === p && !seen.has(pid)) { seen.add(pid); out.push(pid); queue.push(pid); }
+              }
+            }
+            res(out);
+          });
+          ps.on('error', () => res(null));
+        } catch { res([]); }
+      });
+
+      child.on('close', (code) => {
+        if (process.platform === 'win32') {
+          // close already means the parent exited — the deadline is moot for
+          // termination. The sweep below is settlement bookkeeping; a child
+          // that exits at T-ε must report its exit code, not "deadline".
+          clearTimeout(deadline);
+          const parentPid = child.pid;
+          // The sweep is bounded too — a hung powershell cannot block settlement.
+          // 30s: powershell+CIM is genuinely slow on a loaded Frank (~5-15s
+          // observed); settlement latency is cheap insurance vs. false hangs.
+          const sweep = Promise.race([
+            descendants(),
+            new Promise((r) => setTimeout(() => r(null), 30000)),
+          ]);
+          sweep.then(async (kids) => {
+            if (kids === null) {
+              // Sweep inconclusive — cannot confirm the tree is clean; do not
+              // report a false success.
+              const base = code === 0 ? `parent exited 0` : `Process exited with code ${code}`;
+              return finish(() => reject(new Error(`${base} — descendant sweep inconclusive; orphans possible and NOT confirmed stopped`)));
+            }
+            const killed = [], alive = [];
+            for (const pid of kids) {
+              try { process.kill(pid, 'SIGKILL'); } catch { /* may already be gone */ }
+              await new Promise((r) => setTimeout(r, 200));
+              try { process.kill(pid, 0); alive.push(pid); } catch { killed.push(pid); }
+            }
+            finish(() => {
+              if (alive.length) {
+                reject(new Error(`cleanup FAILED — NOT confirmed stopped: orphaned descendants survive at PIDs ${alive.join(',')} (parent ${parentPid})`));
+              } else if (killed.length) {
+                reject(new Error(`parent exited ${code}; ${killed.length} orphaned descendant(s) killed by PID (${killed.join(',')}) — not a clean success`));
+              } else if (deadlineFired) {
+                reject(new Error(`deadline exceeded after ${timeout}ms`));
+              } else if (code === 0) {
+                resolve({ stdout, stderr, exitCode: code });
+              } else {
+                reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+              }
+            });
+          }).catch(() => {
+            // Sweep itself failed — still settle once, honestly.
+            finish(() => reject(new Error('descendant sweep failed — outcome not confirmed')));
+          });
+          return;
+        }
+        finish(() => {
+          if (deadlineFired) reject(new Error(`deadline exceeded after ${timeout}ms`));
+          else if (code === 0) resolve({ stdout, stderr, exitCode: code });
+          else reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+        });
+      });
+
       child.on('error', (error) => {
-        reject(error);
+        finish(() => reject(error));
       });
     });
   }
