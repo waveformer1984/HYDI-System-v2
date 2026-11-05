@@ -234,36 +234,63 @@ class ActionExecutor {
    */
   spawnProcess(command, args, options = {}) {
     return new Promise((resolve, reject) => {
-      // Bounded timeout — an action may carry timeout_ms up to 10 minutes
-      // (a full jest suite needs ~8; shorter work keeps the 30s default).
+      // Bounded timeout — an action may carry timeout_ms up to 10 minutes.
+      // spawn's own `timeout` only kills the DIRECT child; a grandchild
+      // inheriting stdio keeps `close` from firing (mission #3942 ran ~18h).
+      // Own the deadline: kill the process TREE, tear down the pipes, and
+      // settle once — never wait indefinitely on inherited handles.
       const timeout = Math.min(Math.max(Number(options.timeout_ms) || 30000, 1000), 600000);
       const child = spawn(command, args, {
         shell: false,   // never route through a shell — args stay literal
-        timeout,
         env: { ...process.env, NODE_ENV: 'production' }
       });
 
       let stdout = '';
       let stderr = '';
+      let settled = false;
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+      const finish = (fn) => {
+        if (settled) return; // exactly one terminal outcome
+        settled = true;
+        clearTimeout(deadline);
+        fn();
+      };
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve({ stdout, stderr, exitCode: code });
+      // Owned-tree kill: taskkill /T targets this process's descendants only —
+      // never a broad image-name match. Report cleanup failure explicitly.
+      const killTree = () => new Promise((res) => {
+        if (process.platform === 'win32') {
+          const killer = spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], { shell: false });
+          killer.on('close', (code) => res({ ok: code === 0 || code === 128, code }));
+          killer.on('error', () => res({ ok: false, code: null }));
         } else {
-          reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+          try { process.kill(-child.pid, 'SIGKILL'); res({ ok: true, code: 0 }); }
+          catch { try { process.kill(child.pid, 'SIGKILL'); res({ ok: true, code: 0 }); } catch { res({ ok: false, code: null }); } }
         }
       });
 
+      let deadlineFired = false;
+      const deadline = setTimeout(async () => {
+        deadlineFired = true; // set BEFORE the kill so a racing close() reports the deadline
+        const k = await killTree();
+        try { child.stdout.destroy(); child.stderr.destroy(); } catch { /* pipes may already be gone */ }
+        const note = k.ok ? 'owned process tree killed' : `cleanup FAILED (taskkill ${k.code}) — surviving work NOT confirmed stopped`;
+        finish(() => reject(new Error(`deadline exceeded after ${timeout}ms — ${note}`)));
+      }, timeout);
+
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      child.on('close', (code) => {
+        finish(() => {
+          if (deadlineFired) reject(new Error(`deadline exceeded after ${timeout}ms`));
+          else if (code === 0) resolve({ stdout, stderr, exitCode: code });
+          else reject(new Error(`Process exited with code ${code}: ${stderr || stdout}`));
+        });
+      });
+
       child.on('error', (error) => {
-        reject(error);
+        finish(() => reject(error));
       });
     });
   }
