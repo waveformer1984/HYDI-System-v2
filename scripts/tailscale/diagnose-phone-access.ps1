@@ -13,12 +13,23 @@ $ErrorActionPreference = 'Continue'
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $Root
 
-Write-Host '=== 1) Local heidi-web health ===' -ForegroundColor Cyan
-try {
-    $code = (Invoke-WebRequest -Uri 'http://127.0.0.1:3000/api/health' -UseBasicParsing -TimeoutSec 8).StatusCode
-    Write-Host "  http://127.0.0.1:3000/api/health -> $code"
-} catch {
-    Write-Host "  FAIL: $($_.Exception.Message)" -ForegroundColor Red
+Write-Host '=== 1) Local heidi-web liveness (ping, then health) ===' -ForegroundColor Cyan
+function Test-LocalHeidiWeb {
+    foreach ($path in @('/api/ping', '/api/health')) {
+        try {
+            $code = (Invoke-WebRequest -Uri "http://127.0.0.1:3000$path" -UseBasicParsing -TimeoutSec 8).StatusCode
+            if ($code -ge 200 -and $code -lt 500) {
+                Write-Host "  http://127.0.0.1:3000$path -> $code"
+                return $true
+            }
+        } catch {
+            Write-Host "  $path FAIL: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    return $false
+}
+if (-not (Test-LocalHeidiWeb)) {
+    Write-Host '  Local heidi-web unreachable on /api/ping and /api/health' -ForegroundColor Red
 }
 
 Write-Host '=== 2) PM2 ===' -ForegroundColor Cyan
