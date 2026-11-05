@@ -20,12 +20,12 @@ describe('redactOutput (#507)', () => {
 
   it('redacts secret-looking content that falls inside the kept tail', () => {
     const filler = Array.from({ length: 120 }, (_, i) => `log line ${i} ok`).join('\n');
-    const secretLine = 'leaked sk_test_abcdefghijklmnopqrstuvwxyz1234567890';
+    const secretLine = `leaked ghp_${'x'.repeat(24)}`;
     const raw = `${filler}\n${secretLine}`;
     const out = redactOutput(raw, 1500);
     expect(out).toContain('… (earlier chars elided)');
     expect(out).toContain('[line hidden: looked like a credential]');
-    expect(out).not.toContain('sk-test_');
+    expect(out).not.toContain('ghp_');
   });
 });
 
