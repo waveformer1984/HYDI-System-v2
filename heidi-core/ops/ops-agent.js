@@ -225,6 +225,7 @@ class OpsAgent {
   }
 
   async act() {
+    const mode = (await this.store.getControl('mode')) || this.mode;
     const needs = await this.store.incidents(['diagnosed'], 50);
     for (const inc of needs) {
       if (!inc.runbook) {
@@ -233,7 +234,7 @@ class OpsAgent {
           { kind: 'escalated', reason: 'no runbook for this kind — needs a human' });
         continue;
       }
-      if (this.mode === 'observe') {
+      if (mode === 'observe') {
         await this.store.updateIncident(inc.id, { state: 'escalated', hypothesis: `mode=observe: runbook ${inc.runbook} identified but not proposed` },
           { kind: 'escalated', reason: 'observe-only mode — repair identified, not proposed' });
         continue;

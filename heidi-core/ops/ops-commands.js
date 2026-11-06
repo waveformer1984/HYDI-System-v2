@@ -75,6 +75,13 @@ async function runOpsCommand(agent, cmd) {
       await agent.store.setControl('paused', '0', 'operator');
       return 'ops agent resumed';
     }
+    case 'mode': {
+      if (!cmd.arg || !['observe', 'approval_required'].includes(cmd.arg)) {
+        return `usage: ops mode <observe|approval_required> (current: ${(await agent.store.getControl('mode')) || agent.mode})`;
+      }
+      await agent.store.setControl('mode', cmd.arg, 'operator');
+      return `ops agent mode = ${cmd.arg}`;
+    }
     case 'runbooks':
       return RUNBOOK_TEXT;
     default:
