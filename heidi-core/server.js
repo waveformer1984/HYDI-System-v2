@@ -58,6 +58,8 @@ const ToolRegistry = require('./tools/tool-registry');
 const MissionWorker = require('./missions/mission-worker');
 const lifecycle = require('./missions/lifecycle');
 const HealthObserver = require('./missions/health-observer');
+const OpsAgent = require('./ops/ops-agent');
+const { isOpsQuery, parseOpsCommand, runOpsCommand } = require('./ops/ops-commands');
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
 const { decisionInbox, brief } = require('./status/decision-inbox');
@@ -81,6 +83,9 @@ class HeidiCore {
     });
     this.missionWorker = new MissionWorker(this.memory, this.actions, config.missionWorker);
     this.healthObserver = new HealthObserver(this.memory, config.healthObserver);
+    // Ops agent: observe → diagnose → propose repairs AS MISSIONS (existing
+    // approval path) → verify. Default observe-only; every repair is a mission.
+    this.opsAgent = new OpsAgent(this.memory, this.actions, config.opsAgent);
     // Persistent conversations + long-term memory (memory/memory-runtime.js).
     // Same SQLite file as the legacy store; never falls back to RAM.
     this.memoryRuntime = config.memoryRuntime || new MemoryRuntime({
@@ -332,6 +337,12 @@ class HeidiCore {
           const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
           send({ t: text });
           send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (isOpsQuery(input)) {
+          const text = await runOpsCommand(this.opsAgent, parseOpsCommand(input));
+          send({ t: text });
+          send({ done: true, model: 'ops', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
@@ -806,6 +817,12 @@ class HeidiCore {
           const text = traceCmd.cmd === 'usage' ? 'Usage: trace <trace id, or its first 8+ characters>' : (await this.traceReport(traceCmd.id)).text;
           send({ t: text });
           send({ done: true, model: 'trace', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic');
+        }
+        if (isOpsQuery(input)) {
+          const text = await runOpsCommand(this.opsAgent, parseOpsCommand(input));
+          send({ t: text });
+          send({ done: true, model: 'ops', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return done('deterministic');
         }
         const turn = this.memoryRuntime.beginTurn({ owner, conversationId: req.body.conversation_id || null, input, requestId });
@@ -1788,6 +1805,10 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     this.startBrainWatchdog();
     this.missionWorker.start();
     this.healthObserver.start();
+    this.opsAgent.store.ready
+      .then(() => this.opsAgent.recover())
+      .then(() => this.opsAgent.start())
+      .catch((e) => console.warn(`[OPS AGENT] startup failed: ${e.message}`));
 
     console.log('[HEIDI] Ready');
   }
