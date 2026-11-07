@@ -284,6 +284,13 @@ describe('GET /api/heidi-mobile/status', () => {
     expect(res.body.state).toBe('online');
     expect(res.body.system.subsystems[0]).toMatchObject({ name: 'hydi_core', status: 'healthy' });
     expect(res.body.errors).toEqual([]);
+    expect(res.body.diagnostics).toMatchObject({
+      upstream_valid: true,
+      upstream_host: 'hydi.test',
+      upstream_uses_default: false,
+      service_secret_configured: true,
+      device_pending_at_pairing: false,
+    });
     expect(calls.find((c) => c.path === '/api/status/system').auth.valid).toBe(true);
   });
 
@@ -307,6 +314,16 @@ describe('GET /api/heidi-mobile/status', () => {
     expect(res.body.state).toBe('offline');
     expect(res.body.api.reachable).toBe(false);
     expect(res.body.system).toBeNull();
+    expect(res.body.errors[0].message).toMatch(/Heidi page loaded/);
+  });
+
+  it('reports unconfigured when HYDI_API_URL is invalid', async () => {
+    process.env.HYDI_API_URL = 'not-a-url';
+    const res = await call('status');
+    expect(res.body.state).toBe('unconfigured');
+    expect(res.body.diagnostics.upstream_valid).toBe(false);
+    expect(res.body.errors[0].message).toMatch(/HYDI_API_URL/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('reports pending_approval / unauthorized from HYDI auth failures', async () => {
