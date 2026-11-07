@@ -37,6 +37,11 @@ const {
   authorizeHumanApproval,
 } = require('../lib/governance/advisory-auth');
 
+/** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
+function logSafe(value) {
+  return String(value).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 200);
+}
+
 class HeidiAgent {
   constructor(config = {}) {
     this.name = 'frank-heidi-agent';
@@ -589,7 +594,7 @@ class HeidiAgent {
         // action registry.
         const auth = authorizeHumanApproval({ task, env: process.env, paused: this.isPaused() });
         if (!auth.allowed) {
-          console.log(`[HEIDI-AGENT] Approval of ${taskId} refused: ${auth.reason}`);
+          console.log(`[HEIDI-AGENT] Approval of ${logSafe(taskId)} refused: ${logSafe(auth.reason)}`);
           await this.logEvent(task, 'APPROVAL-REFUSED', `${auth.reason} [gate:${auth.gate}]`, []);
           return { success: false, executed: false, error: auth.reason, gate: auth.gate };
         }
