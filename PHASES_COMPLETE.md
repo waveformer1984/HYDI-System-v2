@@ -334,3 +334,17 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 - Jest: `heidi-persistent-memory` (28), `chat-tools-terminal` (7), `heidi-task-routes` (2), `store-adapter` (8) — all green. These suites previously failed with `null.run` and init timeouts.
 
 **Open:** heidi-agent.js still uses supabase-js directly (migration to lib/store is incremental debt); `version` reports `dev` until `BUILD_SHA` is set for heidi-core; boot event fires per `initialize()` call (tests included) — acceptable volume.
+
+---
+
+## Phase 4 — Persistent Governed Agent (2026-11-07, branch `feat/phase-4-governance`)
+
+**Shipped:**
+- `lib/governance/tripleGate.js` — pure, total verdict function. Gate order: exec flag → bounds loaded (numeric threshold required) → action registered → pause → sensitive division → confidence/bounds. `safeEvaluateTripleGate` converts any fault to REVIEW — AUTO-APPROVE can never come from an error.
+- `lib/governance/action-registry.js` — registered action types with risk level + bounds key; unregistered types are BLOCKED before execution.
+- `heidi-core/heidi-agent.js` — `makeDecision` now delegates to the triple gate (was inline logic); added `isPaused()` kill switch (env `HEIDI_PAUSE` + forward-compatible `paused` flag on `heidi_decision_bounds`); `processTaskCycle` is observe-only while paused.
+- Verified pre-existing: lease claim/renewal in heidi-agent, generation-fenced ops leases + `ops_control.paused` in ops-agent (ops-commands pause/resume), mission awaiting_approval lifecycle, hourly reflection cycle.
+
+**Verified:** `tests/unit/triple-gate.test.js` — 20 tests covering every gate combination, gate ordering, deny-on-error, registry integrity. All pass.
+
+**Open:** DB-level pause flag for the agent_bus path needs a `paused` column migration (env works today); approval-queue UI is Phase 8 (Ursula); `HEIDI_ALLOW_EXEC` remains unset/false in production — zero actions execute.
