@@ -65,6 +65,9 @@ async function reconcilePass(service) {
 }
 
 async function main() {
+  if (!once) {
+    require('../lib/runtime/provenance').recordProcessProvenance('hydi-billing-worker', { root: ROOT }).catch(() => null);
+  }
   const service = getBillingService();
   if (once) {
     await retryPass(service);
