@@ -301,3 +301,18 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 0 — Ground Truth Audit (2026-11-07, branch `docs/phase-0-ground-truth`)
+
+**Shipped:**
+- `docs/ARCHITECTURE.md` — verified topology (PM2 fleet, boot-agent children, external services), per-service tables, authoritative data stores.
+- `docs/PORTS.md` — generated from `.ports.json` via new `scripts/gen-ports-doc.js`.
+- `.ports.json` — corrected stale `supabase-rest` entry (was :3001, which belongs to rezonate-app; PostgREST is served via Kong on :54321).
+- `docs/DISCREPANCIES.md` — every owner-note vs verified-reality conflict (PM2 app names, port assignments, Supabase row counts, Vercel codebase location, Termux claims).
+- `scripts/frank/inventory.ps1` — read-only sprawl inventory (git state per folder, PM2 jlist, port listeners, PM2 error tails) → `inventory.json` + summary.
+
+**Verified live:** PM2 26 apps (25 online, `heidi-mobile-chat` waiting restart — missing `HEIDI_MOBILE_TOKEN`, Jordan decision); ports 3000/3001/3005/3100/3459/11434/54321 listening; local Supabase `heidi_events`=262,987 rows, `hydi_facts`=43, `heidi_decision_bounds`=1, `hydi_tasks`/`agent_bus`/`heidi_reflections` empty, `heidi_state_snapshots`/`divisions` absent.
+
+**Open:** Jordan runs `inventory.ps1` on Frank and pastes output; `config/ports.json` vs existing `.ports.json` naming decision (recommend keeping `.ports.json`); `claude/local-mobile-chat-app-c3UBW` branch not found — recheck Phase 1.
