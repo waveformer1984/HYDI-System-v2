@@ -88,7 +88,9 @@ async function main() {
   // 3. DB round-trip (read) — heidi_events reachable + has rows
   const sbUrl = process.env.SUPABASE_URL;
   const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-  if (sbUrl && sbKey) {
+  if (quick) {
+    record('db:heidi_events', 'SKIP', '--quick mode');
+  } else if (sbUrl && sbKey) {
     const r = await fetch(`${sbUrl}/rest/v1/heidi_events?select=id&order=created_at.desc&limit=1`, {
       headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
     }).then((x) => x.json()).catch(() => null);
