@@ -22,11 +22,14 @@ for (const f of ['.env.local', '.env']) {
   if (fs.existsSync(p)) { try { require('dotenv').config({ path: p }); } catch (_) {} }
 }
 
+const { logSafe } = require(path.join(ROOT, 'lib/governance/log-safe'));
+
 const results = [];
 function record(name, status, detail = '') {
   results.push({ name, status, detail });
   const icon = { PASS: 'PASS', FAIL: 'FAIL', SKIP: 'SKIP' }[status] || status;
-  console.log(`${icon.padEnd(4)} ${name}${detail ? ` — ${detail}` : ''}`);
+  const safeDetail = detail ? ` — ${logSafe(detail)}` : '';
+  console.log(`${logSafe(icon).padEnd(4)} ${logSafe(name)}${safeDetail}`);
 }
 
 function getJSON(url, timeoutMs = 4000) {
@@ -173,4 +176,8 @@ async function main() {
   setTimeout(() => process.exit(fails ? 1 : 0), 250);
 }
 
-main().catch((e) => { console.error('hydi-verify crashed:', e); process.exit(1); });
+main().catch((e) => {
+  const message = e instanceof Error ? logSafe(e.message) : logSafe(e);
+  console.error('hydi-verify crashed:', message);
+  process.exit(1);
+});

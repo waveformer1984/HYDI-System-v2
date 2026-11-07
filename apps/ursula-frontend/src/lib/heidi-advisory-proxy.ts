@@ -4,6 +4,14 @@
  */
 
 const DEFAULT_BASE = 'http://127.0.0.1:3461';
+const ADVISORY_PATH =
+  /^\/api\/(decisions\/(pending|[A-Za-z0-9_-]{1,128}\/(approve|reject))|feedback\/[A-Za-z0-9_-]{1,128})$/;
+
+function assertAdvisoryUpstreamPath(upstreamPath: string): string | null {
+  const path = upstreamPath.startsWith('/') ? upstreamPath : `/${upstreamPath}`;
+  if (/[\r\n\u0000]/.test(path) || path.includes('..')) return null;
+  return ADVISORY_PATH.test(path) ? path : null;
+}
 
 export function heidiAdvisoryBaseUrl(): string {
   return (process.env.HEIDI_ADVISORY_URL || DEFAULT_BASE).replace(/\/+$/, '');
@@ -21,7 +29,13 @@ export async function proxyHeidiAdvisory(
     });
   }
 
-  const path = upstreamPath.startsWith('/') ? upstreamPath : `/${upstreamPath}`;
+  const path = assertAdvisoryUpstreamPath(upstreamPath);
+  if (!path) {
+    return new Response(JSON.stringify({ error: 'invalid_upstream_path' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   const headers = new Headers(init?.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (init?.body && !headers.has('Content-Type')) {

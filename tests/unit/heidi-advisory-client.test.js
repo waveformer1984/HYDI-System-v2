@@ -42,4 +42,11 @@ describe('heidi-advisory-client', () => {
   it('advisoryBaseUrl honors HEIDI_ADVISORY_URL', () => {
     expect(advisoryBaseUrl({ HEIDI_ADVISORY_URL: 'http://127.0.0.1:3461' })).toBe('http://127.0.0.1:3461');
   });
+
+  it('rejects non-allowlisted advisory paths', async () => {
+    const r = await advisoryRequest('/api/../../evil', {
+      env: { HEIDI_ADVISORY_URL: `http://127.0.0.1:${port}`, HEIDI_ADMIN_TOKEN: 'tok' },
+    });
+    expect(r.status).toBe(400);
+  });
 });
