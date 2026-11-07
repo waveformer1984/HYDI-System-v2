@@ -39,7 +39,10 @@ const {
 
 /** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
 function logSafe(value) {
-  return String(value).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 200);
+  return String(value)
+    .replace(/[\r\n]+/g, ' ') // explicit CR/LF so static analysis recognises the sanitiser
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .slice(0, 200);
 }
 
 class HeidiAgent {
