@@ -47,16 +47,9 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
 const EMBEDDING_DIMENSION = 1536;
 
-// Simple CORS middleware (no external package needed)
-const corsMiddleware = (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-heidi-secret');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-};
+const { expressAllowedCorsMiddleware, attachListenErrorHandler } = require('../lib/governance/http-listen-guard');
+const { bindHost: defaultBindHost } = require('../lib/governance/advisory-auth');
+const corsMiddleware = expressAllowedCorsMiddleware('HEIDI_CORE_ALLOWED_ORIGINS');
 const HeidiMemory = require('./memory/sqlite-store');
 const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
@@ -1875,9 +1868,11 @@ if (require.main === module) {
     console.log('[HEIDI] 4-layer self-awareness stack operational');
 
     // Start Express server
-    heidi.server = heidi.app.listen(heidi.port, () => {
-      console.log(`[HEIDI] Server listening on port ${heidi.port}`);
+    const host = defaultBindHost(process.env);
+    heidi.server = heidi.app.listen(heidi.port, host, () => {
+      console.log(`[HEIDI] Server listening on http://${host}:${heidi.port}`);
     });
+    attachListenErrorHandler(heidi.server, { label: 'heidi-core', host, port: heidi.port });
   }).catch(error => {
     console.error('[HEIDI] Failed to start:', error);
     process.exit(1);

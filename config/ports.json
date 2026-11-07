@@ -1,5 +1,5 @@
 {
-  "description": "Global port registry for all HYDI services. Canonical copy — keep in sync with `.ports.json` (run `node scripts/sync-ports-registry.js`).",
+  "description": "Canonical port registry for all HYDI services. Mirror: `.ports.json` (run `node scripts/sync-ports-registry.js`).",
   "validation": "Run: node scripts/check-ports.js before startup",
   "services": {
     "heidi-mobile-chat": {

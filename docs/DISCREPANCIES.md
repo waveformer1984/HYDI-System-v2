@@ -25,7 +25,7 @@ ports, and the local Supabase REST API. "Verified" = observed live.
 
 | Owner note | Verified reality |
 |---|---|
-| "Write `config/ports.json` as the single port registry" | A registry already exists: **`.ports.json`** at repo root, consumed by `scripts/check-ports.js` and `start-heidi-everything.ps1`. Creating `config/ports.json` would create a second source of truth. Kept `.ports.json`; `docs/PORTS.md` is generated from it. (Decision flagged for Jordan — see Phase 1.) |
+| "Write `config/ports.json` as the single port registry" | **Resolved:** `config/ports.json` is canonical; `.ports.json` is a generated mirror (`node scripts/sync-ports-registry.js`). Readers use `lib/config/ports-registry.js`. CI fails on drift (`--check`). |
 | `heidi-bridge` port | `.ports.json` says **5050**, not 3456. The live bridge file is `C:\ProtoForge_Ecosystem\heidi-bridge.py` (outside this repo) and is currently **not running**. |
 | Port 3001 | `.ports.json` assigns `supabase-rest` to 3001, but PM2 `rezonate-app` binds **3001**. Registry/code conflict — flagged for Phase 2. |
 | Ports 8765/8766/8767 (Termux-era) | Not in `.ports.json`, nothing listens on Frank. Dead. |
@@ -45,6 +45,13 @@ ports, and the local Supabase REST API. "Verified" = observed live.
 | Vercel project Ursila, `/api/hydi/sync` contract | The Ursila Vercel codebase is **not in this repo** — `api/voice-agent.mjs`, `api/_store.js`, `api/tasks/` do not exist here. `apps/ursula-frontend` is a different app (local :3100). The sync contract must be verified against the Vercel project directly (Phase 6). |
 | `api/voice-agent.mjs` uses paid GPT-4o-mini, conflicts with $0 | Confirmed it would conflict **if** it exists in the Vercel project; it is not in this repo. Flag for `docs/VERCEL_AUDIT.md`. |
 | Stripe webhook secret status unknown | `hydi-stripe-webhook-listener` is PM2-online; `api/stripe-connect-webhook.js` exists in-repo. Secret presence not verified (env-only). |
+
+## agent_bus — self-reported confidence (security)
+
+| Risk | Mitigation |
+|---|---|
+| `agent_bus.confidence` and `within_bounds` are written by the inserter (historically service_role only). A compromised client JWT could not insert rows after migration `20261107180000_agent_bus_rls_write_service_role` — only `service_role` may INSERT/UPDATE. | Human approvals still flow through heidi-agent advisory API + triple gate; never trust task-supplied bounds for AUTO-APPROVE. |
+| Ursula browser must not hold `HEIDI_ADMIN_TOKEN`. | Call `http://127.0.0.1:3100/api/heidi-advisory/*` only; Ursula server proxies with Bearer token. |
 
 ## Environment / tooling
 

@@ -9,7 +9,8 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 
-const PORTS_CONFIG = require('../.ports.json');
+const { loadPortsRegistry } = require('../lib/config/ports-registry');
+const PORTS_CONFIG = loadPortsRegistry();
 
 // Color output
 const colors = {
@@ -72,7 +73,7 @@ async function isPortInUse(port) {
  */
 async function checkAllPorts() {
   console.log(`\n${colors.cyan('🔍 HYDI Port Registry Check')}\n`);
-  console.log(`Registry file: ${path.resolve('.ports.json')}\n`);
+  console.log(`Registry file: ${path.resolve('config/ports.json')}\n`);
 
   const services = PORTS_CONFIG.services;
   const results = [];
