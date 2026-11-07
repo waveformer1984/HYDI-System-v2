@@ -65,13 +65,8 @@ function buildFallback(message) {
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
-    next();
-});
+const { expressAllowedCorsMiddleware, attachListenErrorHandler, mobileBindHost } = require('./lib/governance/http-listen-guard');
+app.use(expressAllowedCorsMiddleware('HEIDI_MOBILE_ALLOWED_ORIGINS'));
 
 // Device login (lib/mobile-chat/local-auth.js). Off unless HEIDI_MOBILE_TOKEN
 // is set; then every /api route except health/pair needs a paired device.
@@ -413,7 +408,9 @@ const server = useTLS
     : http.createServer(app);
 const lanIP = getLANIP();
 
-server.listen(PORT, '0.0.0.0', async () => {
+const bindHost = mobileBindHost(process.env);
+attachListenErrorHandler(server, { label: 'heidi-mobile-chat', host: bindHost, port: PORT });
+server.listen(PORT, bindHost, async () => {
     if (require.main === module) {
         const { recordProcessProvenance } = require('./lib/runtime/provenance');
         await recordProcessProvenance('heidi-mobile-chat');

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Generates docs/PORTS.md from .ports.json — the single port registry.
+ * Generates docs/PORTS.md from config/ports.json — the canonical port registry.
  * Run: node scripts/gen-ports-doc.js
  */
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const registry = JSON.parse(fs.readFileSync(path.join(ROOT, '.ports.json'), 'utf8'));
+const { loadPortsRegistry } = require('../lib/config/ports-registry');
+const registry = loadPortsRegistry();
 
 const lines = [
   '# Port Registry',
   '',
-  '> Generated from `.ports.json` by `scripts/gen-ports-doc.js`. Do not edit by hand —',
-  '> edit `.ports.json` and regenerate (`node scripts/gen-ports-doc.js`).',
+  '> Generated from `config/ports.json` by `scripts/gen-ports-doc.js`. Do not edit by hand —',
+  '> edit the registry and regenerate (`node scripts/gen-ports-doc.js`).',
   '> Validate with `node scripts/check-ports.js`.',
   '',
   '| Service | Port | Env var | Description | Depends on |',

@@ -3,7 +3,7 @@
 /**
  * Port registry consistency check (Phase 2).
  *
- * .ports.json is the single port registry. This script verifies that the
+ * config/ports.json is the canonical port registry. This script verifies that the
  * ports services actually bind — in ecosystem.config.js (PM2 env) and
  * boot.config.json (boot-agent modules) — match the registry. Report-only;
  * exits 1 on mismatch so CI/hooks can gate on it.
@@ -15,7 +15,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const registry = JSON.parse(fs.readFileSync(path.join(ROOT, '.ports.json'), 'utf8'));
+const { loadPortsRegistry } = require('../lib/config/ports-registry');
+const registry = loadPortsRegistry();
 
 /** serviceId -> port from the registry */
 const regById = {};
@@ -111,7 +112,7 @@ const report = { matched: matched.length, issues, undeclaredRegistryPorts: undec
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(report, null, 2));
 } else {
-  console.log(`port registry consistency: ${matched.length} declared ports match .ports.json`);
+  console.log(`port registry consistency: ${matched.length} declared ports match config/ports.json`);
   for (const i of issues) {
     console.log(`  FAIL ${i.source} ${i.service} (${i.via}) -> :${i.port}  ${i.problem}${i.registryPort != null ? ` (registry ${i.registryId}=:${i.registryPort})` : ''}${i.owners ? ` (owned by ${i.owners.join(',')})` : ''}`);
   }

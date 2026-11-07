@@ -18,7 +18,8 @@ const { execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const PORTS_CONFIG = require('../.ports.json');
+const { loadPortsRegistry } = require('../lib/config/ports-registry');
+const PORTS_CONFIG = loadPortsRegistry();
 
 const colors = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,

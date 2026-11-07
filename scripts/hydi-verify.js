@@ -4,8 +4,9 @@
 /**
  * hydi-verify — one-command operational verification for the HYDI stack.
  *
- *   node scripts/hydi-verify.js            # full run
+ *   node scripts/hydi-verify.js            # full run (Frank / live stack)
  *   node scripts/hydi-verify.js --quick    # skip DB round-trip write
+ *   node scripts/hydi-verify.js --offline    # CI: governance, ports, .env.example only
  *
  * Prints a PASS/FAIL/SKIP table and exits 1 if anything FAILs.
  * Read-only except: one heidi_events probe row is NOT written (we only
@@ -52,12 +53,40 @@ function portOpen(port, host = '127.0.0.1', timeoutMs = 2000) {
   });
 }
 
+async function runOfflineChecks() {
+  const { gateProbePasses, probeOutOfBoundsGate } = require(path.join(ROOT, 'lib/governance/hydi-verify-gate-probe'));
+  const r = probeOutOfBoundsGate(ROOT);
+  record('gate:oob-blocked', gateProbePasses(ROOT) ? 'PASS' : 'FAIL', `verdict=${r.verdict} gate=${r.gate}`);
+
+  const { spawnSync } = require('child_process');
+  const sync = spawnSync(process.execPath, [path.join(ROOT, 'scripts/sync-ports-registry.js'), '--check'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  record('config:port-registry', sync.status === 0 ? 'PASS' : 'FAIL', sync.status === 0 ? 'config/ports.json ↔ .ports.json' : (sync.stderr || sync.stdout || '').trim().slice(0, 80));
+
+  const { auditEnvExample } = require(path.join(ROOT, 'lib/governance/env-example-audit'));
+  const envAudit = auditEnvExample(ROOT);
+  record('config:env-example', envAudit.ok ? 'PASS' : 'FAIL', envAudit.detail);
+}
+
 async function main() {
   const quick = process.argv.includes('--quick');
-  console.log('hydi-verify — HYDI stack verification\n');
+  const offline = process.argv.includes('--offline');
+  console.log(`hydi-verify — HYDI stack verification${offline ? ' (offline profile)' : ''}\n`);
 
-  // 1. Service ports (registry: .ports.json)
-  const registry = JSON.parse(fs.readFileSync(path.join(ROOT, '.ports.json'), 'utf8'));
+  if (offline) {
+    await runOfflineChecks();
+    const fails = results.filter((r) => r.status === 'FAIL').length;
+    const passes = results.filter((r) => r.status === 'PASS').length;
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`hydi-verify (offline): ${passes} PASS, ${fails} FAIL`);
+    setTimeout(() => process.exit(fails ? 1 : 0), 50);
+    return;
+  }
+
+  const { loadPortsRegistry } = require(path.join(ROOT, 'lib/config/ports-registry'));
+  const registry = loadPortsRegistry();
   const ports = registry.services || registry.ports || registry;
   const expected = Object.entries(ports)
     .filter(([, v]) => typeof v === 'number' || (v && typeof v.port === 'number'))
@@ -102,14 +131,9 @@ async function main() {
 
   // 4. Governance gate — out-of-bounds action MUST be blocked/review, never auto-approved
   try {
-    const { safeEvaluateTripleGate } = require(path.join(ROOT, 'lib/governance/tripleGate'));
-    const r = safeEvaluateTripleGate({
-      execEnabled: 'true',
-      bounds: { auto_approve_threshold: 0.85 },
-      knownActions: new Set(['operational_decision']),
-      task: { type: 'rm_rf_everything', division: 'ops', confidence: 0.99, within_bounds: true },
-    });
-    record('gate:oob-blocked', r.verdict !== 'AUTO-APPROVE' ? 'PASS' : 'FAIL', `verdict=${r.verdict} gate=${r.gate}`);
+    const { probeOutOfBoundsGate, gateProbePasses } = require(path.join(ROOT, 'lib/governance/hydi-verify-gate-probe'));
+    const r = probeOutOfBoundsGate(ROOT);
+    record('gate:oob-blocked', gateProbePasses(ROOT) ? 'PASS' : 'FAIL', `verdict=${r.verdict} gate=${r.gate}`);
   } catch (e) {
     record('gate:oob-blocked', 'SKIP', `tripleGate not present on this branch (${e.message.slice(0, 60)})`);
   }
