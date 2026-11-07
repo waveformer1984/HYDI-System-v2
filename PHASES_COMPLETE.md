@@ -301,3 +301,17 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 1 — One Canonical Codebase (2026-11-07, branch `chore/phase-1-consolidation`)
+
+**Shipped:**
+- `docs/CONSOLIDATION_PLAN.md` — verdicts for all 57 folders / 36 repos from live inventory; squash-merge verification per branch.
+- `scripts/frank/archive-folders.ps1` — dry-run-first, never-delete archiver with worktree-prune handling.
+- Salvage PR #519 (`salvage/proto-yi-workspace` — Proto.I.Y :3010 workspace, feeds Phase 8).
+- Git hygiene: stray `cm.txt`/`commitmsg.txt` removed; `moderation.html` :3001→:3018.
+
+**Verified:** every "ahead" branch diffed against clean-main log — nearly all are pre-squash originals of merged PRs; only proto-yi-workspace and the #466 cleanup had unmerged content.
+
+**Open:** Jordan approves the archive list (dry-run first); `HYDI_System` salvage-branch review; `protoforgesite` remote/CI check; CONTRIBUTING.md branching model (Phase 2).
