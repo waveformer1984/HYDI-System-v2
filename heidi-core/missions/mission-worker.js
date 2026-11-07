@@ -203,10 +203,12 @@ class MissionWorker {
 
     const policy = this.policy(action);
     if (policy.required) {
+      // Read the clock once so expires_at - requested_at is exactly the TTL.
+      const requestedMs = this.now();
       const approval = {
         required: true, reason: policy.reason, decision: null,
-        requested_at: new Date(this.now()).toISOString(),
-        expires_at: new Date(this.now() + this.approvalTtlMs).toISOString(),
+        requested_at: new Date(requestedMs).toISOString(),
+        expires_at: new Date(requestedMs + this.approvalTtlMs).toISOString(),
       };
       await this.move(id, 'awaiting_approval', policy.reason, { from: 'planning', patch: { plan: p.plan, approval } });
       this.log(`[MISSION WORKER] task ${id} awaiting approval: ${policy.reason}`);

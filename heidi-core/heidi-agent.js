@@ -30,6 +30,20 @@ const GoalExecutor = require('../evolution/goal-executor');
 const ActionExecutor = require('./actions/action-executor');
 const { safeEvaluateTripleGate, VERDICTS } = require('../lib/governance/tripleGate');
 const { registeredActionTypes } = require('../lib/governance/action-registry');
+const {
+  checkAdvisoryAuth,
+  allowedCorsOrigin,
+  bindHost,
+  authorizeHumanApproval,
+} = require('../lib/governance/advisory-auth');
+
+/** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
+function logSafe(value) {
+  return String(value)
+    .replace(/[\r\n]+/g, ' ') // explicit CR/LF so static analysis recognises the sanitiser
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .slice(0, 200);
+}
 
 class HeidiAgent {
   constructor(config = {}) {
@@ -247,6 +261,7 @@ class HeidiAgent {
           division: task.division,
           confidence: task.confidence || 0,
           within_bounds: task.within_bounds === true || task.within_bounds === 1 || task.within_bounds === 'true',
+          payload: task.payload,
         },
       });
 
@@ -577,6 +592,16 @@ class HeidiAgent {
       const task = tasks[0];
 
       if (action === 'approve') {
+        // A human approval replaces the confidence/bounds judgement only.
+        // It never overrides HEIDI_ALLOW_EXEC, the pause switch, or the
+        // action registry.
+        const auth = authorizeHumanApproval({ task, env: process.env, paused: this.isPaused() });
+        if (!auth.allowed) {
+          console.log(`[HEIDI-AGENT] Approval of ${logSafe(taskId)} refused: ${logSafe(auth.reason)}`);
+          await this.logEvent(task, 'APPROVAL-REFUSED', `${auth.reason} [gate:${auth.gate}]`, []);
+          return { success: false, executed: false, error: auth.reason, gate: auth.gate };
+        }
+
         // Execute the task
         console.log(`[HEIDI-AGENT] User approved task ${taskId}`);
         await this.supabase
@@ -750,6 +775,12 @@ class HeidiAgent {
   /**
    * Start HTTP server for advisory mode approvals
    */
+  /** Overridable for tests. Exits so PM2 records the failure. */
+  onFatal(error) {
+    console.error('[HEIDI-AGENT] Fatal:', error && error.message);
+    process.exit(1);
+  }
+
   startAdvisoryServer() {
     // 3459 is heidi-core/server.js's own port (see .ports.json) -- advisory
     // mode must not collide with it when both run at once.
@@ -757,12 +788,28 @@ class HeidiAgent {
 
     this.httpServer = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Cache-Control', 'no-store');
+      // CORS only for explicitly allowed origins (e.g. Ursula); never '*'.
+      const corsOrigin = allowedCorsOrigin(req, process.env);
+      if (corsOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      }
 
       if (req.method === 'OPTIONS') {
-        res.writeHead(200);
+        res.writeHead(corsOrigin ? 204 : 403);
         res.end();
+        return;
+      }
+
+      // Every route needs the admin bearer token. No token configured →
+      // refuse everything rather than serve open.
+      const auth = checkAdvisoryAuth(req, process.env);
+      if (!auth.ok) {
+        res.writeHead(auth.status);
+        res.end(JSON.stringify({ error: auth.error }));
         return;
       }
 
@@ -877,14 +924,20 @@ class HeidiAgent {
       res.end(JSON.stringify({ error: 'Not found' }));
     });
 
-    this.httpServer.listen(port, () => {
-      console.log(`[HEIDI-AGENT] Advisory server listening on http://localhost:${port}`);
+    const host = bindHost(process.env);
+    if (!process.env.HEIDI_ADMIN_TOKEN) {
+      console.error('[HEIDI-AGENT] HEIDI_ADMIN_TOKEN not set — advisory API will refuse every request (503)');
+    }
+
+    // Fail loudly on a port conflict (exit non-zero so PM2 shows it) instead
+    // of silently running with no approval API.
+    this.httpServer.on('error', (error) => {
+      console.error(`[HEIDI-AGENT] Advisory server error on ${host}:${port}:`, error.code || '', error.message);
+      this.onFatal(error);
     });
 
-    this.httpServer.on('error', (error) => {
-      if (error.code !== 'EADDRINUSE') {
-        console.error('[HEIDI-AGENT] Advisory server error:', error.message);
-      }
+    this.httpServer.listen(port, host, () => {
+      console.log(`[HEIDI-AGENT] Advisory server listening on http://${host}:${port}`);
     });
   }
 
