@@ -102,14 +102,9 @@ async function main() {
 
   // 4. Governance gate — out-of-bounds action MUST be blocked/review, never auto-approved
   try {
-    const { safeEvaluateTripleGate } = require(path.join(ROOT, 'lib/governance/tripleGate'));
-    const r = safeEvaluateTripleGate({
-      execEnabled: 'true',
-      bounds: { auto_approve_threshold: 0.85 },
-      knownActions: new Set(['operational_decision']),
-      task: { type: 'rm_rf_everything', division: 'ops', confidence: 0.99, within_bounds: true },
-    });
-    record('gate:oob-blocked', r.verdict !== 'AUTO-APPROVE' ? 'PASS' : 'FAIL', `verdict=${r.verdict} gate=${r.gate}`);
+    const { probeOutOfBoundsGate, gateProbePasses } = require(path.join(ROOT, 'lib/governance/hydi-verify-gate-probe'));
+    const r = probeOutOfBoundsGate(ROOT);
+    record('gate:oob-blocked', gateProbePasses(ROOT) ? 'PASS' : 'FAIL', `verdict=${r.verdict} gate=${r.gate}`);
   } catch (e) {
     record('gate:oob-blocked', 'SKIP', `tripleGate not present on this branch (${e.message.slice(0, 60)})`);
   }

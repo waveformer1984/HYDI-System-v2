@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - name: Unit gates (governance + contracts)
         run: |
-          npx jest tests/unit/triple-gate.test.js tests/unit/hydi-sync-contract.test.js tests/unit/heidi-life-mock-streams.test.js --runInBand --forceExit
+          npx jest tests/unit/triple-gate.test.js tests/unit/hydi-sync-contract.test.js tests/unit/heidi-life-mock-streams.test.js __tests__/scripts/hydi-verify.gate.test.js --runInBand --forceExit
       - name: hydi-verify quick (no live Frank)
         run: node scripts/hydi-verify.js --quick
         continue-on-error: true
