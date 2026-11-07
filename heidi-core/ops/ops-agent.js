@@ -25,7 +25,6 @@ const { randomUUID } = require('crypto');
 const OpsStore = require('./ops-store');
 
 const RESTART_MODULE_SCRIPT = path.join(__dirname, '../../scripts/restart-module.js');
-const FIXTURE_SERVER_SCRIPT = path.join(__dirname, '../../scripts/fixtures/ops-fixture-server.js');
 const FIXTURE_RESTART_SCRIPT = path.join(__dirname, '../../scripts/fixtures/ops-fixture-restart.js');
 
 // --- Policy table (the ACT contract) -------------------------------------

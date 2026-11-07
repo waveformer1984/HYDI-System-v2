@@ -23,7 +23,10 @@ function isOpsQuery(input) {
 }
 
 function parseOpsCommand(input) {
-  const m = String(input || '').trim().match(/^ops\s*(\w+)?\s*(.*)$/i);
+  // Bounded, unambiguous tokenization: cap length and use explicit single
+  // separators so no input can trigger polynomial backtracking.
+  const s = String(input || '').trim().slice(0, 200);
+  const m = s.match(/^ops(?:\s+([a-z]+))?(?:\s+([\s\S]+))?$/i);
   if (!m) return null;
   return { cmd: (m[1] || 'status').toLowerCase(), arg: (m[2] || '').trim() };
 }
