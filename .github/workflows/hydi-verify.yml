@@ -1,0 +1,32 @@
+name: hydi-verify
+
+on:
+  pull_request:
+    branches: [clean-main]
+  push:
+    branches: [clean-main]
+    paths:
+      - 'scripts/hydi-verify.js'
+      - 'config/ports.json'
+      - '.ports.json'
+      - 'lib/governance/**'
+      - '.github/workflows/hydi-verify.yml'
+  workflow_dispatch:
+
+jobs:
+  verify-quick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Unit gates (governance + contracts)
+        run: |
+          npx jest tests/unit/triple-gate.test.js tests/unit/hydi-sync-contract.test.js tests/unit/heidi-life-mock-streams.test.js --runInBand --forceExit
+      - name: hydi-verify quick (no live Frank)
+        run: node scripts/hydi-verify.js --quick
+        continue-on-error: true

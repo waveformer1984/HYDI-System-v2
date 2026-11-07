@@ -8,13 +8,16 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const registry = JSON.parse(fs.readFileSync(path.join(ROOT, '.ports.json'), 'utf8'));
+const registryPath = fs.existsSync(path.join(ROOT, 'config', 'ports.json'))
+  ? path.join(ROOT, 'config', 'ports.json')
+  : path.join(ROOT, '.ports.json');
+const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
 
 const lines = [
   '# Port Registry',
   '',
-  '> Generated from `.ports.json` by `scripts/gen-ports-doc.js`. Do not edit by hand —',
-  '> edit `.ports.json` and regenerate (`node scripts/gen-ports-doc.js`).',
+  '> Generated from `config/ports.json` by `scripts/gen-ports-doc.js`. Do not edit by hand —',
+  '> edit the registry and regenerate (`node scripts/gen-ports-doc.js`).',
   '> Validate with `node scripts/check-ports.js`.',
   '',
   '| Service | Port | Env var | Description | Depends on |',

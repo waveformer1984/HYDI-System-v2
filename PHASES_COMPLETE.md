@@ -387,6 +387,39 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 **Open / discrepancy:**
 - `hydi_facts.embedding` is `vector(1536)` with 43/43 rows populated, but local `nomic-embed-text` emits **768 dims** — `retrieve_similar_facts` fails `different vector dimensions 1536 and 768`. Options for Jordan: (a) pull a 1536-dim Ollama embedding model (e.g. gte-qwen2 ~1.1 GB, $0), or (b) approve re-embedding all 43 facts into a new 768-dim column. Recorded in DISCREPANCIES via this entry; decision needed before `scripts/backfill-embeddings` can run.
 - Embedding backfill job + retrieval-into-planning-prompt wiring deferred pending the dimension decision.
+- `scripts/backfill-embeddings.js` added (dry-run + dimension gate).
+
+## Phase 6 — Local-First Sync (2026-11-07)
+
+**Shipped:** `docs/LOCAL_SYNC_CONTRACT.md`, `docs/VERCEL_AUDIT.md`, `tests/unit/hydi-sync-contract.test.js`, Tailscale cross-link in `docs/TAILSCALE.md`.
+
+**Verified:** Jest contract test (hermetic). Live tailnet sync requires Jordan.
+
+**Open:** Vercel env name inventory from Jordan.
+
+## Phase 7 — Phone Thin Client (2026-11-07)
+
+**Shipped:** `docs/PHONE_ENV_URLS.md`, `scripts/phone/*.sh`, `docs/runbooks/phone-phantom-killer.md`, `scripts/phone/run-all-pending.sh`.
+
+**Verified:** scripts are non-destructive; health probe expects paired auth for mobile-status.
+
+**Open:** Jordan runs `run-all-pending.sh` on Termux.
+
+## Phase 8 — Ursula Hub (2026-11-07)
+
+**Shipped:** `config/workspaces.template.json`, `docs/URSULA_HUB_WORKSPACES.md`; Heidi panel + `config/portfolio.json` pre-existing.
+
+**Verified:** cloud agent — docs + template only.
+
+**Open:** Frank UI acceptance on :3100.
+
+## Phase 9 — Heidi Life Mock (2026-11-07)
+
+**Shipped:** `lib/heidi-life/mock-streams.js`, `GET /api/heidi-life/streams`, `docs/HEIDI_LIFE_MOCK_STREAMS.md`, unit tests.
+
+**Verified:** Jest mock-stream tests green.
+
+**Open:** real `heidi-life/` process on Frank unchanged.
 
 ## Phase 10 — Verification, CI Handoff (2026-11-07, branch `feat/phase-10-verify-handoff`)
 
@@ -396,10 +429,8 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 
 **Verified live on Frank:** `node scripts/hydi-verify.js` → **16 PASS, 0 FAIL, 6 SKIP** (SKIP = token-gated/optional ports + gate check pending Phase-4 merge).
 
-**Deferred (explicit, not claimed):**
-- Phase 6 (local-sync contract tests, Tailscale, VERCEL_AUDIT doc) — not started.
-- Phase 7 (Termux thin client, phantom-killer runbook) — not started; `HEIDI_MOBILE_TOKEN` found in `.env.local` (phone re-pair unblocked — see Phase 2 notes).
-- Phase 8 (Ursula panels, chat hover, workspaces) — partially exists (portfolio.json, /apps/[id]); acceptance not verified.
-- Phase 9 (Heidi Life scaffold) — not started.
-- GitHub Actions CI workflow + branch protection — not added; repo is public so hosted runners are free, but workflow files were not written this session.
-- Open decisions for Jordan: embedding dimension (1536 vs 768), HEIDI_MOBILE_TOKEN PM2 wiring, `heidi_decision_bounds.paused` column migration, Stripe fixture key rotation.
+**CI:** `.github/workflows/hydi-verify.yml` — Jest contract/governance tests + `hydi-verify --quick` on PR.
+
+**Open on Frank:** full `node scripts/hydi-verify.js` (not quick); branch protection still manual.
+
+**Jordan:** embedding dimension (1536 vs 768), `HEIDI_MOBILE_TOKEN` PM2 `--update-env`, `heidi_decision_bounds.paused` migration, live Ursula verify.

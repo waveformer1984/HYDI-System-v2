@@ -1,0 +1,27 @@
+{
+  "description": "Ursula hub workspace templates — copy entries into config/portfolio.json or Ursula workspace config.",
+  "version": 1,
+  "workspaces": [
+    {
+      "id": "rezonate",
+      "title": "Rezonate Studio",
+      "division": "rezonate",
+      "modules": ["rezonate-app", "song-composer"],
+      "launch": { "pm2Name": "rezonate-app", "port": 3001, "healthUrl": "http://127.0.0.1:3001/health" }
+    },
+    {
+      "id": "lead-gen",
+      "title": "Lead Forge",
+      "division": "galactic-bytes",
+      "modules": ["lead-forge"],
+      "launch": { "pm2Name": "lead-forge", "note": "Register port in config/ports.json when service ships" }
+    },
+    {
+      "id": "proto-iy",
+      "title": "Proto.I.Y",
+      "division": "protoforge",
+      "modules": ["proto-yi"],
+      "launch": { "pm2Name": "proto-yi", "port": 3010, "healthUrl": "http://127.0.0.1:3010/health" }
+    }
+  ]
+}
