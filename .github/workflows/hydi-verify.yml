@@ -27,6 +27,8 @@ jobs:
       - name: Unit gates (governance + contracts)
         run: |
           npx jest tests/unit/triple-gate.test.js tests/unit/hydi-sync-contract.test.js tests/unit/heidi-life-mock-streams.test.js __tests__/scripts/hydi-verify.gate.test.js tests/unit/heidi-agent-advisory-security.test.js --runInBand --forceExit
-      - name: hydi-verify quick (no live Frank)
+      - name: hydi-verify offline (CI gate)
+        run: node scripts/hydi-verify.js --offline
+      - name: hydi-verify quick (optional live ports)
         run: node scripts/hydi-verify.js --quick
         continue-on-error: true

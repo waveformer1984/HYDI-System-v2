@@ -17,6 +17,20 @@ describe('hydi-verify governance gate probe', () => {
     expect(gateProbePasses(ROOT)).toBe(true);
   });
 
+  it('hydi-verify --offline passes governance, ports, and env-example checks', () => {
+    const script = path.join(ROOT, 'scripts/hydi-verify.js');
+    const r = spawnSync(process.execPath, [script, '--offline'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      timeout: 90_000,
+      env: { ...process.env, CI: '1' },
+    });
+    expect(r.stdout).toMatch(/PASS\s+gate:oob-blocked/);
+    expect(r.stdout).toMatch(/PASS\s+config:port-registry/);
+    expect(r.stdout).toMatch(/PASS\s+config:env-example/);
+    expect(r.status).toBe(0);
+  });
+
   it('hydi-verify --quick prints PASS gate:oob-blocked without live services', () => {
     const script = path.join(ROOT, 'scripts/hydi-verify.js');
     const r = spawnSync(process.execPath, [script, '--quick'], {

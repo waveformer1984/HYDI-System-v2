@@ -5,8 +5,9 @@
  * seed-divisions.js — idempotently seed the 10 HYDI divisions (Phase 5).
  *
  * Usage:
- *   node scripts/seed-divisions.js            # apply
+ *   node scripts/seed-divisions.js            # apply (local Supabase only)
  *   node scripts/seed-divisions.js --dry-run  # print plan only
+ *   node scripts/seed-divisions.js --allow-remote  # permit non-local SUPABASE_URL
  *
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY).
  * Loads .env.local then .env like heidi-core does. Never prints secrets.
@@ -38,12 +39,32 @@ const DIVISIONS = [
   { slug: 'protoforge-manufacturing', name: 'ProtoForge Manufacturing', notes: 'TODO(owner): describe ProtoForge Manufacturing — seeded placeholder.' },
 ];
 
+function isLocalSupabaseUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === 'host.docker.internal';
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
+  const allowRemote = process.argv.includes('--allow-remote');
   const url = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) {
     console.error('seed-divisions: SUPABASE_URL and a service/anon key are required');
+    process.exit(2);
+  }
+
+  let targetHost;
+  try { targetHost = new URL(url).host; } catch { targetHost = url; }
+  console.log(`seed-divisions: target host ${targetHost}`);
+
+  if (!allowRemote && !isLocalSupabaseUrl(url)) {
+    console.error('seed-divisions: refusing non-local Supabase URL (pass --allow-remote to override)');
     process.exit(2);
   }
 
