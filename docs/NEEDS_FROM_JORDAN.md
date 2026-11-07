@@ -2,6 +2,24 @@
 
 Commands are copy-paste ready. Paste **stdout only** back into chat or commit under `internal/inventory/` if large.
 
+## P0 — Heidi advisory token (Ursula ↔ heidi-agent)
+
+`HEIDI_ADMIN_TOKEN` must live in `.env.local` only (never in browser JS). Ursula proxies
+approve/reject/feedback/pending via `/api/heidi-advisory/*` and attaches the Bearer server-side.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1
+# Or generate once without echoing the value:
+node -e "require('fs').appendFileSync('.env.local', 'HEIDI_ADMIN_TOKEN=' + require('crypto').randomBytes(32).toString('hex') + '\nHEIDI_ALLOW_EXEC=false\n')"
+pm2 restart heidi-agent ursula-local --update-env
+pm2 save
+```
+
+Set matching CORS on heidi-agent: `HEIDI_ADVISORY_ALLOWED_ORIGINS=http://127.0.0.1:3100` (already in `ecosystem.config.js` for `heidi-agent`).
+
+**Paste back:** confirmation tokens are set (not the values) + `node scripts/hydi-verify.js --offline` PASS table.
+
 ## P0 — Unblock mobile + PM2
 
 ```powershell
@@ -72,7 +90,7 @@ ollama pull mxbai-embed-large
 ```powershell
 cd C:\Users\Owner\HYDI-System-v2
 npx supabase db push   # if migration not applied
-node scripts/seed-divisions.js
+node scripts/seed-divisions.js --allow-remote
 ```
 
 **Paste back:** script summary line (`inserted N`).
