@@ -301,3 +301,22 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 5 — Memory Layer + Divisions (2026-11-07, branch `feat/phase-5-memory-divisions`)
+
+**Shipped:**
+- `supabase/migrations/20261107000000_divisions.sql` — first-class `divisions` table (slug UNIQUE, status CHECK, RLS service_role-only, updated_at trigger). Applied to local Supabase.
+- `tests/migrations/20261107000000_divisions.test.js` — 3 tests.
+- `scripts/seed-divisions.js` — idempotent two-step seed (insert missing slugs, refresh names only; never clobbers status/notes). `--dry-run` supported.
+
+**Verified live (local Supabase :54321):**
+- Migration applied via `pg` client; PostgREST schema reload sent.
+- `node scripts/seed-divisions.js` → 10 rows inserted; second run → `inserted 0, kept 10 unchanged` (idempotent).
+- All 10 divisions present: appforge … protoforge-manufacturing, all `[seeded]` with `TODO(owner)` notes.
+- `retrieve_similar_facts` RPC exists and responds (pgvector live).
+
+**Open / discrepancy:**
+- `hydi_facts.embedding` is `vector(1536)` with 43/43 rows populated, but local `nomic-embed-text` emits **768 dims** — `retrieve_similar_facts` fails `different vector dimensions 1536 and 768`. Options for Jordan: (a) pull a 1536-dim Ollama embedding model (e.g. gte-qwen2 ~1.1 GB, $0), or (b) approve re-embedding all 43 facts into a new 768-dim column. Recorded in DISCREPANCIES via this entry; decision needed before `scripts/backfill-embeddings` can run.
+- Embedding backfill job + retrieval-into-planning-prompt wiring deferred pending the dimension decision.
