@@ -454,6 +454,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 |-----------|----------------|-------------------|
 | `20261107000000_divisions` | New `public.divisions` — `id UUID PK`, `slug TEXT UNIQUE`, `name`, `status` CHECK (`seeded`/`active`/`dormant`/`archived`), `notes`, timestamps; slug index; `updated_at` trigger. RLS enabled; single `service_role`-only policy (`USING true WITH CHECK true`, `DO $$ … EXCEPTION WHEN duplicate_object` guard); no anon/authenticated policies. | Makes the ten HYDI divisions addressable rows for seeds and planning prompts. Not part of the hydi_runs state machine — no transitions, no `STATE_MACHINE_APPROVED` needed. Writes only via service role (seed script); reads service-role only. |
 
+### agent_bus RLS tightening (2026-11-07)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261107180000_agent_bus_rls_write_service_role` | Replaces prior `agent_bus_service_role` `FOR ALL` policy with four `service_role`-only policies: `INSERT`, `UPDATE`, `DELETE`, and `SELECT` each scoped `TO service_role` (`DO $$ … EXCEPTION WHEN duplicate_object` guards). Drops legacy `agent_bus_service_role` policy first. No anon/authenticated/public policies added. | Closes REST/anon JWT forgery of pending agent_bus tasks. No enum / `hydi_runs` transition change — RLS-only hardening. Not part of the hydi_runs state machine; no new `STATE_MACHINE_APPROVED` transitions. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
