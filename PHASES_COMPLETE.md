@@ -301,3 +301,19 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 2 — One Orchestrator, Zero Port Conflicts (2026-11-07, branch `chore/phase-2-pm2-orchestration`)
+
+**Shipped:**
+- `start-heidi-everything.ps1` rewritten as a thin PM2 wrapper (preflight → `pm2 resurrect` → `pm2 start ecosystem.config.js` → port probes → summary). It no longer spawns services directly — PM2 is the only process manager.
+- `scripts/frank/port-doctor.ps1` — registry port → PID/process map; `-Fix` stops only HYDI-recognized occupants, confirmed per port.
+- `scripts/check-port-registry.js` — cross-checks ports declared in `ecosystem.config.js`/`boot.config.json` against `.ports.json`; immediately caught the stale `supabase-rest:3001` entry (fixed in PR #518).
+- `GET /health` contract: heidi-web rewrite `/health`→`/api/health`; heidi-mobile-chat `/health` alias; `docs/HEALTH_CONTRACT.md` coverage table.
+- `docs/runbooks/windows-autostart.md` — `pm2 startup` + `pm2 save` procedure, mobile-token and heidi-bridge notes.
+- CONTRIBUTING.md worktree lifecycle note.
+
+**Verified:** restart limits (`max_restarts`, `exp_backoff_restart_delay`) already present on all 27 PM2 entries; `check-port-registry.js` run live (12 matches, 1 known-stale registry row pending #518).
+
+**Open:** ecosystem env ports are still literals (registry check enforces consistency rather than importing); ursula-local lacks a single `/health`; heidi-mobile-chat awaits Jordan's token decision; autostart not yet installed on Frank (runbook ready).
