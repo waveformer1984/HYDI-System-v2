@@ -28,6 +28,8 @@ const { createClient } = require('@supabase/supabase-js');
 const HeidiGoalEngine = require('../evolution/heidi-goals');
 const GoalExecutor = require('../evolution/goal-executor');
 const ActionExecutor = require('./actions/action-executor');
+const { safeEvaluateTripleGate, VERDICTS } = require('../lib/governance/tripleGate');
+const { registeredActionTypes } = require('../lib/governance/action-registry');
 
 class HeidiAgent {
   constructor(config = {}) {
@@ -207,72 +209,55 @@ class HeidiAgent {
   }
 
   /**
+   * Kill switch (Phase 4): env HEIDI_PAUSE always wins; a `paused` flag on
+   * the heidi_decision_bounds row is honored when present (forward-compatible
+   * with a future migration — absent column simply reads undefined).
+   */
+  isPaused() {
+    if (process.env.HEIDI_PAUSE === 'true' || process.env.HEIDI_PAUSE === '1') return true;
+    const b = this.decisionBounds;
+    return !!(b && (b.paused === true || b.paused === 'true' || b.paused === 1 || b.paused === '1'));
+  }
+
+  /**
    * Make a decision on a task
    * Returns: { verdict: 'AUTO-APPROVE' | 'REVIEW' | 'BLOCK', reason: string, memory_ids: UUID[] }
    */
   async makeDecision(task) {
     try {
-      // Never auto-approve without explicit enable flag
-      if (!process.env.HEIDI_ALLOW_EXEC) {
-        return { verdict: 'REVIEW', reason: 'HEIDI_ALLOW_EXEC not set', memory_ids: [] };
-      }
-
-      // Check bounds
-      if (!this.decisionBounds) {
-        return { verdict: 'REVIEW', reason: 'Decision bounds not loaded', memory_ids: [] };
-      }
-
-      // Retrieve relevant procedural memory
+      // Retrieve relevant procedural memory (evidence for the audit trail;
+      // confidence is evaluated on the ORIGINAL task value, never boosted).
       const relevantFacts = await this.retrieveRelevantFacts(task);
       const memoryIds = relevantFacts.map(f => f.id);
 
-      const originalConfidence = task.confidence || 0;
-      const threshold = this.decisionBounds.auto_approve_threshold || 0.85;
       let memoryReasoning = '';
-      let adjustedConfidence = originalConfidence;
-
-      // Record memory reasoning but DON'T boost confidence before gate evaluation
       if (relevantFacts.length > 0) {
         const avgFactConfidence = relevantFacts.reduce((sum, f) => sum + (f.confidence || 0), 0) / relevantFacts.length;
         memoryReasoning = ` (verified against ${relevantFacts.length} facts, avg ${(avgFactConfidence * 100).toFixed(0)}% confident)`;
       }
 
-      // Sensitive tasks ALWAYS need human review (financial, crypto, vendor decisions)
-      const sensitiveDivisions = ['financial', 'crypto', 'vendor'];
-      if (sensitiveDivisions.includes(task.division)) {
-        return {
-          verdict: 'REVIEW',
-          reason: `Sensitive (${task.division}) → human approval required${memoryReasoning}`,
-          memory_ids: memoryIds
-        };
-      }
+      // Authoritative verdict: lib/governance/tripleGate (deny on any error).
+      const gate = safeEvaluateTripleGate({
+        execEnabled: process.env.HEIDI_ALLOW_EXEC,
+        bounds: this.decisionBounds,
+        paused: this.isPaused(),
+        knownActions: registeredActionTypes(),
+        task: {
+          type: task.type,
+          division: task.division,
+          confidence: task.confidence || 0,
+          within_bounds: task.within_bounds === true || task.within_bounds === 1 || task.within_bounds === 'true',
+        },
+      });
 
-      // Decision logic (triple gate) — evaluate on ORIGINAL confidence, not boosted
-      if (originalConfidence >= threshold && task.within_bounds) {
-        return {
-          verdict: 'AUTO-APPROVE',
-          reason: `High confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning} and within bounds`,
-          memory_ids: memoryIds
-        };
-      }
-
-      if (originalConfidence < 0.5) {
-        return {
-          verdict: 'BLOCK',
-          reason: `Low confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning}`,
-          memory_ids: memoryIds
-        };
-      }
-
-      // Default to review
       return {
-        verdict: 'REVIEW',
-        reason: `Confidence ${(originalConfidence * 100).toFixed(0)}%${memoryReasoning} below threshold ${(threshold * 100).toFixed(0)}%`,
-        memory_ids: memoryIds
+        verdict: gate.verdict,
+        reason: `${gate.reason}${memoryReasoning} [gate:${gate.gate}]`,
+        memory_ids: memoryIds,
       };
     } catch (error) {
       console.error('[HEIDI-AGENT] Decision failed:', error.message);
-      return { verdict: 'REVIEW', reason: 'Decision engine error', memory_ids: [] };
+      return { verdict: VERDICTS.REVIEW, reason: 'Decision engine error', memory_ids: [] };
     }
   }
 
@@ -485,6 +470,8 @@ class HeidiAgent {
    */
   async processTaskCycle() {
     if (!this.leaseClaimed) return;
+    // Kill switch: paused means observe-only — leave tasks pending.
+    if (this.isPaused()) return;
 
     try {
       const tasks = await this.pollTasks();
