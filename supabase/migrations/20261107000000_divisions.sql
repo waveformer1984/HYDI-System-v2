@@ -22,8 +22,10 @@ ALTER TABLE public.divisions ENABLE ROW LEVEL SECURITY;
 -- Read access for service_role only; writes go through the seed script
 -- (service role) — no anon/authenticated policies by design.
 DROP POLICY IF EXISTS divisions_service_role_all ON public.divisions;
-CREATE POLICY divisions_service_role_all ON public.divisions
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY divisions_service_role_all ON public.divisions
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION public.touch_divisions_updated_at()
 RETURNS trigger LANGUAGE plpgsql AS $$
