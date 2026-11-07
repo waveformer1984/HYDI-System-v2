@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const portfolio = readJson(repoFile(path.join('config', 'portfolio.json')));
   const app = (portfolio?.apps || []).find((a: any) => a.id === id);
-  if (!app) return NextResponse.json({ ok: false, error: `unknown app '${params.id}'` }, { status: 404 });
+  if (!app) return NextResponse.json({ ok: false, error: `unknown app '${id}'` }, { status: 404 });
 
   const provenance = app.pm2Name ? readJson(repoFile(path.join('.runtime', 'provenance', `${app.pm2Name}.json`))) : null;
   const fixList = readJson(repoFile(path.join('.runtime', 'fixlist', 'current.json')));
