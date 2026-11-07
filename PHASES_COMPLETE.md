@@ -301,3 +301,17 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 4 — Persistent Governed Agent (2026-11-07, branch `feat/phase-4-governance`)
+
+**Shipped:**
+- `lib/governance/tripleGate.js` — pure, total verdict function. Gate order: exec flag → bounds loaded (numeric threshold required) → action registered → pause → sensitive division → confidence/bounds. `safeEvaluateTripleGate` converts any fault to REVIEW — AUTO-APPROVE can never come from an error.
+- `lib/governance/action-registry.js` — registered action types with risk level + bounds key; unregistered types are BLOCKED before execution.
+- `heidi-core/heidi-agent.js` — `makeDecision` now delegates to the triple gate (was inline logic); added `isPaused()` kill switch (env `HEIDI_PAUSE` + forward-compatible `paused` flag on `heidi_decision_bounds`); `processTaskCycle` is observe-only while paused.
+- Verified pre-existing: lease claim/renewal in heidi-agent, generation-fenced ops leases + `ops_control.paused` in ops-agent (ops-commands pause/resume), mission awaiting_approval lifecycle, hourly reflection cycle.
+
+**Verified:** `tests/unit/triple-gate.test.js` — 20 tests covering every gate combination, gate ordering, deny-on-error, registry integrity. All pass.
+
+**Open:** DB-level pause flag for the agent_bus path needs a `paused` column migration (env works today); approval-queue UI is Phase 8 (Ursula); `HEIDI_ALLOW_EXEC` remains unset/false in production — zero actions execute.
