@@ -34,6 +34,7 @@ clean-main  ←  feature/<short-name>
 - Branch from `clean-main`, not from another feature branch.
 - Keep branches short-lived; open a PR as soon as the first meaningful commit lands.
 - **Merge or delete promptly.** Fix and feature branches should be merged to `clean-main` via PR within a few days, or deleted if abandoned. Don't leave work stranded on an orphan branch — if a branch has been inactive for more than two weeks, it should either be merged, rebased, or deleted. Stale branches cause confusion about which code is authoritative and lead to duplicate or divergent work.
+- **Worktrees on Frank:** parallel work happens in `git worktree`s under `C:\Users\Owner\hydi-*`/`HYDI-spine-*` (each on its own branch). A worktree is disposable once its PR merges — `git worktree remove <path>` then delete the branch. `scripts/frank/archive-folders.ps1` archives whole folders without deleting; run `git worktree prune` in the canonical repo afterwards if the folder was a linked worktree.
 
 ## Making Changes
 

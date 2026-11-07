@@ -133,8 +133,9 @@ app.get('/api/models', async (req, res) => {
     res.json({ models, default: DEFAULT_MODEL });
 });
 
-// Server + AI health
-app.get('/api/health', async (req, res) => {
+// Server + AI health — /health is the standard contract path (Phase 2),
+// /api/health kept for existing callers.
+app.get(['/health', '/api/health'], async (req, res) => {
     const status = { server: 'ok', ollama: false, lmstudio: false, heidiCore: false, models: [], loginRequired: mobileAuth.enabled, loggedIn: mobileAuth.authorized(req) };
 
     try {
