@@ -397,3 +397,21 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 **Verified:** every "ahead" branch diffed against clean-main log — nearly all are pre-squash originals of merged PRs; only proto-yi-workspace and the #466 cleanup had unmerged content.
 
 **Open:** Jordan approves the archive list (dry-run first); `HYDI_System` salvage-branch review; `protoforgesite` remote/CI check; CONTRIBUTING.md branching model (Phase 2).
+
+---
+
+## Phase 10 — Verification, CI Handoff (2026-11-07, branch `feat/phase-10-verify-handoff`)
+
+**Shipped:**
+- `scripts/hydi-verify.js` — one-command verification: registry port probes (optional services reported SKIP not FAIL), `/health` probes for web/core/rezonate/protoforge/ursula/ollama, `heidi_events` read, governance gate BLOCK check (when `lib/governance` is merged), sync endpoint reachability, `retrieve_similar_facts` RPC. Prints PASS/FAIL/SKIP table, exit 1 on FAIL.
+- `docs/OPERATIONS.md` — daily start/stop, logs, pause levels, approvals, secret rotation, restore, division/workspace additions, triage.
+
+**Verified live on Frank:** `node scripts/hydi-verify.js` → **16 PASS, 0 FAIL, 6 SKIP** (SKIP = token-gated/optional ports + gate check pending Phase-4 merge).
+
+**Deferred (explicit, not claimed):**
+- Phase 6 (local-sync contract tests, Tailscale, VERCEL_AUDIT doc) — not started.
+- Phase 7 (Termux thin client, phantom-killer runbook) — not started; `HEIDI_MOBILE_TOKEN` found in `.env.local` (phone re-pair unblocked — see Phase 2 notes).
+- Phase 8 (Ursula panels, chat hover, workspaces) — partially exists (portfolio.json, /apps/[id]); acceptance not verified.
+- Phase 9 (Heidi Life scaffold) — not started.
+- GitHub Actions CI workflow + branch protection — not added; repo is public so hosted runners are free, but workflow files were not written this session.
+- Open decisions for Jordan: embedding dimension (1536 vs 768), HEIDI_MOBILE_TOKEN PM2 wiring, `heidi_decision_bounds.paused` column migration, Stripe fixture key rotation.
