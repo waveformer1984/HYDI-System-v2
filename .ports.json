@@ -74,6 +74,13 @@
       "description": "Switchboard operator console (moved off 3001 — rezonate-app owns 3001)",
       "depends_on": []
     },
+    "proto-yi": {
+      "port": 3010,
+      "name": "Proto.I.Y (canonical project planner)",
+      "env_var": "PORT",
+      "description": "protoforge-applications/proto-yi service — Ursula Suite engine on :5000 is a dependency",
+      "depends_on": []
+    },
     "ursula-local": {
       "port": 3100,
       "name": "Ursula Command Center (local)",
