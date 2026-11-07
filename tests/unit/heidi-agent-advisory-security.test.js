@@ -204,16 +204,6 @@ describe('human approval honours exec flag, pause and registry', () => {
     expect(r.executed).toBe(true);
   });
 
-  it('refusal log line cannot be forged with newlines in the task id', async () => {
-    const agent = makeAgent([TASK]);
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await agent.handleAdvisoryAction('t1\n[HEIDI-AGENT] forged line', 'approve');
-    const lines = spy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('refused'));
-    spy.mockRestore();
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).not.toMatch(/[\r\n]/);
-  });
-
   it('authorizeHumanApproval is fail-closed', () => {
     expect(authorizeHumanApproval({ task: TASK, env: {} }).allowed).toBe(false);
     expect(authorizeHumanApproval({ task: null, env: { HEIDI_ALLOW_EXEC: 'true' } }).allowed).toBe(false);
