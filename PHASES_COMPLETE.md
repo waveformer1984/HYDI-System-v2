@@ -342,3 +342,19 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 **Verified:** restart limits (`max_restarts`, `exp_backoff_restart_delay`) already present on all 27 PM2 entries; `check-port-registry.js` run live (12 matches, 1 known-stale registry row pending #518).
 
 **Open:** ecosystem env ports are still literals (registry check enforces consistency rather than importing); ursula-local lacks a single `/health`; heidi-mobile-chat awaits Jordan's token decision; autostart not yet installed on Frank (runbook ready).
+
+## Phase 3 — Heidi Bridge Proven Alive (2026-11-07, branch `feat/phase-3-heidi-bridge-alive`)
+
+**Shipped:**
+- `lib/store/` data-layer adapter: `SupabaseStore` (wraps supabase-js), `PostgresStore` (loud Phase-6 stub), `NullStore` (local-only). Selection via `HYDI_STORE`/`SUPABASE_*`/`HYDI_PG_URL`. `insertEvent()` never throws — audit can't break callers.
+- `heidi-core/server.js`: writes a `heidi_events` `boot` row on startup (version, host, pid, port) through the adapter; `/health` now returns `service`/`version`/`uptime_s`/`deps.store` per the Phase 2 contract.
+- `sqlite-store.js`: lazy `ensureReady()` on run/get/all (OpsStore.ensure runs in the HeidiCore constructor before `initialize()`); memoized `initialize()`; `_inCreateTables` guard prevents self-deadlock.
+- `ops-store.js`: degraded-mode catch — memory-only mode can no longer crash boot.
+- `tests/unit/store-adapter.test.js` — 8 tests.
+
+**Verified:**
+- Branch heidi-core booted on :3465 → `heidi_events` row `1d966aa1-a8ea-4515-a7c0-5b1708d811dc` (`event_type=boot`) — first real boot evidence row.
+- `/health` → `{"status":"healthy","deps":{"store":{"status":"ok"}}}`.
+- Jest: `heidi-persistent-memory` (28), `chat-tools-terminal` (7), `heidi-task-routes` (2), `store-adapter` (8) — all green. These suites previously failed with `null.run` and init timeouts.
+
+**Open:** heidi-agent.js still uses supabase-js directly (migration to lib/store is incremental debt); `version` reports `dev` until `BUILD_SHA` is set for heidi-core; boot event fires per `initialize()` call (tests included) — acceptable volume.
