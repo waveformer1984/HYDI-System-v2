@@ -69,13 +69,27 @@ function tool(config = {}) {
       level: config.level ?? 0,
       description: config.description ?? '',
       parameters: config.parameters ?? { type: 'object', properties: {}, required: [] },
-      name: config.name ?? null
+      name: config.name ?? null,
+      // directAction tools mutate the host the moment the model calls them —
+      // no mission, no human approval. They are only advertised/executable
+      // when HEIDI_CHAT_DIRECT_ACTIONS=true; the governed path is
+      // create_mission → human `task approve` → worker.
+      directAction: config.directAction === true
     };
     return handler;
   };
 }
 
 class ToolRegistry {
+  /**
+   * Direct side-effecting chat tools (run_command, restart_service) are
+   * opt-in. Default off: chat can propose work through create_mission but
+   * cannot execute commands itself — a person approves the mission first.
+   */
+  static directActionsEnabled() {
+    return process.env.HEIDI_CHAT_DIRECT_ACTIONS === 'true';
+  }
+
   /**
    * @param {HeidiMemory} memory  initialized sqlite store (agent_registry + missions live here)
    * @param {object} opts  { ollamaUrl, selfStatus: () => object, actions: ActionExecutor }
@@ -283,6 +297,7 @@ class ToolRegistry {
 
   run_command = tool({
     level: 3,
+    directAction: true,
     description: 'Run an approved command (git, npm, node, powershell, echo, cat, ls, dir) and return its output. git push and git merge are always refused -- landing changes on a remote or protected branch requires a human.',
     parameters: {
       type: 'object',
@@ -305,6 +320,7 @@ class ToolRegistry {
 
   restart_service = tool({
     level: 3,
+    directAction: true,
     description: 'Restart one supervised HYDI module (see boot.config.json for ids, e.g. "heidi-mobile-chat", "protoforge-core", "heidi-web"). Stops only the PID bound to that module\'s own port, then re-launches it via boot-agent -- never a blanket process kill.',
     parameters: {
       type: 'object',
@@ -328,12 +344,15 @@ class ToolRegistry {
     }
   });
 
-  /** Ollama /api/chat `tools` array */
+  /** Ollama /api/chat `tools` array — direct-action tools only when armed. */
   toOllamaTools() {
-    return Object.entries(this.tools).map(([name, t]) => ({
-      type: 'function',
-      function: { name, description: t.description, parameters: t.parameters }
-    }));
+    const armed = ToolRegistry.directActionsEnabled();
+    return Object.entries(this.tools)
+      .filter(([, t]) => armed || !t.directAction)
+      .map(([name, t]) => ({
+        type: 'function',
+        function: { name, description: t.description, parameters: t.parameters }
+      }));
   }
 
   /**
@@ -344,7 +363,8 @@ class ToolRegistry {
   extractToolCalls(text) {
     if (!text || typeof text !== 'string') return [];
 
-    const known = new Set(Object.keys(this.tools));
+    const armed = ToolRegistry.directActionsEnabled();
+    const known = new Set(Object.keys(this.tools).filter((n) => armed || !this.tools[n].directAction));
     const calls = [];
     const seen = new Set();
 
@@ -398,15 +418,22 @@ class ToolRegistry {
     let agent = null;
     try { agent = await this.memory.getAgent(agentName); } catch {}
     const level = agent && agent.enabled ? agent.permission_level : 0;
-    const allowed = level >= tool.level;
+    const directBlocked = tool.directAction && !ToolRegistry.directActionsEnabled();
+    const allowed = level >= tool.level && !directBlocked;
 
     // Audit trail — PERMISSIONS.md rule 5
     this.memory.storeSystemState('tool_execution', {
       tool: name, agent: agentName, agent_level: level,
-      required_level: tool.level, allowed, args
+      required_level: tool.level, allowed, args,
+      ...(directBlocked ? { denied: 'direct_actions_disabled' } : {})
     }, allowed ? 'info' : 'warning').catch(() => {});
 
     if (!allowed) {
+      if (directBlocked && level >= tool.level) {
+        return {
+          error: `${name} is disabled for direct chat execution — create a mission with create_mission instead; a person approves it before anything runs (HEIDI_CHAT_DIRECT_ACTIONS=true re-enables direct execution)`
+        };
+      }
       return {
         error: `permission denied: ${agentName} is level ${level}, ${name} requires level ${tool.level}`
       };

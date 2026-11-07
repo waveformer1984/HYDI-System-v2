@@ -448,6 +448,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 | `20261015170000_execution_fabric_correlation_id` | Adds nullable `correlation_id text` on `execution_fabric_tasks` and backfills existing rows to `id`. | Additive. No RLS change. Application uses it for resumable mobile workflows. |
 | `20261015180000_execution_fabric_tenant_binding` | Adds nullable `tenant_id` and `created_by` (no default tenant), index `(tenant_id, updated_at DESC)`, and `BEFORE UPDATE` trigger `execution_fabric_lock_ownership` (`search_path = public`) that rejects ownership rewrites and rejects claiming a NULL `tenant_id`. | Existing rows stay unowned. Service-role RLS is unchanged (`USING true`) because the API uses the service role; tenant isolation is application-enforced plus this trigger. Application transition `FAILED → RECOVERING` allows an explicit operator retry without treating failure as success. No SQL enum change. |
 
+### Division registry addition (2026-11-07)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261107000000_divisions` | New `public.divisions` — `id UUID PK`, `slug TEXT UNIQUE`, `name`, `status` CHECK (`seeded`/`active`/`dormant`/`archived`), `notes`, timestamps; slug index; `updated_at` trigger. RLS enabled; single `service_role`-only policy (`USING true WITH CHECK true`, `DO $$ … EXCEPTION WHEN duplicate_object` guard); no anon/authenticated policies. | Makes the ten HYDI divisions addressable rows for seeds and planning prompts. Not part of the hydi_runs state machine — no transitions, no `STATE_MACHINE_APPROVED` needed. Writes only via service role (seed script); reads service-role only. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |

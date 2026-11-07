@@ -36,6 +36,12 @@ if (!supabase) {
   console.log('[HEIDI] LOCAL-ONLY MODE: Supabase disabled — using local memory only');
 }
 
+// Data-layer adapter (Phase 3): Heidi-owned persistence goes through this
+// so the backing store can move to local Postgres later. The legacy
+// `supabase` client above remains for not-yet-migrated call sites.
+const { getStore } = require('../lib/store');
+const store = getStore();
+
 // Ollama embedding configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
@@ -132,10 +138,15 @@ class HeidiCore {
     // Health check
     this.app.get('/health', async (req, res) => {
       const brainAvailable = await this.brain.isAvailable();
+      const storeHealth = await store.health().catch(() => ({ status: 'error' }));
       res.json({
-        status: brainAvailable ? 'healthy' : 'degraded',
+        service: 'heidi-core',
+        version: process.env.BUILD_SHA || process.env.npm_package_version || 'dev',
+        status: brainAvailable && storeHealth.status !== 'unavailable' ? 'healthy' : 'degraded',
         brain: brainAvailable ? 'connected' : 'disconnected',
+        uptime_s: this.stats.startTime ? Math.floor((Date.now() - this.stats.startTime) / 1000) : 0,
         uptime: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
+        deps: { store: storeHealth },
         stats: this.stats
       });
     });
@@ -870,12 +881,15 @@ class HeidiCore {
         const toolsList = this.toolRegistry.toOllamaTools()
           .map((t) => `- ${t.function.name}: ${t.function.description}`)
           .join('\n');
+        const runCommandGuidance = ToolRegistry.directActionsEnabled()
+          ? 'If the user asks to run a command, call run_command. '
+          : 'If the user asks to run a command, create a governed mission with create_mission — a person approves it before anything runs. ';
 
         const messages = MemoryRuntime.chatMessages(
             this.getSystemPersonality() +
               '\n\nYou have REAL tools. For every user request, decide if one of the tools below matches. ' +
               'If it does, you MUST call that tool with the correct arguments. ' +
-              'If the user asks to run a command, call run_command. ' +
+              runCommandGuidance +
               'If the user wants to create/update/list missions, agents, or memories, call the matching tool. ' +
               'If the user asks about system status, health, models, or services, call the matching tool. ' +
               'Answer status, health and command questions ONLY from the tool result — never invent status or command output. ' +
@@ -1574,6 +1588,10 @@ class HeidiCore {
       // isn't actually approved, this was never a command in the first
       // place: don't fast-path it, let it fall through to the LLM.
       if (route.tool === 'run_command') {
+        // Direct command execution is opt-in (HEIDI_CHAT_DIRECT_ACTIONS).
+        // Off by default: "run X" falls through to the model, which can only
+        // propose a governed mission — never execute immediately.
+        if (!ToolRegistry.directActionsEnabled()) continue;
         const approved = this.actions && this.actions.approvedCommands;
         if (!approved || !approved.has(String(args.command || '').toLowerCase())) continue;
       }
@@ -1811,6 +1829,27 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
       .catch((e) => console.warn(`[OPS AGENT] startup failed: ${e.message}`));
 
     console.log('[HEIDI] Ready');
+
+    // Boot evidence (Phase 3): first durable proof the bridge came up.
+    // Audit writes must never block or crash startup.
+    try {
+      const boot = await store.insertEvent({
+        event_type: 'boot',
+        division: 'core',
+        payload: {
+          version: process.env.BUILD_SHA || process.env.npm_package_version || 'dev',
+          node: process.version,
+          host: require('os').hostname(),
+          pid: process.pid,
+          port: this.port,
+        },
+        context_snapshot: { source: 'heidi-core/server.js', memory_initialized: !!this.memory.initialized },
+      });
+      if (boot.ok) console.log('[HEIDI] boot event recorded in heidi_events');
+      else console.warn(`[HEIDI] boot event not recorded: ${boot.reason}`);
+    } catch (e) {
+      console.warn(`[HEIDI] boot event failed: ${e.message}`);
+    }
   }
 }
 

@@ -17,6 +17,8 @@ const env = {
   OLLAMA_KEEP_ALIVE: '2m',
 };
 
+require('../lib/runtime/provenance').recordProcessProvenance('ollama-serve', { root: path.resolve(__dirname, '..') }).catch(() => null);
+
 const child = spawn(OLLAMA, ['serve'], { env, stdio: 'inherit', windowsHide: true });
 child.on('exit', (code) => process.exit(code ?? 0));
 process.on('SIGTERM', () => child.kill('SIGTERM'));

@@ -11,6 +11,10 @@
 const HeidiCore = require('../../heidi-core/server');
 const ActionExecutor = require('../../heidi-core/actions/action-executor');
 
+// The run_command fast-path route only exists when direct chat actions are
+// armed; these tests exercise it, so arm them. Default-off coverage below.
+process.env.HEIDI_CHAT_DIRECT_ACTIONS = 'true';
+
 // matchFastPath's run_command route cross-checks the extracted "command"
 // against ActionExecutor's real approvedCommands set, so tests need a
 // context with a real (or equivalently-shaped) `actions` on it -- not a
@@ -125,6 +129,26 @@ describe('matchFastPath: routing', () => {
     expect(matchFastPath('run git status for me')).toEqual({
       tool: 'run_command',
       args: { command: 'git', args: ['status', 'for', 'me'] }
+    });
+  });
+
+  describe('direct actions disabled (HEIDI_CHAT_DIRECT_ACTIONS unset — the default)', () => {
+    beforeEach(() => { delete process.env.HEIDI_CHAT_DIRECT_ACTIONS; });
+    afterEach(() => { process.env.HEIDI_CHAT_DIRECT_ACTIONS = 'true'; });
+
+    it('does NOT fast-path "run git diff" — falls through to the governed model path', () => {
+      expect(matchFastPath('run git diff')).toBeNull();
+    });
+
+    it('still routes "run the tests" to the governed create_mission', () => {
+      const m = matchFastPath('run the tests');
+      expect(m.tool).toBe('create_mission');
+      expect(m.args.action.type).toBe('run_command');
+    });
+
+    it('read-only routes are unaffected', () => {
+      expect(matchFastPath('status')).toEqual({ tool: 'system_status', args: {} });
+      expect(matchFastPath('list missions')).toEqual({ tool: 'list_missions', args: {} });
     });
   });
 });
