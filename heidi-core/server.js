@@ -36,6 +36,12 @@ if (!supabase) {
   console.log('[HEIDI] LOCAL-ONLY MODE: Supabase disabled — using local memory only');
 }
 
+// Data-layer adapter (Phase 3): Heidi-owned persistence goes through this
+// so the backing store can move to local Postgres later. The legacy
+// `supabase` client above remains for not-yet-migrated call sites.
+const { getStore } = require('../lib/store');
+const store = getStore();
+
 // Ollama embedding configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
@@ -132,10 +138,15 @@ class HeidiCore {
     // Health check
     this.app.get('/health', async (req, res) => {
       const brainAvailable = await this.brain.isAvailable();
+      const storeHealth = await store.health().catch(() => ({ status: 'error' }));
       res.json({
-        status: brainAvailable ? 'healthy' : 'degraded',
+        service: 'heidi-core',
+        version: process.env.BUILD_SHA || process.env.npm_package_version || 'dev',
+        status: brainAvailable && storeHealth.status !== 'unavailable' ? 'healthy' : 'degraded',
         brain: brainAvailable ? 'connected' : 'disconnected',
+        uptime_s: this.stats.startTime ? Math.floor((Date.now() - this.stats.startTime) / 1000) : 0,
         uptime: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
+        deps: { store: storeHealth },
         stats: this.stats
       });
     });
@@ -1811,6 +1822,27 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
       .catch((e) => console.warn(`[OPS AGENT] startup failed: ${e.message}`));
 
     console.log('[HEIDI] Ready');
+
+    // Boot evidence (Phase 3): first durable proof the bridge came up.
+    // Audit writes must never block or crash startup.
+    try {
+      const boot = await store.insertEvent({
+        event_type: 'boot',
+        division: 'core',
+        payload: {
+          version: process.env.BUILD_SHA || process.env.npm_package_version || 'dev',
+          node: process.version,
+          host: require('os').hostname(),
+          pid: process.pid,
+          port: this.port,
+        },
+        context_snapshot: { source: 'heidi-core/server.js', memory_initialized: !!this.memory.initialized },
+      });
+      if (boot.ok) console.log('[HEIDI] boot event recorded in heidi_events');
+      else console.warn(`[HEIDI] boot event not recorded: ${boot.reason}`);
+    } catch (e) {
+      console.warn(`[HEIDI] boot event failed: ${e.message}`);
+    }
   }
 }
 
