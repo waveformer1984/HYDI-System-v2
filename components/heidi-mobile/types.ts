@@ -26,12 +26,21 @@ export interface Worker {
   error_count: number | null;
 }
 
+export interface StatusDiagnostics {
+  upstream_valid: boolean;
+  upstream_host: string | null;
+  upstream_uses_default: boolean;
+  service_secret_configured: boolean;
+  device_pending_at_pairing: boolean;
+}
+
 export interface StatusSnapshot {
   state: ConnectionState;
   checked_at: string;
   latency_ms: number;
   api: { reachable: boolean; latency_ms: number | null };
   device_id: string;
+  diagnostics?: StatusDiagnostics;
   health: {
     status: string | null;
     hydi_status: string | null;

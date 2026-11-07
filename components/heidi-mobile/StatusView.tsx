@@ -127,6 +127,32 @@ export default function StatusView({ status, activity, online, realtime, liveEve
         </section>
       )}
 
+      {snap?.diagnostics && (snap.errors.length > 0 || snap.state === 'offline' || snap.state === 'unconfigured') && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>BFF diagnostics</h3>
+          <div className={styles.card}>
+            <div className={styles.cardRow}>
+              <span>HYDI upstream</span>
+              <span className={styles.muted}>
+                {snap.diagnostics.upstream_valid
+                  ? snap.diagnostics.upstream_host || 'configured'
+                  : 'invalid HYDI_API_URL'}
+                {snap.diagnostics.upstream_uses_default ? ' (default loopback)' : ''}
+              </span>
+            </div>
+            <div className={styles.cardRow} style={{ marginTop: 6 }}>
+              <span>Session secret on server</span>
+              <span className={styles.muted}>{snap.diagnostics.service_secret_configured ? 'configured' : 'missing'}</span>
+            </div>
+            {snap.diagnostics.device_pending_at_pairing && (
+              <p className={styles.muted} style={{ marginBottom: 0, marginTop: 8 }}>
+                Cookie still marked pending from pairing — approve device {snap.device_id} on Frank, then tap Refresh.
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
       {snap && snap.errors.length > 0 && (
         <section className={styles.section}>
           <h3 className={styles.sectionTitle}>Check details</h3>
