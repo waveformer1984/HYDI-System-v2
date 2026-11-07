@@ -11,6 +11,7 @@ import {
 import { createRealtime, backoffDelay, eventKey, type RealtimeState } from '../../lib/heidi-mobile/client/realtime';
 import { relativeTime, isStale } from '../../lib/heidi-mobile/client/format';
 import { heidiRequest, streamChat, kindForStatus, type ChatEvent } from '../../lib/heidi-mobile/client/api';
+import { ingressGuidance, probePublicHealth, shouldRunIngressProbe } from '../../lib/heidi-mobile/client/ingressProbe';
 
 // ── fakes ───────────────────────────────────────────────────────────────
 class MemoryStorage {
@@ -257,5 +258,33 @@ describe('streamChat', () => {
     const p = streamChat({ message: 'x', sessionId: 'abcdefgh12', signal: ac.signal }, () => undefined);
     ac.abort();
     expect(await p).toMatchObject({ ok: false, error: { kind: 'aborted' } });
+  });
+});
+
+describe('ingressProbe', () => {
+  it('shouldRunIngressProbe gates on online, stale, and error kinds', () => {
+    expect(shouldRunIngressProbe({ online: false, statusUntrusted: true })).toBe(false);
+    expect(shouldRunIngressProbe({ online: true, statusUntrusted: true })).toBe(true);
+    expect(shouldRunIngressProbe({ online: true, statusErrorKind: 'network' })).toBe(true);
+    expect(shouldRunIngressProbe({ online: true, connectionState: 'offline' })).toBe(true);
+    expect(shouldRunIngressProbe({ online: true, upstreamValid: false })).toBe(true);
+    expect(shouldRunIngressProbe({ online: true, connectionState: 'online' })).toBe(false);
+  });
+
+  it('probePublicHealth parses a healthy JSON body', async () => {
+    globalThis.fetch = jest.fn(async (url: string) => {
+      expect(url).toBe('/api/health');
+      return new Response(JSON.stringify({ status: 'healthy' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    const r = await probePublicHealth();
+    expect(r).toMatchObject({ ok: true, status: 'healthy' });
+  });
+
+  it('ingressGuidance distinguishes healthy ingress vs failed', () => {
+    const ok = ingressGuidance({ ok: true, status: 'healthy', latencyMs: 10 });
+    expect(ok.detail).toMatch(/stale|Clear this site/i);
+    const bad = ingressGuidance({ ok: false, kind: 'network', message: 'x', latencyMs: 0 });
+    expect(bad.detail).toMatch(/tailscale serve/i);
+    expect(bad.docPath).toBe('docs/TAILSCALE.md');
   });
 });

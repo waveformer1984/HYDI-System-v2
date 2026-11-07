@@ -245,7 +245,7 @@ export default function HeidiMobileApp() {
           />
         )}
         {tab === 'status' && (
-          <StatusView status={status} activity={activity} online={online} realtime={realtime} liveEvents={liveEvents} now={now} />
+          <StatusView status={status} activity={activity} online={online} statusUntrusted={statusUntrusted} realtime={realtime} liveEvents={liveEvents} now={now} />
         )}
         {tab === 'tasks' && <TasksView tasks={tasks} online={online} now={now} onAuthError={onAuthError} />}
         {tab === 'control' && (

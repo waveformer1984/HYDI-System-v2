@@ -1,7 +1,9 @@
 import styles from '../../styles/heidi-mobile.module.css';
 import { relativeTime } from '../../lib/heidi-mobile/client/format';
+import { ingressGuidance } from '../../lib/heidi-mobile/client/ingressProbe';
 import type { RealtimeEvent, RealtimeState } from '../../lib/heidi-mobile/client/realtime';
 import type { Loadable } from './hooks';
+import { useIngressProbe } from './hooks';
 import type { ActivitySnapshot, StatusSnapshot } from './types';
 import { Dot, Freshness, SectionError, describeState, toneForStatus } from './ui';
 
@@ -20,6 +22,7 @@ interface Props {
   status: Loadable<StatusSnapshot>;
   activity: Loadable<ActivitySnapshot>;
   online: boolean;
+  statusUntrusted?: boolean;
   realtime: RealtimeState;
   liveEvents: RealtimeEvent[];
   now: number;
@@ -32,11 +35,19 @@ function describeLiveEvent(e: RealtimeEvent): string {
   return e.type.replace(/_/g, ' ');
 }
 
-export default function StatusView({ status, activity, online, realtime, liveEvents, now }: Props) {
+export default function StatusView({ status, activity, online, statusUntrusted, realtime, liveEvents, now }: Props) {
   const snap = status.data;
   const stateKey = !online ? 'phone_offline' : snap ? snap.state : status.error ? 'offline' : 'checking';
   const meta = describeState(stateKey);
   const realtimeLabel = realtime === 'live' ? 'Live' : realtime === 'reconnecting' ? 'Reconnecting…' : realtime === 'connecting' ? 'Connecting…' : 'Off — using periodic refresh';
+  const ingress = useIngressProbe({
+    enabled: online,
+    statusErrorKind: status.error?.kind,
+    connectionState: snap?.state,
+    upstreamValid: snap?.diagnostics?.upstream_valid ?? null,
+    statusUntrusted,
+  });
+  const ingressAdvice = ingress.probe ? ingressGuidance(ingress.probe) : null;
 
   return (
     <div className={styles.scroll}>
@@ -124,6 +135,40 @@ export default function StatusView({ status, activity, online, realtime, liveEve
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {ingress.active && (
+        <section className={styles.section} aria-labelledby="hs-ingress">
+          <h3 id="hs-ingress" className={styles.sectionTitle}>Tailscale / ingress check</h3>
+          <div className={styles.card}>
+            {ingress.loading && !ingress.probe && <p className={styles.muted}>Probing public /api/health on this URL…</p>}
+            {ingress.probe && (
+              <>
+                <div className={styles.cardRow}>
+                  <span>GET /api/health</span>
+                  <span className={styles.statusLabel}>
+                    <Dot tone={ingress.probe.ok ? 'ok' : 'bad'} />
+                    {ingress.probe.ok ? ingress.probe.status : ingress.probe.kind}
+                    {ingress.probe.latencyMs ? ` · ${ingress.probe.latencyMs} ms` : ''}
+                  </span>
+                </div>
+                {ingressAdvice && (
+                  <>
+                    <p className={styles.muted} style={{ marginTop: 8, marginBottom: 4 }}>{ingressAdvice.title}</p>
+                    <p className={styles.small} style={{ marginBottom: 0 }}>{ingressAdvice.detail}</p>
+                    <p className={`${styles.muted} ${styles.small}`} style={{ marginTop: 6, marginBottom: 0 }}>
+                      Repo: {ingressAdvice.docPath}
+                      {ingressAdvice.docPath.includes('serve') ? ' · scripts/tailscale/serve-heidi-web.ps1' : ''}
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+            <button type="button" className={styles.btn} style={{ marginTop: 8 }} onClick={() => { void ingress.retry(); }} disabled={ingress.loading || !online}>
+              {ingress.loading ? 'Probing…' : 'Re-probe ingress'}
+            </button>
+          </div>
         </section>
       )}
 

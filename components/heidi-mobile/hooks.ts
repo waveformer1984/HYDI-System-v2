@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { heidiRequest, type ApiError } from '../../lib/heidi-mobile/client/api';
+import { probePublicHealth, shouldRunIngressProbe, type IngressProbeResult } from '../../lib/heidi-mobile/client/ingressProbe';
 import { loadSnapshot, saveSnapshot } from '../../lib/heidi-mobile/client/cache';
 import type { StatusSnapshot } from './types';
 
@@ -140,3 +141,39 @@ export function useCachedResource<T>(
 }
 
 export type StatusResource = Loadable<StatusSnapshot>;
+
+/** Same-origin GET /api/health when BFF status looks offline or stale. */
+export function useIngressProbe(input: {
+  enabled: boolean;
+  statusErrorKind?: string;
+  connectionState?: string;
+  upstreamValid?: boolean | null;
+  statusUntrusted?: boolean;
+}) {
+  const [probe, setProbe] = useState<IngressProbeResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const active = shouldRunIngressProbe({
+    online: input.enabled,
+    statusErrorKind: input.statusErrorKind,
+    connectionState: input.connectionState,
+    upstreamValid: input.upstreamValid,
+    statusUntrusted: input.statusUntrusted,
+  });
+
+  const run = useCallback(async () => {
+    if (!active) {
+      setProbe(null);
+      return;
+    }
+    setLoading(true);
+    const result = await probePublicHealth();
+    setProbe(result);
+    setLoading(false);
+  }, [active]);
+
+  useEffect(() => {
+    void run();
+  }, [run]);
+
+  return { probe, loading, active, retry: run };
+}
