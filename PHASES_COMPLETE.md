@@ -383,3 +383,17 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 **Verified:** restart limits (`max_restarts`, `exp_backoff_restart_delay`) already present on all 27 PM2 entries; `check-port-registry.js` run live (12 matches, 1 known-stale registry row pending #518).
 
 **Open:** ecosystem env ports are still literals (registry check enforces consistency rather than importing); ursula-local lacks a single `/health`; heidi-mobile-chat awaits Jordan's token decision; autostart not yet installed on Frank (runbook ready).
+
+---
+
+## Phase 1 — One Canonical Codebase (2026-11-07, branch `chore/phase-1-consolidation`)
+
+**Shipped:**
+- `docs/CONSOLIDATION_PLAN.md` — verdicts for all 57 folders / 36 repos from live inventory; squash-merge verification per branch.
+- `scripts/frank/archive-folders.ps1` — dry-run-first, never-delete archiver with worktree-prune handling.
+- Salvage PR #519 (`salvage/proto-yi-workspace` — Proto.I.Y :3010 workspace, feeds Phase 8).
+- Git hygiene: stray `cm.txt`/`commitmsg.txt` removed; `moderation.html` :3001→:3018.
+
+**Verified:** every "ahead" branch diffed against clean-main log — nearly all are pre-squash originals of merged PRs; only proto-yi-workspace and the #466 cleanup had unmerged content.
+
+**Open:** Jordan approves the archive list (dry-run first); `HYDI_System` salvage-branch review; `protoforgesite` remote/CI check; CONTRIBUTING.md branching model (Phase 2).
