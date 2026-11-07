@@ -315,4 +315,16 @@ Heidi is now a fully autonomous orchestrator with procedural memory, persistent 
 
 **Verified live:** PM2 26 apps (25 online, `heidi-mobile-chat` waiting restart — missing `HEIDI_MOBILE_TOKEN`, Jordan decision); ports 3000/3001/3005/3100/3459/11434/54321 listening; local Supabase `heidi_events`=262,987 rows, `hydi_facts`=43, `heidi_decision_bounds`=1, `hydi_tasks`/`agent_bus`/`heidi_reflections` empty, `heidi_state_snapshots`/`divisions` absent.
 
-**Open:** Jordan runs `inventory.ps1` on Frank and pastes output; `config/ports.json` vs existing `.ports.json` naming decision (recommend keeping `.ports.json`); `claude/local-mobile-chat-app-c3UBW` branch not found — recheck Phase 1.
+**Open:** Jordan runs `inventory.ps1` on Frank and pastes output; `config/ports.json` alias to `.ports.json`; `claude/local-mobile-chat-app-c3UBW` branch not found — recheck Phase 1.
+
+## Phase 1 — One Canonical Codebase (2026-11-07, branch `chore/phase-1-consolidation`)
+
+**Shipped:**
+- `docs/CONSOLIDATION_PLAN.md` — verdicts for all 57 folders / 36 repos from live inventory; squash-merge verification per branch.
+- `scripts/frank/archive-folders.ps1` — dry-run-first, never-delete archiver with worktree-prune handling.
+- Salvage PR #519 (`salvage/proto-yi-workspace` — Proto.I.Y :3010 workspace, feeds Phase 8).
+- Git hygiene: stray `cm.txt`/`commitmsg.txt` removed; `moderation.html` :3001→:3018.
+
+**Verified:** every "ahead" branch diffed against clean-main log — nearly all are pre-squash originals of merged PRs; only proto-yi-workspace and the #466 cleanup had unmerged content.
+
+**Open:** Jordan approves the archive list (dry-run first); `HYDI_System` salvage-branch review; `protoforgesite` remote/CI check; CONTRIBUTING.md branching model (Phase 2).
