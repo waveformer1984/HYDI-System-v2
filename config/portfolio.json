@@ -46,7 +46,6 @@
       "devLogin": { "method": "none", "seed": null },
       "stripeMode": "none",
       "embeddable": true,
-      "pendingDecision": "canonical pick confirmed: protoforge-applications/proto-yi; Flask suite is its engine (dependency, not an app)",
       "dependencies": [
         {
           "name": "ursula-suite-proto_iy",
