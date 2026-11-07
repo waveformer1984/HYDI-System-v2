@@ -30,7 +30,7 @@ jobs:
       WALKIE_TEST_DATABASE_URL: postgres://postgres:walkie@127.0.0.1:55432/walkie_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -57,7 +57,7 @@ jobs:
         working-directory: apps/walkie/mobile
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
