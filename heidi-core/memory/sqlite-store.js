@@ -206,6 +206,9 @@ class HeidiMemory {
   }
 
   run(sql, params = []) {
+    // In-memory mode has no SQL engine: resolve empty rather than crash on
+    // this.db === null. Callers that need rows already branch on inMemoryData.
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve({ id: 0, changes: 0 });
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, function(err) {
         if (err) reject(err);
@@ -215,6 +218,7 @@ class HeidiMemory {
   }
 
   get(sql, params = []) {
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
         if (err) reject(err);
@@ -224,6 +228,7 @@ class HeidiMemory {
   }
 
   all(sql, params = []) {
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve([]);
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
         if (err) reject(err);
