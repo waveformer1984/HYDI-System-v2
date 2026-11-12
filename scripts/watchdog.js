@@ -683,6 +683,18 @@ async function runCheck() {
   // Check boot.config.json endpoints
   const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
 
+  // SPLIT-BRAIN: a responding port is not proof PM2 owns it. An orphaned
+  // listener (e.g. next start whose PM2 parent died) answers every probe
+  // while PM2's managed instance sits in "waiting restart" — the
+  // 2026-11-11 heidi-web false-green. annotateSplitBrain flips those
+  // results to unhealthy with the orphan PID and files a mission-inbox
+  // proposal; it never kills anything.
+  try {
+    require('./watchdog-split-brain').annotateSplitBrain(endpointResults);
+  } catch (e) {
+    log(`SPLIT-BRAIN check error (non-fatal): ${e.message}`);
+  }
+
   // Phase 5: Check infrastructure (Docker containers, Ollama)
   const infraResults = (await checkInfrastructure()).filter((r) => !r._checkOllama);
   const ollamaResult = await checkOllama();
@@ -746,6 +758,15 @@ async function runCheck() {
       for (const f of failures) {
         if (!f.required) {
           log(`OBSERVE  ${f.name} is optional — logging only, not calling RecoveryEngine`);
+          continue;
+        }
+
+        // SPLIT-BRAIN: the port answers but not via PM2's instance. A PM2
+        // restart cannot evict the orphan (it just EADDRINUSE-crash-loops
+        // again), so recovery is not authorized — the orphan kill is
+        // proposed through the mission inbox for a human to approve.
+        if (f.splitBrain) {
+          log(`OBSERVE  ${f.name} SPLIT-BRAIN — orphan pid(s) ${(f.orphanPids || []).join(',')} hold the port; recovery NOT authorized, kill proposed via mission inbox`);
           continue;
         }
 
