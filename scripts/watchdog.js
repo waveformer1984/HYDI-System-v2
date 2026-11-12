@@ -360,7 +360,7 @@ async function checkInfrastructure() {
   if (DOCKER_CMD) {
     try {
       dbDockerStatus = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
-        encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+        encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
       }).trim();
     } catch {
       dbDockerStatus = 'docker inspect failed';
@@ -407,7 +407,7 @@ async function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+          encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
         });
         restDockerStatus = out.trim();
         restDockerOk = restDockerStatus === 'running';
@@ -479,7 +479,7 @@ async function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_kong_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+          encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
         });
         kongDockerStatus = out.trim();
         break;
