@@ -28,6 +28,7 @@
  */
 
 const lifecycle = require('./lifecycle');
+const allowlist = require('../approvals/allowlist');
 
 // Required permission_level per action type, mirroring ActionExecutor.isSafe()'s
 // own risk tiering: log_event/read_file are always-safe (1), run_command/
@@ -181,7 +182,11 @@ class MissionWorker {
       ok: true,
       plan: {
         action, requiredLevel, agent: mission.assigned_agent, agentLevel, safe: true,
-        armed: process.env.HEIDI_AUTONOMOUS_ACTIONS === 'true',
+        // Allowlisted phone-approved actions arm on HEIDI_ALLOW_EXEC (their
+        // own gate, re-checked in resumeApproved); everything else still
+        // needs HEIDI_AUTONOMOUS_ACTIONS.
+        armed: process.env.HEIDI_AUTONOMOUS_ACTIONS === 'true'
+          || (allowlist.isAllowlisted(mission) && process.env.HEIDI_ALLOW_EXEC === 'true'),
         success: lifecycle.successOf(mission) || { exitCode: 0 },
         planned_at: new Date(this.now()).toISOString(),
       },
@@ -217,6 +222,15 @@ class MissionWorker {
 
   /** A person approved it: re-check the gates now, then run. */
   async resumeApproved(mission, action) {
+    // Allowlist gate: HEIDI_ALLOW_EXEC + recorded human approval + the
+    // action still exactly matching its spec. Refusals are audited as a
+    // blocked transition with the reason.
+    const gate = allowlist.authorize(mission, action);
+    if (!gate.ok) {
+      await this.move(mission.id, 'blocked', `allowlist gate: ${gate.reason}`, { from: 'awaiting_approval' });
+      this.log(`[MISSION WORKER] task ${mission.id} blocked by allowlist gate: ${gate.reason}`);
+      return;
+    }
     const p = await this.plan(mission, action);
     if (!p.ok) {
       const evidence = { outcome: p.to === 'failed' ? 'failed' : 'blocked', error: `after approval: ${p.error}` };
