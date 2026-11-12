@@ -111,9 +111,34 @@ class OllamaClient {
    * Stream a generation token-by-token. Calls onToken(text) for each chunk,
    * resolves with the same shape as generate() once complete.
    */
+  /** Smallest installed generative model — the cheap retry target. */
+  async _smallestModel() {
+    try {
+      const res = await this.client.get('/api/tags', { timeout: 3000 });
+      const models = (res.data.models || []).filter(m => m.size > 0 && !/embed/i.test(m.name));
+      models.sort((a, b) => a.size - b.size);
+      return models.length ? models[0].name : null;
+    } catch { return null; }
+  }
+
   async generateStream(prompt, onToken, options = {}) {
     this._backoffActive();
     const model = options.model || await this.resolveModel();
+    try {
+      return await this._streamGenerate(model, prompt, onToken, options);
+    } catch (e) {
+      // One bounded retry on the smallest installed model: a timeout on the
+      // primary pick is usually RAM/queue pressure, and the smallest model
+      // is the cheapest way to still give the user a real answer.
+      if (options.noFallbackRetry) throw e;
+      const smaller = await this._smallestModel();
+      if (!smaller || smaller === model) throw e;
+      console.warn(`[HEIDI Brain] stream failed on ${model} (${e.message}); retrying on ${smaller}`);
+      return await this._streamGenerate(smaller, prompt, onToken, { ...options, noFallbackRetry: true });
+    }
+  }
+
+  async _streamGenerate(model, prompt, onToken, options = {}) {
     const response = await fetch(`${this.baseURL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
