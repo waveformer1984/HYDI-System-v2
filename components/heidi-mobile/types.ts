@@ -87,11 +87,21 @@ export interface Command {
   completed_at: string | null;
 }
 
+export interface MissionApproval {
+  id: number;
+  goal: string;
+  status: string;
+  priority: number;
+  assigned_agent: string | null;
+  created_at: string | null;
+}
+
 export interface TasksSnapshot {
   checked_at: string;
   approvals: Section<Approval[]>;
   work: Section<{ sessions: WorkSession[]; queue_depth: number }>;
   commands: Section<Command[]>;
+  missions: Section<MissionApproval[]>;
 }
 
 export interface Notification {
