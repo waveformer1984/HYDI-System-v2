@@ -495,6 +495,23 @@
   padding: 32px 12px 12px;
 }
 
+.briefCard {
+  border: 1px solid var(--border, #2a2a3a);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 4px 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text, #e8e8f0);
+  background: var(--card, #14141f);
+  white-space: pre-wrap;
+}
+
+.briefTitle {
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

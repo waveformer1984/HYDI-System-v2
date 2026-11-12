@@ -5,7 +5,7 @@ import { clearAll, loadPreferences, loadSnapshot, savePreferences, DEFAULT_PREFE
 import { createRealtime, type RealtimeEvent, type RealtimeHandle, type RealtimeState } from '../../lib/heidi-mobile/client/realtime';
 import { relativeTime, isStale } from '../../lib/heidi-mobile/client/format';
 import { useAppHeight, useCachedResource, useNow, useOnline, useVisible } from './hooks';
-import type { ActivitySnapshot, StatusSnapshot, Tab, TasksSnapshot } from './types';
+import type { ActivitySnapshot, BriefSnapshot, StatusSnapshot, Tab, TasksSnapshot } from './types';
 import { Dot, describeState } from './ui';
 import ChatView from './ChatView';
 import StatusView from './StatusView';
@@ -51,6 +51,10 @@ export default function HeidiMobileApp() {
   const activity = useCachedResource<ActivitySnapshot>('activity', '/activity', {
     enabled: active && online && tab === 'status',
     intervalMs: 60000,
+  });
+  const brief = useCachedResource<BriefSnapshot>('brief', '/brief', {
+    enabled: active && online,
+    intervalMs: 15 * 60_000,
   });
 
   const checkSession = useCallback(async () => {
@@ -221,6 +225,7 @@ export default function HeidiMobileApp() {
             speakReplies={prefs.speakReplies}
             onAuthError={onAuthError}
             onTasksChanged={() => void tasks.refresh()}
+            brief={brief.data}
           />
         )}
         {tab === 'status' && (

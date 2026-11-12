@@ -85,7 +85,7 @@ export interface Loadable<T> {
  * say both "this is old" and "why".
  */
 export function useCachedResource<T>(
-  key: 'status' | 'tasks' | 'activity',
+  key: 'status' | 'tasks' | 'activity' | 'brief',
   path: string,
   opts: { enabled: boolean; intervalMs: number | null; timeoutMs?: number },
 ): Loadable<T> {

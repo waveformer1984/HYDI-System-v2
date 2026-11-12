@@ -84,13 +84,13 @@ function write(key: string, value: unknown): void {
   }
 }
 
-export function loadSnapshot<T>(key: 'status' | 'tasks' | 'activity'): Snapshot<T> | null {
+export function loadSnapshot<T>(key: 'status' | 'tasks' | 'activity' | 'brief'): Snapshot<T> | null {
   const snap = read<Snapshot<T>>(`snapshot.${key}`);
   if (!snap || typeof snap.savedAt !== 'number' || snap.data === undefined) return null;
   return snap;
 }
 
-export function saveSnapshot<T>(key: 'status' | 'tasks' | 'activity', data: T, now = Date.now()): void {
+export function saveSnapshot<T>(key: 'status' | 'tasks' | 'activity' | 'brief', data: T, now = Date.now()): void {
   write(`snapshot.${key}`, { data, savedAt: now });
 }
 

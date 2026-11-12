@@ -110,4 +110,11 @@ export interface ActivitySnapshot {
   unread_count: number;
 }
 
+export interface BriefSnapshot {
+  generated_at: string;
+  ct_date: string;
+  lines: string[];
+  failures: string[];
+}
+
 export type Tab = 'chat' | 'status' | 'tasks' | 'control';

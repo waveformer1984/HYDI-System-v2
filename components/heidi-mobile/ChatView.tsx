@@ -18,6 +18,7 @@ interface Props {
   speakReplies: boolean;
   onAuthError: (_error: ApiError) => void;
   onTasksChanged: () => void;
+  brief?: { generated_at: string; ct_date: string; lines: string[]; failures: string[] } | null;
 }
 
 function describeActions(event: Extract<ChatEvent, { type: 'actions' }>): string[] {
@@ -29,7 +30,7 @@ function describeActions(event: Extract<ChatEvent, { type: 'actions' }>): string
   });
 }
 
-export default function ChatView({ online, speakReplies, onAuthError, onTasksChanged }: Props) {
+export default function ChatView({ online, speakReplies, onAuthError, onTasksChanged, brief }: Props) {
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState('');
   const [interim, setInterim] = useState('');
@@ -237,6 +238,12 @@ export default function ChatView({ online, speakReplies, onAuthError, onTasksCha
       </div>
 
       <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
+        {brief && brief.lines.length > 0 && (
+          <div className={styles.briefCard} role="note" aria-label="Morning brief">
+            {brief.lines.map((line, i) => <div key={i} className={i === 0 ? styles.briefTitle : undefined}>{line}</div>)}
+            {brief.failures.length > 0 && <div className={styles.muted}>Some sources unavailable: {brief.failures.join('; ')}</div>}
+          </div>
+        )}
         {!messages.length && (
           <div className={styles.emptyChat}>
             <p style={{ fontSize: 18, fontWeight: 650, margin: 0 }}>Ask Heidi about HYDI</p>
