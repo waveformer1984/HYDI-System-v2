@@ -783,6 +783,17 @@ async function runCheck() {
           continue;
         }
 
+        // In-flight recovery mutex: if a previous hydi-recover for this
+        // component is still running (live PID in .runtime/recover-*.lock),
+        // that IS the outcome for this cycle — do not delegate again.
+        const mutex = require('../lib/operational/recovery-mutex');
+        if (mutex.inProgress(root, f.name)) {
+          log(`IN-FLIGHT ${f.name} — recovery already running (lock held), treating as outcome, not re-delegating`);
+          observationHysteresis.markRecovered(f.name, true);
+          recoveryThrottle.recordOutcome(f.name, true, 'recovery already in progress');
+          continue;
+        }
+
         // Delegation throttle — exponential backoff across cycles +
         // hard cap → OPEN. Denied delegations produce zero child
         // processes and zero pm2 calls; the supervisor stays unloaded.
