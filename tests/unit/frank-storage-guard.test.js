@@ -204,11 +204,11 @@ describe('frank storage guard status, alerts and reports', () => {
     await pass(7);
     const status = JSON.parse(fs.readFileSync(path.join(h.opts.storageDir, 'status.json'), 'utf8'));
     expect(status).toMatchObject({ level: 'LOW', freeGb: 7, totalGb: 500, autoclean: true });
-    expect(status.gateFloors).toEqual({ deployGb: 5, localCiGb: 8 });
+    expect(status.gateFloors).toEqual({ deployGb: 5, localCiGb: 12 });
     const alerts = () => h.posts.filter((p) => p.channel === 'alerts').map((p) => p.body);
     expect(alerts()).toHaveLength(1);
     expect(alerts()[0]).toContain('LOW: 7 GB free');
-    expect(alerts()[0]).toContain('local CI (needs 8 GB)');
+    expect(alerts()[0]).toContain('local CI (needs 12 GB)');
 
     t += 15 * 60 * 1000;
     await pass(7);
