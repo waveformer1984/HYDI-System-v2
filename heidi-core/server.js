@@ -61,6 +61,7 @@ const OpsAgent = require('./ops/ops-agent');
 const { isOpsQuery, parseOpsCommand, runOpsCommand } = require('./ops/ops-commands');
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
+const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
 
 class HeidiCore {
@@ -326,6 +327,11 @@ class HeidiCore {
           try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
           send({ t: formatFixList(list) });
           send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (isJobsQuery(input)) {
+          send({ t: formatJobs() });
+          send({ done: true, model: 'job-scout', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {
@@ -806,6 +812,11 @@ class HeidiCore {
           try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
           send({ t: formatFixList(list) });
           send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic');
+        }
+        if (isJobsQuery(input)) {
+          send({ t: formatJobs() });
+          send({ done: true, model: 'job-scout', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return done('deterministic');
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {

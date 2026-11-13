@@ -1,0 +1,42 @@
+{
+  "_comment": "Heidi job scout — which boards to read, what to search for, and how to rank leads against ProtoForge divisions. Starter profile: edit keywords, rates and divisions to match what you actually want to take on. Heidi only reads and drafts; it never applies.",
+  "minScore": 35,
+  "draftScore": 60,
+  "maxLeads": 400,
+  "retentionDays": 30,
+  "sources": {
+    "freelancer": { "enabled": true, "queries": ["next.js", "react", "node.js", "stripe", "supabase", "chatbot", "ai automation", "web scraping", "music production", "mixing mastering", "logo design", "3d printing", "cad design"] },
+    "remotive": { "enabled": true, "queries": ["react", "node", "python", "ai", "design"], "jobTypes": ["contract", "freelance", "part_time"] },
+    "remoteok": { "enabled": true, "requireTags": ["contract", "freelance", "part time", "part-time"] },
+    "hn": { "enabled": true }
+  },
+  "negativeKeywords": ["unpaid", "equity only", "commission only", "exam", "homework", "assignment help", "fake reviews", "adult", "casino", "crypto pump", "on-site only", "security clearance"],
+  "minFixedBudgetUsd": 150,
+  "minHourlyUsd": 20,
+  "divisions": {
+    "AppForge": {
+      "pitch": "full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy",
+      "keywords": ["next.js", "nextjs", "react", "typescript", "node.js", "nodejs", "full stack", "full-stack", "web app", "saas", "dashboard", "supabase", "postgres", "api", "rest api", "stripe", "payment integration", "pwa", "tailwind"]
+    },
+    "Build-A-Mind": {
+      "pitch": "practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control",
+      "keywords": ["ai", "llm", "chatbot", "gpt", "openai", "claude", "rag", "langchain", "machine learning", "automation", "n8n", "zapier", "make.com", "python", "agent", "ollama"]
+    },
+    "ForgeFinder": {
+      "pitch": "lead generation and data pipelines: scrapers, enrichment and clean exports into your CRM",
+      "keywords": ["lead generation", "web scraping", "scraper", "data extraction", "crm", "enrichment", "data entry automation", "google sheets", "airtable"]
+    },
+    "Galactic Bytes": {
+      "pitch": "creative studio work: brand identity, web design and visual assets",
+      "keywords": ["logo", "branding", "brand identity", "graphic design", "web design", "landing page", "ui design", "ux", "figma", "illustration", "social media graphics"]
+    },
+    "Rezonate / Waveformer Records": {
+      "pitch": "music production, mixing and mastering, and audio post",
+      "keywords": ["music production", "producer", "beat", "mixing", "mastering", "audio editing", "sound design", "podcast editing", "jingle", "composer", "vocal tuning"]
+    },
+    "ProtoForge Manufacturing": {
+      "pitch": "prototyping: CAD, 3D printing and small-batch fabrication",
+      "keywords": ["3d printing", "3d print", "cad", "fusion 360", "solidworks", "prototype", "product design", "stl", "enclosure design", "fabrication"]
+    }
+  }
+}
