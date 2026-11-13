@@ -68,6 +68,14 @@ export interface DaemonStatusSnapshot {
   persistence: PersistenceTruth;
   updatedAt: string;
   provenance?: RuntimeProvenanceStamp | null;
+  spine?: {
+    snapshots: number;
+    lastSnapshotAt: string | null;
+    lastReflectionAt: number;
+    lastReflectionId: string | null;
+    reflectionModel: string;
+    reflectIntervalMs: number;
+  } | null;
 }
 
 export type DaemonVerdictState =

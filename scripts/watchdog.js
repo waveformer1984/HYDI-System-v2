@@ -30,6 +30,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // SelfHealthMonitor — HEIDI's own operational health (memory growth,
 // stuck recoveries, stale observation cycles, persistence failures).
@@ -679,7 +680,36 @@ async function sendHeartbeats() {
   }
 }
 
+// PM2 defect guard: an empty-args `ping` RPC crashes the PM2 God daemon's
+// domain handler, which spawns a detached `pm2 update` that hangs forever
+// (docs/operations/PM2_OBSERVABILITY_AGENT_H.md). 119 accumulated on 2026-11-12.
+// Reap any `pm2 update` client older than 10 minutes — a real update finishes
+// in seconds, so anything this old is a corpse. Never touches the daemon.
+const PM2_UPDATE_MIN_AGE_MIN = 10;
+function reapHungPm2Update() {
+  if (process.platform !== 'win32') return { killed: 0, found: 0 };
+  try {
+    const ps = [
+      `$cut=(Get-Date).AddMinutes(-${PM2_UPDATE_MIN_AGE_MIN})`,
+      `$m=@(Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'pm2 update' -and $_.CreationDate -lt $cut })`,
+      `$k=0; foreach($p in $m){ try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $k++ } catch {} }`,
+      `Write-Output "killed=$k found=$($m.Count)"`,
+    ].join('; ');
+    const out = execSync(`powershell -NoProfile -Command "${ps.replace(/"/g, '\\"')}"`, {
+      encoding: 'utf8', timeout: 30000, stdio: 'pipe', windowsHide: true,
+    }).trim();
+    const m = out.match(/killed=(\d+) found=(\d+)/);
+    const res = m ? { killed: Number(m[1]), found: Number(m[2]) } : { killed: 0, found: 0 };
+    if (res.killed > 0) log(`PM2-UPDATE-REAP killed ${res.killed} hung 'pm2 update' process(es) (found ${res.found})`);
+    return res;
+  } catch (e) {
+    log(`PM2-UPDATE-REAP check failed (non-fatal): ${e.message}`);
+    return { killed: 0, found: 0 };
+  }
+}
+
 async function runCheck() {
+  reapHungPm2Update();
   // Check boot.config.json endpoints
   const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
 
@@ -911,7 +941,7 @@ async function main() {
 // added to scripts/boot-agent.js earlier in this project's history for the
 // same reason: requiring this file unconditionally ran real HTTP checks,
 // real Docker calls, and real log writes.
-module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama, sendHeartbeats };
+module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama, sendHeartbeats, reapHungPm2Update };
 
 if (require.main === module) {
   main().catch((e) => {
