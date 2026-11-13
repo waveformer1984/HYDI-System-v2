@@ -137,9 +137,12 @@ hydi.db
 .endurance-report.json
 pm2-state.json
 
+# Python bytecode (never commit)
+__pycache__/
+*.pyc
+
 # Rezonate pipeline outputs
 rezonate/swaps/
-rezonate/__pycache__/
 protoforge-applications/rezonate/generated/
 
 # Machine-local runtime state — never commit live memory, session, gate,
