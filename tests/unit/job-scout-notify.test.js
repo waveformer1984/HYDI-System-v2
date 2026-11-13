@@ -174,9 +174,9 @@ describe('job scout — lead alerts', () => {
   it('maybeNotifyLeads ignores leads below notifyScore and already-notified leads', async () => {
     const sent = [];
     const leads = [
-      { id: 'a:1', title: 'weak', score: 50 },
-      { id: 'b:2', title: 'strong', score: 90, notifiedAt: '2026-01-01T00:00:00Z' },
-      { id: 'c:3', title: 'fresh strong', score: 80, sourceUrl: 'https://x' },
+      { id: 'a:1', title: 'weak', score: 50, notifyPending: true },
+      { id: 'b:2', title: 'strong', score: 90, notifiedAt: '2026-01-01T00:00:00Z', notifyPending: true },
+      { id: 'c:3', title: 'fresh strong', score: 80, sourceUrl: 'https://x', notifyPending: true },
     ];
     const r = await maybeNotifyLeads({ leads, config: CONFIG, notifyFn: async (n) => sent.push(n), now: DAYTIME });
     expect(r.sent).toBe(1);

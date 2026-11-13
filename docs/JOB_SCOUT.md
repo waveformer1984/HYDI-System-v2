@@ -48,6 +48,14 @@ wins (max 100). A negative keyword drops the lead; a budget under
 Leads under `minScore` (35) are not kept. Leads at `draftScore` (60) or
 above get a template starter draft with an `[EDIT: …]` placeholder.
 
+New leads at `notifyScore` (75) or above also raise a `job_lead`
+notification via `lib/notifications/notify.js` (category in
+`20261115000000_notifications_job_lead.sql`). More than three in one scan
+→ one batched summary. Each lead is notified at most once (`notifiedAt` in
+`leads.json`). Quiet hours (`notify.quietHours`, default 22:00–07:00
+America/Chicago) defer alerts to the next daytime scan; they are never
+dropped.
+
 **The shipped division keywords and pitches are a starter profile.** Edit
 them to match the work you actually want.
 
