@@ -287,6 +287,7 @@ describe('GET /api/phone/observe', () => {
       ok: true,
       snapshot: { device: 'frank', level: 'OK' },
       fixList: null,
+      frontDoor: null,
       billingOps: { alert: null, lastReconcileErrors: null, ts: null },
     });
     expect(ok.headers['Cache-Control']).toBe('no-store');
