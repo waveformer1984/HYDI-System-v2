@@ -27,6 +27,8 @@
  *   AUTONOMY POLICY → AUTHORIZATION → EXECUTION → VERIFICATION → AUDIT
  */
 
+import * as nodeFs from 'fs';
+import * as nodePath from 'path';
 import { Pool, QueryResultRow } from 'pg';
 import { devPatchEnabled, revenueAdvanceEnabled, shouldAutoApplyPatch, GATE_DEV_PATCH_DISABLED, GATE_REVENUE_ADVANCE_DISABLED } from './executor-env-gates';
 import { HeidiIdentityModel, HeidiIdentity, AutonomyLevel } from './HeidiIdentity';
@@ -4104,11 +4106,9 @@ export class CognitiveCore {
     recent: Array<Record<string, unknown>>;
   } | null {
     try {
-      const fs = require('fs') as typeof import('fs');
-      const path = require('path') as typeof import('path');
       const p = process.env.HEIDI_GATE_LOG_PATH
-        || path.join(process.cwd(), '.runtime', 'heidi-gate-log.json');
-      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+        || nodePath.join(process.cwd(), '.runtime', 'heidi-gate-log.json');
+      const parsed = JSON.parse(nodeFs.readFileSync(p, 'utf8'));
       const entries: Array<Record<string, unknown>> = Array.isArray(parsed)
         ? parsed
         : Array.isArray(parsed?.entries) ? parsed.entries : [];

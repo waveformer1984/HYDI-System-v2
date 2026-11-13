@@ -11,6 +11,37 @@
  * kill+spawn so PM2's own restart policy, env and cwd are preserved.
  */
 const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..');
+// Boot-lease consistency helpers (kept from the previous version of this
+// script; tests/unit/pm2-restart-consistency.test.js covers them). The boot
+// lease guarantees exactly one hydi-boot supervisor, so PM2's tracked pid
+// must equal the lease pid — a mismatch is the Windows double-fork race.
+const BOOT_LEASE_PATH = process.env.HYDI_BOOT_LEASE_PATH
+  ? path.resolve(process.env.HYDI_BOOT_LEASE_PATH)
+  : path.join(ROOT, '.hydi-boot.lock');
+
+function readBootLeasePid() {
+  try {
+    const lease = JSON.parse(fs.readFileSync(BOOT_LEASE_PATH, 'utf8'));
+    return lease && Number.isInteger(lease.pid) ? lease.pid : null;
+  } catch { return null; }
+}
+
+function checkSupervisorConsistency(pm2Pid, leasePid) {
+  if (pm2Pid == null || leasePid == null) {
+    return { verdict: 'incomplete', pm2Pid, leasePid, detail: 'one side has not reported a pid yet' };
+  }
+  if (pm2Pid === leasePid) {
+    return { verdict: 'consistent', pm2Pid, leasePid, detail: 'PM2 record and boot lease agree' };
+  }
+  return {
+    verdict: 'mismatch', pm2Pid, leasePid,
+    detail: `PM2 tracks pid ${pm2Pid} but the boot lease names pid ${leasePid} — PM2 bookkeeping lost the surviving fork`,
+  };
+}
 
 const APP_RE = /^[a-zA-Z0-9:_-]{1,64}$/;
 
@@ -49,4 +80,8 @@ function main() {
   process.exit(0);
 }
 
-main();
+module.exports = { checkSupervisorConsistency, readBootLeasePid, BOOT_LEASE_PATH };
+
+// Run only as a CLI — requiring this file (tests, other scripts) must not
+// call pm2 or exit the process.
+if (require.main === module) main();
