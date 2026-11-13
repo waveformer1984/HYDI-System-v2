@@ -118,3 +118,21 @@ node scripts/hydi-verify.js
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1
 ```
+
+## Job scout — division profiles needed
+
+`config/job-scout.json` has profiles for AppForge, Build-A-Mind, ForgeFinder and Galactic Bytes. These divisions have **no profile yet**, so the scout can't rank leads for them:
+
+- **GroundWork**
+- **J.STEIN Collection**
+- **Colter's Little Smokehouse**
+- **Z-Aero Foundation**
+
+For each one, reply with:
+
+1. What kind of work should the scout look for? (e.g. the services/products it sells)
+2. Any keywords, sites or buyer types that show up in those posts?
+3. A one-line "pitch" — how we describe the work when drafting a reply?
+4. Any hard exclusions (work we won't take)?
+
+Don't worry about format — plain sentences are fine; Devin will turn them into config entries. Nothing is invented until you answer.
