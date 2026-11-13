@@ -12,7 +12,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { checkSupervisorConsistency } = require('../../scripts/pm2-restart');
+const {
+  checkSupervisorConsistency,
+  readPm2Pid,
+  waitForSupervisorConsistency,
+  restartHydiBoot,
+  BOOT_AGENT_APP,
+} = require('../../scripts/pm2-restart');
 
 describe('pm2-restart: checkSupervisorConsistency', () => {
   it('consistent when PM2 record and boot lease agree', () => {
@@ -35,6 +41,82 @@ describe('pm2-restart: checkSupervisorConsistency', () => {
   it('incomplete when the boot lease is not yet written', () => {
     const r = checkSupervisorConsistency(29484, null);
     expect(r.verdict).toBe('incomplete');
+  });
+});
+
+describe('pm2-restart: readPm2Pid', () => {
+  it('returns the tracked pid when pm2 reports a live process', () => {
+    expect(readPm2Pid('hydi-boot', [{ name: 'hydi-boot', pid: 4242 }])).toBe(4242);
+    expect(readPm2Pid('hydi-boot', [{ name: 'hydi-boot', pid: 0 }])).toBeNull();
+    expect(readPm2Pid('missing', [{ name: 'hydi-boot', pid: 1 }])).toBeNull();
+  });
+});
+
+describe('pm2-restart: waitForSupervisorConsistency', () => {
+  it('resolves when pm2 and lease agree within the poll window', async () => {
+    let pm2Pid = null;
+    const r = await waitForSupervisorConsistency({
+      readPm2Pid: () => pm2Pid,
+      readLeasePid: () => 9001,
+      sleep: async () => { pm2Pid = 9001; },
+    }, 500);
+    expect(r.ok).toBe(true);
+    expect(r.last.verdict).toBe('consistent');
+  });
+
+  it('fails fast on mismatch', async () => {
+    const r = await waitForSupervisorConsistency({
+      readPm2Pid: () => 1,
+      readLeasePid: () => 2,
+      sleep: async () => {},
+    }, 500);
+    expect(r.ok).toBe(false);
+    expect(r.last.verdict).toBe('mismatch');
+  });
+});
+
+describe('pm2-restart: restartHydiBoot (stubbed pm2)', () => {
+  it('delete + start then polls until consistent', async () => {
+    const calls = [];
+    let jlistCount = 0;
+    const pm2Run = (args) => {
+      calls.push(args);
+      if (args[0] === 'delete') return { status: 0 };
+      if (args[0] === 'start') return { status: 0 };
+      if (args[0] === 'jlist') {
+        jlistCount += 1;
+        const pid = jlistCount >= 2 ? 7000 : 0;
+        return { status: 0, stdout: JSON.stringify([{ name: BOOT_AGENT_APP, pid }]) };
+      }
+      return { status: 1 };
+    };
+    const r = await restartHydiBoot({
+      pm2Run,
+      readLeasePid: () => 7000,
+      sleep: async () => {},
+    });
+    expect(r.ok).toBe(true);
+    expect(calls[0]).toEqual(['delete', BOOT_AGENT_APP]);
+    expect(calls[1][0]).toBe('start');
+    expect(calls[1]).toContain('--only');
+    expect(calls[1]).toContain(BOOT_AGENT_APP);
+  });
+
+  it('returns mismatch when lease and PM2 never agree', async () => {
+    const pm2Run = (args) => {
+      if (args[0] === 'delete' || args[0] === 'start') return { status: 0 };
+      if (args[0] === 'jlist') {
+        return { status: 0, stdout: JSON.stringify([{ name: BOOT_AGENT_APP, pid: 111 }]) };
+      }
+      return { status: 1 };
+    };
+    const r = await restartHydiBoot({
+      pm2Run,
+      readLeasePid: () => 222,
+      sleep: async () => {},
+    });
+    expect(r.ok).toBe(false);
+    expect(r.last.verdict).toBe('mismatch');
   });
 });
 
