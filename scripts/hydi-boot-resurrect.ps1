@@ -52,6 +52,32 @@ Log ("supabase postgres/kong: " + $(if ($dbUp) { 'reachable' } else { 'TIMEOUT a
 Log 'running pm2 resurrect'
 & pm2 resurrect 2>&1 | ForEach-Object { Log ("pm2: " + $_) }
 
+# 3b. Kong gate — heidi-web's init blocks on Supabase REST; a dead Kong
+#     leaves /heidi answering 000 for minutes (observed 2026-11-12). TCP
+#     connect is not enough — probe the REST root for a real HTTP response,
+#     and if the container is down, start it and wait (bounded).
+function Test-KongRest {
+  try {
+    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:54321/rest/v1/' -UseBasicParsing -TimeoutSec 5
+    return ($r.StatusCode -lt 500)
+  } catch {
+    # Any HTTP response (even 401/404) proves Kong+upstream are alive.
+    return ($_.Exception.Response -ne $null)
+  }
+}
+$kongDeadline = (Get-Date).AddMinutes(3)
+$kongOk = $false
+while ((Get-Date) -lt $kongDeadline) {
+  if (Test-KongRest) { $kongOk = $true; break }
+  $cs = (& docker inspect -f '{{.State.Status}}' supabase_kong_HYDI-System-v2 2>$null)
+  if ($cs -ne 'running') {
+    Log "kong container status=$cs — attempting docker start"
+    & docker start supabase_kong_HYDI-System-v2 2>&1 | ForEach-Object { Log "docker start kong: $_" }
+  }
+  Start-Sleep -Seconds 10
+}
+Log ("kong REST gate: " + $(if ($kongOk) { 'healthy' } else { 'TIMEOUT after 3m — heidi-web may stall on init' }))
+
 # 4. Persist current process list so future resurrects match reality.
 & pm2 save 2>&1 | ForEach-Object { Log ("pm2 save: " + $_) }
 
