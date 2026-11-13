@@ -1,0 +1,654 @@
+{
+  "status": "success",
+  "result": {
+    "projects": [
+      {
+        "id": 40816029,
+        "title": "Automated Account Provisioning  / Workflow using Axiom.AI and Cursor  (READY TO HIRE!)",
+        "status": "active",
+        "seo_url": "api/Automated-Account-Provisioning-Workflow",
+        "currency": {
+          "id": 3,
+          "code": "AUD",
+          "sign": "$",
+          "name": "Australian Dollar",
+          "exchange_rate": 0.678946,
+          "country": "AU",
+          "is_external": false,
+          "is_escrowcom_supported": true
+        },
+        "description": "(follow response instructions please!)\r\n\r\nProject Description:\r\n\r\nWe are looking for a skilled developer to build an automated account provisioning system. The project combines a centralised admin dashboard (built and maintained using Cursor) that triggers Axiom.ai browser bots via webhooks to handle automated sign-ups across multiple websites that do not offer public APIs.\r\nProject Architecture & Goals:\r\n\r\n1. Centralised Admin Dashboard: A lightweight web interface/database where our team can i…[trimmed]",
+        "jobs": [
+          {
+            "id": 3,
+            "name": "PHP",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "php",
+            "local": false
+          },
+          {
+            "id": 9,
+            "name": "JavaScript",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "javascript",
+            "local": false
+          },
+          {
+            "id": 106,
+            "name": "C# Programming",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "c_sharp_programming",
+            "local": false
+          },
+          {
+            "id": 116,
+            "name": "Software Architecture",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "software_architecture",
+            "local": false
+          },
+          {
+            "id": 335,
+            "name": "HTML",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "html",
+            "local": false
+          },
+          {
+            "id": 1031,
+            "name": "Web Development",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "web_development",
+            "local": false
+          },
+          {
+            "id": 1087,
+            "name": "API",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "api",
+            "local": false
+          },
+          {
+            "id": 3027,
+            "name": "Cursor",
+            "category": {
+              "id": 104,
+              "name": "Artificial Intelligence"
+            },
+            "seo_url": "Cursor",
+            "local": false
+          }
+        ],
+        "submitdate": 1794545820,
+        "preview_description": "(follow response instructions please!)\r\n\r\nProject Description:\r\n\r\nWe are looking for a skilled devel",
+        "deleted": false,
+        "nonpublic": false,
+        "hidebids": false,
+        "type": "hourly",
+        "bidperiod": 7,
+        "budget": {
+          "minimum": 8,
+          "maximum": 12
+        },
+        "hourly_project_info": {
+          "commitment": {
+            "hours": 40,
+            "interval": "week"
+          },
+          "duration_enum": "unspecified"
+        },
+        "featured": false,
+        "urgent": false,
+        "bid_stats": {
+          "bid_count": 63,
+          "bid_avg": 11.458095238095238
+        },
+        "time_submitted": 1794545820,
+        "time_updated": 1794545820,
+        "upgrades": {
+          "featured": false,
+          "sealed": false,
+          "nonpublic": false,
+          "fulltime": false,
+          "urgent": false,
+          "qualified": false,
+          "NDA": false,
+          "ip_contract": false,
+          "non_compete": false,
+          "project_management": false,
+          "pf_only": false,
+          "premium": false,
+          "enterprise": false
+        },
+        "language": "en",
+        "hireme": false,
+        "frontend_project_status": "open",
+        "location": {
+          "country": {},
+          "timezone": {}
+        },
+        "local": false,
+        "time_free_bids_expire": 1794542197,
+        "pool_ids": [
+          "freelancer"
+        ],
+        "enterprise_ids": [],
+        "is_escrow_project": false,
+        "is_seller_kyc_required": false,
+        "is_buyer_kyc_required": false,
+        "enterprises": [],
+        "group_ids": []
+      },
+      {
+        "id": 40815999,
+        "title": "AI-Powered Web and Mobile Platform Development",
+        "status": "active",
+        "seo_url": "react-native/Powered-Web-Mobile-Platform-Development",
+        "currency": {
+          "id": 9,
+          "code": "CAD",
+          "sign": "$",
+          "name": "Canadian Dollar",
+          "exchange_rate": 0.7013,
+          "country": "CA",
+          "is_external": false,
+          "is_escrowcom_supported": false
+        },
+        "description": "We are seeking an experienced professional or team to handle the end to end development of an innovative platform, comprising both web and mobile applications with a strong artificial intelligence component. The system must be capable of interpreting natural language requests, querying and integrating data from external sources via APIs, applying server-side business rules, and presenting relevant options to the user in an intuitive manner.\n\nThe project scope includes:\n- Development of native ap…[trimmed]",
+        "jobs": [
+          {
+            "id": 7,
+            "name": "Java",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "java",
+            "local": false
+          },
+          {
+            "id": 287,
+            "name": "NoSQL Couch & Mongo",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "nosql_couch_mongo",
+            "local": false
+          },
+          {
+            "id": 500,
+            "name": "Node.js",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "nodejs",
+            "local": false
+          },
+          {
+            "id": 607,
+            "name": "PostgreSQL",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "postgresql",
+            "local": false
+          },
+          {
+            "id": 704,
+            "name": "AngularJS",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "angular_js",
+            "local": false
+          },
+          {
+            "id": 1314,
+            "name": "React Native",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "react_native",
+            "local": false
+          },
+          {
+            "id": 3375,
+            "name": "AI Integration",
+            "category": {
+              "id": 104,
+              "name": "Artificial Intelligence"
+            },
+            "seo_url": "ai_integration",
+            "local": false
+          },
+          {
+            "id": 3384,
+            "name": "AI App Development",
+            "category": {
+              "id": 104,
+              "name": "Artificial Intelligence"
+            },
+            "seo_url": "ai_app_development",
+            "local": false
+          }
+        ],
+        "submitdate": 1794543874,
+        "preview_description": "We are seeking an experienced professional or team to handle the end to end development of an innova",
+        "deleted": false,
+        "nonpublic": false,
+        "hidebids": false,
+        "type": "hourly",
+        "bidperiod": 7,
+        "budget": {
+          "minimum": 25,
+          "maximum": 50
+        },
+        "hourly_project_info": {
+          "commitment": {
+            "hours": 40,
+            "interval": "week"
+          },
+          "duration_enum": "unspecified"
+        },
+        "featured": false,
+        "urgent": false,
+        "bid_stats": {
+          "bid_count": 251,
+          "bid_avg": 33.348884462151396
+        },
+        "time_submitted": 1794543874,
+        "time_updated": 1794543874,
+        "upgrades": {
+          "featured": false,
+          "sealed": false,
+          "nonpublic": false,
+          "fulltime": false,
+          "urgent": false,
+          "qualified": false,
+          "NDA": false,
+          "ip_contract": false,
+          "non_compete": false,
+          "project_management": false,
+          "pf_only": false,
+          "premium": false,
+          "enterprise": false
+        },
+        "language": "en",
+        "hireme": false,
+        "frontend_project_status": "open",
+        "location": {
+          "country": {},
+          "timezone": {}
+        },
+        "local": false,
+        "time_free_bids_expire": 1794540249,
+        "pool_ids": [
+          "freelancer"
+        ],
+        "enterprise_ids": [],
+        "is_escrow_project": false,
+        "is_seller_kyc_required": false,
+        "is_buyer_kyc_required": false,
+        "enterprises": [],
+        "group_ids": []
+      },
+      {
+        "id": 40815534,
+        "title": "Vijquant Website Build",
+        "status": "active",
+        "seo_url": "css/Vijquant-Website-Build",
+        "currency": {
+          "id": 11,
+          "code": "INR",
+          "sign": "₹",
+          "name": "Indian Rupee",
+          "exchange_rate": 0.010621,
+          "country": "IN",
+          "is_external": false,
+          "is_escrowcom_supported": false
+        },
+        "description": "I need a clean, fast-loading site built from scratch for vijquant.pages.dev. The goal is to publish a professional presence with the following public sections: Home, About, Services and Contact.  \n\nI’m open to your preferred stack—whether you use plain HTML/CSS/JavaScript, Hugo, Jekyll, Next.js or another lightweight static approach—so long as the final site deploys smoothly to the current pages.dev hosting and scores well on mobile and desktop Lighthouse tests.  \n\nKey expectations  \n• Bespoke d…[trimmed]",
+        "jobs": [
+          {
+            "id": 17,
+            "name": "Website Design",
+            "category": {
+              "id": 3,
+              "name": "Design, Media & Architecture"
+            },
+            "seo_url": "website_design",
+            "local": false
+          },
+          {
+            "id": 20,
+            "name": "Graphic Design",
+            "category": {
+              "id": 3,
+              "name": "Design, Media & Architecture"
+            },
+            "seo_url": "graphic_design",
+            "local": false
+          },
+          {
+            "id": 77,
+            "name": "CSS",
+            "category": {
+              "id": 3,
+              "name": "Design, Media & Architecture"
+            },
+            "seo_url": "css",
+            "local": false
+          },
+          {
+            "id": 335,
+            "name": "HTML",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "html",
+            "local": false
+          },
+          {
+            "id": 564,
+            "name": "Web Hosting",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "web_hosting",
+            "local": false
+          },
+          {
+            "id": 1031,
+            "name": "Web Development",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "web_development",
+            "local": false
+          },
+          {
+            "id": 2376,
+            "name": "Next.js",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "nextjs",
+            "local": false
+          },
+          {
+            "id": 2388,
+            "name": "Hugo",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "hugo",
+            "local": false
+          }
+        ],
+        "submitdate": 1794512655,
+        "preview_description": "I need a clean, fast-loading site built from scratch for vijquant.pages.dev. The goal is to publish ",
+        "deleted": false,
+        "nonpublic": false,
+        "hidebids": false,
+        "type": "hourly",
+        "bidperiod": 7,
+        "budget": {
+          "minimum": 750,
+          "maximum": 1250
+        },
+        "hourly_project_info": {
+          "commitment": {
+            "hours": 40,
+            "interval": "week"
+          },
+          "duration_enum": "unspecified"
+        },
+        "featured": false,
+        "urgent": false,
+        "bid_stats": {
+          "bid_count": 107,
+          "bid_avg": 964.4958878504673
+        },
+        "time_submitted": 1794512655,
+        "time_updated": 1794512655,
+        "upgrades": {
+          "featured": false,
+          "sealed": false,
+          "nonpublic": false,
+          "fulltime": false,
+          "urgent": false,
+          "qualified": false,
+          "NDA": false,
+          "ip_contract": false,
+          "non_compete": false,
+          "project_management": false,
+          "pf_only": false,
+          "premium": false,
+          "enterprise": false
+        },
+        "language": "en",
+        "hireme": false,
+        "frontend_project_status": "open",
+        "location": {
+          "country": {},
+          "timezone": {}
+        },
+        "local": false,
+        "time_free_bids_expire": 1794508226,
+        "pool_ids": [
+          "freelancer"
+        ],
+        "enterprise_ids": [],
+        "is_escrow_project": false,
+        "is_seller_kyc_required": false,
+        "is_buyer_kyc_required": false,
+        "enterprises": [],
+        "group_ids": []
+      },
+      {
+        "id": 40815398,
+        "title": "Comprehensive On-Off Page Visbility",
+        "status": "active",
+        "seo_url": "google-analytics/Comprehensive-Off-Page-Visbility",
+        "currency": {
+          "id": 11,
+          "code": "INR",
+          "sign": "₹",
+          "name": "Indian Rupee",
+          "exchange_rate": 0.010621,
+          "country": "IN",
+          "is_external": false,
+          "is_escrowcom_supported": false
+        },
+        "description": "**SEO, AEO & GEO Specialist — Hands-On Next.js Implementation**\n\nTeachrity provides AI-powered practice simulations for universities, colleges and corporate teams. Applications include teacher training, placement preparation, business practice, legal education, hospitality, sales and workplace conversations.\n\nWe are hiring an experienced freelancer or specialist team to improve Teachrity’s visibility in traditional search and AI-generated answers.\n\n**This is an international implementation assig…[trimmed]",
+        "jobs": [
+          {
+            "id": 25,
+            "name": "Internet Marketing",
+            "category": {
+              "id": 6,
+              "name": "Sales & Marketing"
+            },
+            "seo_url": "internet_marketing",
+            "local": false
+          },
+          {
+            "id": 38,
+            "name": "SEO",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "seo",
+            "local": false
+          },
+          {
+            "id": 40,
+            "name": "Link Building",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "link_building",
+            "local": false
+          },
+          {
+            "id": 298,
+            "name": "Google Analytics",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "google_analytics",
+            "local": false
+          },
+          {
+            "id": 663,
+            "name": "Social Media Marketing",
+            "category": {
+              "id": 6,
+              "name": "Sales & Marketing"
+            },
+            "seo_url": "social_media_marketing",
+            "local": false
+          },
+          {
+            "id": 736,
+            "name": "Conversion Rate Optimization",
+            "category": {
+              "id": 6,
+              "name": "Sales & Marketing"
+            },
+            "seo_url": "conversion_rate_optimization",
+            "local": false
+          },
+          {
+            "id": 1023,
+            "name": "Digital Marketing",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "digital_marketing",
+            "local": false
+          },
+          {
+            "id": 1033,
+            "name": "Content Marketing",
+            "category": {
+              "id": 6,
+              "name": "Sales & Marketing"
+            },
+            "seo_url": "content_marketing",
+            "local": false
+          },
+          {
+            "id": 1085,
+            "name": "Keyword Research",
+            "category": {
+              "id": 6,
+              "name": "Sales & Marketing"
+            },
+            "seo_url": "keyword_research",
+            "local": false
+          },
+          {
+            "id": 2376,
+            "name": "Next.js",
+            "category": {
+              "id": 1,
+              "name": "Websites, IT & Software"
+            },
+            "seo_url": "nextjs",
+            "local": false
+          }
+        ],
+        "submitdate": 1794504872,
+        "preview_description": "**SEO, AEO & GEO Specialist — Hands-On Next.js Implementation**\n\nTeachrity provides AI-powered pract",
+        "deleted": false,
+        "nonpublic": false,
+        "hidebids": false,
+        "type": "fixed",
+        "bidperiod": 7,
+        "budget": {
+          "minimum": 12500,
+          "maximum": 37500
+        },
+        "featured": false,
+        "urgent": false,
+        "bid_stats": {
+          "bid_count": 67,
+          "bid_avg": 16503.223880597016
+        },
+        "time_submitted": 1794504872,
+        "time_updated": 1794504872,
+        "upgrades": {
+          "featured": false,
+          "sealed": false,
+          "nonpublic": false,
+          "fulltime": false,
+          "urgent": false,
+          "qualified": false,
+          "NDA": false,
+          "ip_contract": false,
+          "non_compete": false,
+          "project_management": false,
+          "pf_only": false,
+          "premium": false,
+          "enterprise": false
+        },
+        "language": "en",
+        "hireme": false,
+        "frontend_project_status": "open",
+        "location": {
+          "country": {},
+          "timezone": {}
+        },
+        "local": false,
+        "time_free_bids_expire": 1794501272,
+        "pool_ids": [
+          "freelancer"
+        ],
+        "enterprise_ids": [],
+        "is_escrow_project": false,
+        "is_seller_kyc_required": false,
+        "is_buyer_kyc_required": false,
+        "enterprises": [],
+        "group_ids": []
+      }
+    ],
+    "total_count": 33
+  },
+  "request_id": "9b96f82928321da4f226fdcee53ac95f"
+}

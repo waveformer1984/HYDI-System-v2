@@ -1,0 +1,118 @@
+{
+  "exhaustive": {
+    "nbHits": true,
+    "typo": true
+  },
+  "exhaustiveNbHits": true,
+  "exhaustiveTypo": true,
+  "hits": [
+    {
+      "_tags": [
+        "comment",
+        "author_ivyirwin",
+        "story_45093191"
+      ],
+      "author": "ivyirwin",
+      "comment_text": "SEEKING FREELANCER | Remote (US)<p>Intermediate Drupal PHP Developer<p>Looking for a Drupal Developer to help on a number of university web projects. Includes custom builds and maintenance. Must know and be comfortable with Drupal internals – i.e. not afraid to write your own hook, preprocessor, or inspect config yamls when needed.<p>We&#x27;re a small team with 15+ years of university site builds and overloaded for the next 3 to 4 months. Our team is in multiple timezones (including EU) but can only support US contractors. If interested, please send us an email with a subject of &quot;HN Drupal Contractor&quot; to hello+hn@shadyhillstudios.com",
+      "created_at": "2025-09-02T12:46:41Z",
+      "created_at_i": 1756817201,
+      "objectID": "45102408",
+      "parent_id": 45093191,
+      "story_id": 45093191,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (September 2025)",
+      "updated_at": "2026-03-05T22:36:47Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_waldrews",
+        "story_45093191"
+      ],
+      "author": "waldrews",
+      "comment_text": "SEEKING FREELANCER | Seattle, Remote fine, any timezone<p>Senior Role:<p>C# and Python: If you have XAF experience (and preferably already have a DevExpress license?) AND some LLM API (Semantic Kernel or direct) experience, talk to me about some mainstream LOB work.  WinForms and Blazor, document processing&#x2F;OCR workflow, light deployment&#x2F;devops tasks, integrating Python and C# based workflows.<p>---<p>Junior Role:<p>Front-end JS (including ThreeJS&#x2F;Babylon) and light Python backend work, LLM API&#x27;s.\nSet up cloud services, create&#x2F;maintain a web&#x2F;social media presence, some marketing&#x2F;&#x27;growth hacking&#x27; tasks, writing docs&#x2F;consumer text.\nProbably a good fit for someone who&#x27;s working on their own micro-SaaS.<p>---<p>Please include an hourly&#x2F;weekly rate, and a one-sentence mention of what your current&#x2F;preferred AI coding tool workflow is.  sep2025-contractor@waldrews.anonaddy.com",
+      "created_at": "2025-09-01T19:41:28Z",
+      "created_at_i": 1756755688,
+      "objectID": "45095929",
+      "parent_id": 45093191,
+      "story_id": 45093191,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (September 2025)",
+      "updated_at": "2026-03-05T22:36:13Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_Gualdrapo",
+        "story_45093191"
+      ],
+      "author": "Gualdrapo",
+      "comment_text": "SEEKING WORK | Remote<p><pre><code>    Location: Bogotá, Colombia\n    Remote: Yes\n    Willing to relocate: No\n    Technologies: HTML, CSS, JavaScript, SVG, TeX&#x2F;ConTeXt, PHP, Jekyll\n    Portfolio: https:&#x2F;&#x2F;miler.codeberg.page&#x2F;\n    Résumé-CV: https:&#x2F;&#x2F;codeberg.org&#x2F;miler&#x2F;curriculum-vitae&#x2F;raw&#x2F;branch&#x2F;main&#x2F;curriculum-en.pdf\n    Email: Please see Portfolio or CV&#x2F;Résumé\n    GitHub: https:&#x2F;&#x2F;github.com&#x2F;acidrums4&#x2F;\n</code></pre>\nProfessional graphic designer with experience in both frontend and backend (PHP; Wordpress, Framer, some Joomla and some Typo3), iconography, editorial design&#x2F;typesetting with ConTeXt and general graphic design. Please feel free to check my portfolio for some examples of my work.",
+      "created_at": "2025-09-15T00:48:25Z",
+      "created_at_i": 1757897305,
+      "objectID": "45244896",
+      "parent_id": 45093191,
+      "story_id": 45093191,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (September 2025)",
+      "updated_at": "2026-03-05T22:41:15Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_adelmotsjr",
+        "story_45093191"
+      ],
+      "author": "adelmotsjr",
+      "comment_text": "SEEKING WORK<p>Location: Curitiba, Brazil<p>Remote: yes<p>Willing to relocate: no<p>Technologies: TypeScript, JavaScript, Python, Redis, MongoDB, PostgreSQL, MariaDB, Angular, ExpressJS, AWS, Rust, Axum, HTMX and TailwindCSS.<p>Résumé&#x2F;CV: <a href=\"https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;adelmo-junior-2a576b156&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;adelmo-junior-2a576b156&#x2F;</a> | PDF on request<p>Email: development@silvajunior.dev<p>I&#x27;m a software engineer working to help people build products and deliver value to their customers.<p>I can help build: - web applications using modern principles with the latest technologies (Angular, React, TypeScript, Vue, TailwindCSS, HTMX); - services that monitor equipments using telecommunications protocols (SNMP, NETCONF, TR-069); - serverless programs on any business domain to help reduce costs and increase availability (AWS Lambda); - microservices that expose REST APIs for consumption using battle-tested frameworks (SpringBoot, Quarkus); - data processing applications and services that consumes streams of data using common parsing techniques (Rust with Nom); - small CLI apps to help automate common tasks (Rust); - integration of different services using distributed log (Kafka, AWS SNS), WebSocket (with NodeJS) or with simple HTTP requests; - proper documentation for common services using OpenAPI specification and&#x2F;or frameworks such as Diátaxis (Swagger)",
+      "created_at": "2025-09-14T01:32:37Z",
+      "created_at_i": 1757813557,
+      "objectID": "45236680",
+      "parent_id": 45093191,
+      "story_id": 45093191,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (September 2025)",
+      "updated_at": "2026-03-05T22:40:45Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_0xhald",
+        "story_45093191"
+      ],
+      "author": "0xhald",
+      "comment_text": "Location: Mexico\nRemote: Yes\nTechnologies: C, Python, JavaScript, PHP, MySQL, PostgreSQL, Vue, React, Slim Framework, Laravel.\nRésumé&#x2F;CV: <a href=\"https:&#x2F;&#x2F;drive.proton.me&#x2F;urls&#x2F;E7893XFZ8M#WnB5pPoIJKfq\" rel=\"nofollow\">https:&#x2F;&#x2F;drive.proton.me&#x2F;urls&#x2F;E7893XFZ8M#WnB5pPoIJKfq</a>\nEmail: hector[&#x2F;at&#x2F;]halozano.com\nI am a software developer, mostly fullstack but I have delved into other areas of development. My latest role was in a fintech company here in Mexico where I was in charge of the implementation of AML&#x2F;CFT policies in the company, I also was part of the support team where I attended tickets of our customers. I am passionate about machine learning and anything where statistics and programming mix up. Adaptability and continuous learning are my key strengths, honed through my university studies, which have equipped me to excel as an agile learner.",
+      "created_at": "2025-09-14T01:08:15Z",
+      "created_at_i": 1757812095,
+      "objectID": "45236607",
+      "parent_id": 45093191,
+      "story_id": 45093191,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (September 2025)",
+      "updated_at": "2026-03-05T22:40:45Z"
+    }
+  ],
+  "hitsPerPage": 500,
+  "nbHits": 5,
+  "nbPages": 1,
+  "page": 0,
+  "params": "tags=comment%2Cstory_45093191&hitsPerPage=500&advancedSyntax=true&analyticsTags=backend",
+  "processingTimeMS": 23,
+  "processingTimingsMS": {
+    "_request": {
+      "roundTrip": 17
+    },
+    "afterFetch": {
+      "format": {
+        "highlighting": 8,
+        "total": 9
+      },
+      "merge": {
+        "mergeLoop": {
+          "prepareNextHit": 19,
+          "total": 20
+        },
+        "total": 22
+      },
+      "total": 22
+    },
+    "total": 23
+  },
+  "query": "",
+  "serverTimeMS": 33
+}
