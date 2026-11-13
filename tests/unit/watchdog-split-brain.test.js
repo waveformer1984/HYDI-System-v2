@@ -23,6 +23,7 @@ function fakeExec(command) {
     return JSON.stringify([
       { name: 'heidi-web-standalone', pid: PM2_ONLINE_PID, pm2_env: { status: 'online' } },
       { name: 'heidi-web-waiting', pid: 0, pm2_env: { status: 'waiting restart' } },
+      { name: 'heidi-core', pid: 0, pm2_env: { status: 'waiting restart' } },
     ]);
   }
   if (command === 'netstat -ano') {
@@ -46,7 +47,7 @@ describe('watchdog-split-brain', () => {
   });
 
   afterEach(() => {
-    for (const f of ['split-brain-heidi-web.json', 'split-brain-heidi-mobile-chat.json']) {
+    for (const f of ['split-brain-heidi-web.json', 'split-brain-heidi-mobile-chat.json', 'split-brain-heidi-core.json']) {
       try { fs.rmSync(path.join(reportDir, f), { force: true }); } catch {}
     }
   });
@@ -73,6 +74,19 @@ describe('watchdog-split-brain', () => {
     const results = [{ name: 'heidi-web', url: 'http://127.0.0.1:3000/api/health', ok: false, state: 'UNAVAILABLE' }];
     sb.annotateSplitBrain(results);
     expect(results[0].state).toBe('UNAVAILABLE');
+  });
+
+  test('endpoint ok + PM2 app not online + empty listener table → SPLIT-BRAIN', () => {
+    // :3459 has no netstat rows in the fake — simulates sandboxed/permission-
+    // limited hosts where listenerPids() returns empty. Status alone must
+    // still flag split-brain (this was the live blind spot on Frank).
+    const results = [{ name: 'heidi-core', url: 'http://127.0.0.1:3459/health', ok: true, state: 'HEALTHY' }];
+    sb.annotateSplitBrain(results);
+    expect(results[0].ok).toBe(false);
+    expect(results[0].state).toBe('SPLIT-BRAIN');
+    expect(results[0].noAutoRecover).toBe(true);
+    expect(results[0].orphanPids).toEqual([]);
+    expect(results[0].reason).toContain('listener table unavailable');
   });
 
   test('report file records pm2 + orphan pids', () => {
