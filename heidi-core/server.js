@@ -307,6 +307,10 @@ class HeidiCore {
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+        const cid = (req.body && req.body.request_id) || `ts-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const mark = {};
+        const phase = (name) => { mark[name] = Date.now() - startTime; };
+        const phases = (extra = {}) => ({ correlation_id: cid, route: extra.route || 'model', phases: { ...mark, ...extra.phases }, measured: Object.keys(mark) });
 
         // Persistent conversation + memory (see memory/memory-runtime.js)
         const owner = this.memoryRuntime.resolveOwner(req);

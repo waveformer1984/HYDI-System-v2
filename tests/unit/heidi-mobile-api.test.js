@@ -493,7 +493,7 @@ describe('POST /api/heidi-mobile/chat', () => {
       await jest.advanceTimersByTimeAsync(95 * 1000);
       await p;
       expect(res.statusCode).toBe(504);
-      expect(res.body.error).toBe('timeout');
+      expect(res.body.error).toBe('busy');
     } finally {
       jest.useRealTimers();
     }
