@@ -123,6 +123,14 @@ describe('job scout — source parsing', () => {
   it('stripHtml decodes entities and drops tags', () => {
     expect(stripHtml('<p>a &amp; b</p><br>c&#x27;s')).toBe("a & b\nc's");
   });
+
+  it('stripHtml never double-decodes (&amp;lt; stays the literal text &lt;)', () => {
+    expect(stripHtml('x &amp;lt;script&amp;gt; y')).toBe('x &lt;script&gt; y');
+  });
+
+  it('stripHtml collapses blank lines and runs of spaces', () => {
+    expect(stripHtml('a   b\n\n \n\tc')).toBe('a b\nc');
+  });
 });
 
 describe('job scout — scoring', () => {
@@ -226,7 +234,7 @@ describe('job scout — run', () => {
   it('only issues GET requests to public endpoints', async () => {
     const { env } = tmpEnv();
     const seen = [];
-    const fetchImpl = async (url, init) => { seen.push({ url, method: (init && init.method) || 'GET' }); return fakeFetch(ALL)(url, init); };
+    const fetchImpl = async (url, init) => { seen.push({ url, method: (init && init.method) || 'GET' }); return fakeFetch(ALL)(url); };
     await runScout({ config: CONFIG, env, now: NOW, fetchImpl, sleep: noSleep });
     expect(seen.every((c) => c.method === 'GET')).toBe(true);
     expect(seen.every((c) => /^https:\/\/(www\.freelancer\.com|remotive\.com|remoteok\.com|hn\.algolia\.com)\//.test(c.url))).toBe(true);
@@ -263,6 +271,8 @@ describe('job scout — Heidi chat command', () => {
     expect(isJobsQuery('jobs')).toBe(true);
     expect(isJobsQuery('Any jobs?')).toBe(true);
     expect(isJobsQuery('what jobs does the scheduler run')).toBe(false);
+    expect(isJobsQuery('jobs!!!')).toBe(true);
+    expect(isJobsQuery(`jobs${'!'.repeat(50000)}x`)).toBe(false); // long input is rejected in O(1)
   });
 
   it('explains when no scan has run yet', () => {

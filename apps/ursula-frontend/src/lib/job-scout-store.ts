@@ -65,13 +65,21 @@ export function readScout(dir = scoutDir()) {
   };
 }
 
+const MAX_DECISIONS = 5000;
+
 export function setDecision(id: string, status: Decision | 'clear', dir = scoutDir(), now = new Date()) {
   if (!isValidLeadId(id)) throw new Error('invalid lead id');
-  if (status !== 'clear' && !(DECISIONS as readonly string[]).includes(status)) throw new Error('invalid status');
+  // Only values from our own allowlist are ever written — never the raw
+  // request string. The file path is fixed; the id is regex-checked above.
+  const allowed = status === 'clear' ? 'clear' : DECISIONS.find((d) => d === status);
+  if (!allowed) throw new Error('invalid status');
   const file = path.join(dir, 'decisions.json');
   const decisions = readDecisions(dir);
-  if (status === 'clear') delete decisions[id];
-  else decisions[id] = { status, at: now.toISOString() };
+  if (allowed === 'clear') delete decisions[id];
+  else {
+    if (!(id in decisions) && Object.keys(decisions).length >= MAX_DECISIONS) throw new Error('too many decisions recorded');
+    decisions[id] = { status: allowed, at: now.toISOString() };
+  }
   fs.mkdirSync(dir, { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(decisions, null, 2));
