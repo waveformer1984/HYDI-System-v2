@@ -113,6 +113,36 @@ node scripts/hydi-verify.js
 
 **Paste back:** entire stdout table.
 
+## Job scout go-live (Frank) — run in this order
+
+Run **after** the job-scout PRs (#556–#560) are merged. Each step says what to paste back.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+
+# 1) Pull the merged code
+git pull
+# PASTE BACK: output of  git log -1 --oneline
+
+# 2) Apply the job_lead notifications migration — LOCAL Supabase only, never --linked/remote
+npx supabase migration up
+# PASTE BACK: the last ~15 lines of output (should list 20261115000000_notifications_job_lead applied)
+
+# 3) Restart the services that read the new code/config
+pm2 restart hydi-schedulers heidi-web-standalone ursula-local --update-env
+# PASTE BACK: pm2 list rows for hydi-schedulers, heidi-web-standalone, ursula-local (status online, restart count)
+
+# 4) First real scan (writes .runtime/job-scout/leads.json + status.json)
+node scripts/job-scout.js --once
+# PASTE BACK: the summary JSON the script prints (sources ok/failed, kept, newLeads)
+
+# 5) Runtime audit
+npm run runtime:audit
+# PASTE BACK: the audit table
+```
+
+Optional afterwards: set `JOB_SCOUT_LLM_DRAFTS=true` in `.env.local` + `pm2 restart hydi-schedulers --update-env` for local-model drafts (falls back to templates on any error). Leave `HEIDI_ALLOW_EXEC=false`.
+
 ## Batch (Frank)
 
 ```powershell
