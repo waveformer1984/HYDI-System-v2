@@ -276,6 +276,7 @@ async function testCommit(ctx, sha) {
     }
     return results;
   } finally {
+    cleanJestCache();
     try {
       git(['worktree', 'remove', '--force', workdir], ctx.repoRoot);
     } catch (_) {
@@ -291,10 +292,47 @@ function diskGate(check = require('../lib/storage/disk')) {
   return check.preflight({ minFreeGb, volume: check.defaultVolume(path.resolve(__dirname, '..')) });
 }
 
+/**
+ * Disk-guard notice: when a run is refused for low space, leave a small JSON
+ * record the morning brief / decision inbox can surface instead of the job
+ * dying later with ENOSPC. Written to the canonical repo's .runtime so the
+ * observer and brief see it regardless of which worktree ran the check.
+ */
+function noteDiskBlock(repoRoot, space) {
+  try {
+    const dir = path.join(repoRoot, '.runtime', 'local-ci');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'disk-blocked.json'), JSON.stringify({
+      at: new Date().toISOString(),
+      host: os.hostname(),
+      freeGb: space.freeGb ?? null,
+      reason: space.reason,
+      floorGb: require('../lib/storage/disk').gateFloors(process.env).localCiGb,
+    }, null, 2));
+  } catch (_) { /* the notice is best-effort; the skip itself already happened */ }
+}
+
+/** Jest's transform/haste cache lives under the OS temp dir; drop it after
+ * every run so repeated local-ci passes can't accumulate GBs of cache. */
+function cleanJestCache() {
+  try {
+    for (const name of fs.readdirSync(os.tmpdir())) {
+      if (!/^jest/i.test(name)) continue;
+      const p = path.join(os.tmpdir(), name);
+      try {
+        const st = fs.statSync(p);
+        if (st.isDirectory()) fs.rmSync(p, { recursive: true, force: true });
+        else if (st.isFile()) fs.rmSync(p, { force: true });
+      } catch (_) { /* best effort */ }
+    }
+  } catch (_) { /* temp unreadable — nothing to clean */ }
+}
+
 async function watchOnce(ctx, gate = diskGate) {
   const space = gate();
   if (!space.ok) {
     console.log(`[local-ci] skipping this pass: ${space.reason} (docs/STORAGE_PROGRAM.md)`);
+    noteDiskBlock(ctx.repoRoot, space);
     return;
   }
   if (ctx.includeMain) {
@@ -364,7 +402,10 @@ async function main() {
   }
 
   const space = diskGate();
-  if (!space.ok) throw new Error(`not enough disk to run: ${space.reason}`);
+  if (!space.ok) {
+    noteDiskBlock(ctx.repoRoot, space);
+    throw new Error(`not enough disk to run: ${space.reason}`);
+  }
   const results = await testCommit(ctx, sha);
   const failed = results.filter((r) => !r.ok);
   console.log(failed.length ? `[local-ci] ${failed.length} check(s) failed` : '[local-ci] all checks passed');
@@ -382,4 +423,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CHECKS, REPO, MAIN_BRANCH, diskGate, watchOnce, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };
+module.exports = { CHECKS, REPO, MAIN_BRANCH, diskGate, noteDiskBlock, cleanJestCache, watchOnce, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };

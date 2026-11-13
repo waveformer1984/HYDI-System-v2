@@ -36,7 +36,15 @@ class HeidiMemory {
     this.initialized = false;
   }
 
-  async initialize() {
+  initialize() {
+    // Memoize: OpsStore.ensure() can trigger init from the HeidiCore
+    // constructor while callers also await initialize() explicitly —
+    // concurrent opens of the same SQLite file must share one promise.
+    if (!this.initPromise) this.initPromise = this._initialize();
+    return this.initPromise;
+  }
+
+  async _initialize() {
     if (this.initialized) return;
     
     // Fallback to in-memory if sqlite3 not available
@@ -77,10 +85,11 @@ class HeidiMemory {
           reject(err);
         } else {
           console.log('[HEIDI Memory] Connected to SQLite');
+          this._inCreateTables = true;
           this.createTables().then(() => {
             this.initialized = true;
             resolve();
-          }).catch(reject);
+          }).catch(reject).finally(() => { this._inCreateTables = false; });
         }
       });
     });
@@ -205,7 +214,21 @@ class HeidiMemory {
     await this.run(`UPDATE missions SET status = 'running' WHERE status = 'active'`);
   }
 
-  run(sql, params = []) {
+  /**
+   * Lazy init: raw SQL entry points may be reached before initialize()
+   * (e.g. OpsStore.ensure() runs in the HeidiCore constructor). Opening the
+   * database on first use keeps the store usable without reordering boot.
+   */
+  async ensureReady() {
+    // _inCreateTables: createTables() itself calls run()/all(); awaiting
+    // initialize() there would deadlock on its own initPromise.
+    if (this.initialized || this._inCreateTables) return;
+    await this.initialize();
+  }
+
+  async run(sql, params = []) {
+    await this.ensureReady();
+    if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, function(err) {
         if (err) reject(err);
@@ -214,7 +237,9 @@ class HeidiMemory {
     });
   }
 
-  get(sql, params = []) {
+  async get(sql, params = []) {
+    await this.ensureReady();
+    if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
         if (err) reject(err);
@@ -223,7 +248,9 @@ class HeidiMemory {
     });
   }
 
-  all(sql, params = []) {
+  async all(sql, params = []) {
+    await this.ensureReady();
+    if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
         if (err) reject(err);

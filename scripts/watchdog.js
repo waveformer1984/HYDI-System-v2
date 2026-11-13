@@ -30,6 +30,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // SelfHealthMonitor — HEIDI's own operational health (memory growth,
 // stuck recoveries, stale observation cycles, persistence failures).
@@ -360,7 +361,7 @@ async function checkInfrastructure() {
   if (DOCKER_CMD) {
     try {
       dbDockerStatus = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
-        encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+        encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
       }).trim();
     } catch {
       dbDockerStatus = 'docker inspect failed';
@@ -407,7 +408,7 @@ async function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+          encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
         });
         restDockerStatus = out.trim();
         restDockerOk = restDockerStatus === 'running';
@@ -479,7 +480,7 @@ async function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_kong_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+          encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
         });
         kongDockerStatus = out.trim();
         break;
@@ -679,9 +680,50 @@ async function sendHeartbeats() {
   }
 }
 
+// PM2 defect guard: an empty-args `ping` RPC crashes the PM2 God daemon's
+// domain handler, which spawns a detached `pm2 update` that hangs forever
+// (docs/operations/PM2_OBSERVABILITY_AGENT_H.md). 119 accumulated on 2026-11-12.
+// Reap any `pm2 update` client older than 10 minutes — a real update finishes
+// in seconds, so anything this old is a corpse. Never touches the daemon.
+const PM2_UPDATE_MIN_AGE_MIN = 10;
+function reapHungPm2Update() {
+  if (process.platform !== 'win32') return { killed: 0, found: 0 };
+  try {
+    const ps = [
+      `$cut=(Get-Date).AddMinutes(-${PM2_UPDATE_MIN_AGE_MIN})`,
+      `$m=@(Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'pm2 update' -and $_.CreationDate -lt $cut })`,
+      `$k=0; foreach($p in $m){ try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $k++ } catch {} }`,
+      `Write-Output "killed=$k found=$($m.Count)"`,
+    ].join('; ');
+    const out = execSync(`powershell -NoProfile -Command "${ps.replace(/"/g, '\\"')}"`, {
+      encoding: 'utf8', timeout: 30000, stdio: 'pipe', windowsHide: true,
+    }).trim();
+    const m = out.match(/killed=(\d+) found=(\d+)/);
+    const res = m ? { killed: Number(m[1]), found: Number(m[2]) } : { killed: 0, found: 0 };
+    if (res.killed > 0) log(`PM2-UPDATE-REAP killed ${res.killed} hung 'pm2 update' process(es) (found ${res.found})`);
+    return res;
+  } catch (e) {
+    log(`PM2-UPDATE-REAP check failed (non-fatal): ${e.message}`);
+    return { killed: 0, found: 0 };
+  }
+}
+
 async function runCheck() {
+  reapHungPm2Update();
   // Check boot.config.json endpoints
   const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
+
+  // SPLIT-BRAIN: a responding port is not proof PM2 owns it. An orphaned
+  // listener (e.g. next start whose PM2 parent died) answers every probe
+  // while PM2's managed instance sits in "waiting restart" — the
+  // 2026-11-11 heidi-web false-green. annotateSplitBrain flips those
+  // results to unhealthy with the orphan PID and files a mission-inbox
+  // proposal; it never kills anything.
+  try {
+    require('./watchdog-split-brain').annotateSplitBrain(endpointResults);
+  } catch (e) {
+    log(`SPLIT-BRAIN check error (non-fatal): ${e.message}`);
+  }
 
   // Phase 5: Check infrastructure (Docker containers, Ollama)
   const infraResults = (await checkInfrastructure()).filter((r) => !r._checkOllama);
@@ -749,6 +791,15 @@ async function runCheck() {
           continue;
         }
 
+        // SPLIT-BRAIN: the port answers but not via PM2's instance. A PM2
+        // restart cannot evict the orphan (it just EADDRINUSE-crash-loops
+        // again), so recovery is not authorized — the orphan kill is
+        // proposed through the mission inbox for a human to approve.
+        if (f.splitBrain) {
+          log(`OBSERVE  ${f.name} SPLIT-BRAIN — orphan pid(s) ${(f.orphanPids || []).join(',')} hold the port; recovery NOT authorized, kill proposed via mission inbox`);
+          continue;
+        }
+
         // Phase II: an endpoint verdict of UNKNOWN means we failed to obtain
         // evidence (unparseable body, undeclared contract, auth rejection) --
         // not that the target is broken. Recovering on that would be acting on
@@ -780,6 +831,17 @@ async function runCheck() {
 
         if (hystState === 'FAILURE_SUSPECTED') {
           log(`OBSERVE  ${f.name} failure suspected but not yet confirmed (hysteresis=FAILURE_SUSPECTED) — waiting for consecutive failure.`);
+          continue;
+        }
+
+        // In-flight recovery mutex: if a previous hydi-recover for this
+        // component is still running (live PID in .runtime/recover-*.lock),
+        // that IS the outcome for this cycle — do not delegate again.
+        const mutex = require('../lib/operational/recovery-mutex');
+        if (mutex.inProgress(root, f.name)) {
+          log(`IN-FLIGHT ${f.name} — recovery already running (lock held), treating as outcome, not re-delegating`);
+          observationHysteresis.markRecovered(f.name, true);
+          recoveryThrottle.recordOutcome(f.name, true, 'recovery already in progress');
           continue;
         }
 
@@ -879,7 +941,7 @@ async function main() {
 // added to scripts/boot-agent.js earlier in this project's history for the
 // same reason: requiring this file unconditionally ran real HTTP checks,
 // real Docker calls, and real log writes.
-module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama, sendHeartbeats };
+module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama, sendHeartbeats, reapHungPm2Update };
 
 if (require.main === module) {
   main().catch((e) => {

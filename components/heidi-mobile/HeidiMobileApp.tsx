@@ -10,6 +10,7 @@ import { Dot, describeState } from './ui';
 import ChatView from './ChatView';
 import StatusView from './StatusView';
 import TasksView from './TasksView';
+import JobsView from './JobsView';
 import ControlView from './ControlView';
 import PairingView from './PairingView';
 
@@ -19,6 +20,7 @@ const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'chat', label: 'Chat', icon: '💬' },
   { id: 'status', label: 'Status', icon: '📡' },
   { id: 'tasks', label: 'Tasks', icon: '✅' },
+  { id: 'jobs', label: 'Jobs', icon: '💼' },
   { id: 'control', label: 'Control', icon: '🎛' },
 ];
 
@@ -132,6 +134,18 @@ export default function HeidiMobileApp() {
     void statusRefresh();
   }, [checkSession, statusRefresh]);
 
+  const onChatUpstreamFailure = useCallback(() => {
+    void statusRefresh();
+  }, [statusRefresh]);
+
+  const snap = status.data;
+  const stale = status.savedAt !== null && (status.fromCache || isStale(status.savedAt, now));
+  const statusUntrusted = stale && Boolean(status.error || status.fromCache);
+
+  useEffect(() => {
+    if (tab === 'chat' && paired && online && statusUntrusted) void statusRefresh();
+  }, [tab, paired, online, statusUntrusted, statusRefresh]);
+
   const unpair = async () => {
     await heidiRequest('/session', { method: 'DELETE' });
     clearAll();
@@ -141,10 +155,16 @@ export default function HeidiMobileApp() {
   };
 
   // ── Rendering ──────────────────────────────────────────
-  const snap = status.data;
-  const stateKey = !online ? 'phone_offline' : snap ? snap.state : status.error ? 'offline' : 'checking';
+  const stateKey = !online
+    ? 'phone_offline'
+    : statusUntrusted
+      ? 'stale_status'
+      : snap
+        ? snap.state
+        : status.error
+          ? 'offline'
+          : 'checking';
   const meta = describeState(stateKey);
-  const stale = status.savedAt !== null && (status.fromCache || isStale(status.savedAt, now));
   const approvalsCount = tasks.data?.approvals.ok ? tasks.data.approvals.data.length : 0;
 
   if (phase === 'checking') {
@@ -187,7 +207,9 @@ export default function HeidiMobileApp() {
 
   const banner = !online
     ? { cls: styles.bannerBad, text: 'Phone offline — showing data saved on this phone. Nothing here is live.' }
-    : snap?.state === 'pending_approval'
+    : statusUntrusted && online
+      ? { cls: styles.bannerWarn, text: 'Status on this phone is outdated — live checks may be failing on Frank. Open Status and tap Refresh; if chat still errors, see BFF diagnostics below.' }
+      : snap?.state === 'pending_approval'
       ? { cls: styles.bannerInfo, text: `Waiting for an owner to approve device ${snap.device_id}. Heidi checks again automatically.` }
       : snap?.state === 'unauthorized'
         ? { cls: styles.bannerBad, text: 'HYDI rejected this phone’s credentials. Unpair in Control and pair again.' }
@@ -220,6 +242,7 @@ export default function HeidiMobileApp() {
             online={online}
             speakReplies={prefs.speakReplies}
             onAuthError={onAuthError}
+            onUpstreamFailure={onChatUpstreamFailure}
             onTasksChanged={() => void tasks.refresh()}
           />
         )}
@@ -227,6 +250,7 @@ export default function HeidiMobileApp() {
           <StatusView status={status} activity={activity} online={online} realtime={realtime} liveEvents={liveEvents} now={now} />
         )}
         {tab === 'tasks' && <TasksView tasks={tasks} online={online} now={now} onAuthError={onAuthError} />}
+        {tab === 'jobs' && <JobsView online={online} now={now} onAuthError={onAuthError} />}
         {tab === 'control' && (
           <ControlView
             status={status}

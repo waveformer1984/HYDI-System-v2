@@ -23,6 +23,9 @@ const STATES = Object.freeze(['HEALTHY', 'UNKNOWN', 'DEGRADED', 'UNAVAILABLE']);
 const RANK = Object.freeze({ HEALTHY: 0, UNKNOWN: 1, DEGRADED: 2, UNAVAILABLE: 3 });
 const ICON = Object.freeze({ HEALTHY: '✅', DEGRADED: '⚠️', UNAVAILABLE: '❌', UNKNOWN: '❔' });
 const FILE_STALE_MS = Object.freeze({ daemon: 180 * 1000, frank: 5 * 60 * 1000 });
+// 10-minute cache for the GitHub CI probe inside checkSystem (module-level so
+// every caller shares it).
+let _ciCache = { at: 0, report: null };
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
@@ -169,6 +172,68 @@ async function checkSystem(opts = {}) {
     return component('frank-host', 'DEGRADED', `${f.level}: ${issues.length} issue(s)${top ? ` — ${top}` : ''}`, src);
   })());
 
+  // C: drive free space — direct probe. scripts/local-ci.js refuses to run
+  // below 12 GB free; surfacing it here means "status" answers the question
+  // that actually breaks CI, not just service liveness.
+  tasks.push(Promise.resolve().then(() => {
+    // opts.diskInfo lets tests (and callers with their own probe) inject
+    // { freeGB, totalGB } instead of hitting the filesystem.
+    const di = opts.diskInfo;
+    try {
+      const s = di || (() => { const x = fs.statfsSync(process.env.SystemDrive || 'C:\\'); return { freeGB: (x.bavail * x.bsize) / 1073741824, totalGB: (x.blocks * x.bsize) / 1073741824 }; })();
+      const freeGB = s.freeGB, totalGB = s.totalGB;
+      const pct = totalGB > 0 ? Math.round((freeGB / totalGB) * 100) : 0;
+      const low = freeGB < 12;
+      return component('disk-c', low ? 'DEGRADED' : 'HEALTHY',
+        `${freeGB.toFixed(1)} GB free of ${totalGB.toFixed(0)} GB (${pct}% free)${low ? ' — below the 12 GB CI floor' : ''}`,
+        'fs.statfs C:\\');
+    } catch (e) {
+      return component('disk-c', 'UNKNOWN', `could not stat C:: ${e instanceof Error ? e.message : 'error'}`, 'fs.statfs');
+    }
+  }));
+
+  // Last CI signal: newest state per local-ci context on the clean-main head.
+  // The repo is public, so no token is needed; result is cached 10 min so a
+  // chatty "status" cannot hammer the API.
+  tasks.push((async () => {
+    // opts.ciStatuses injects a statuses array (newest-first not required);
+    // otherwise the GitHub commit-status API is queried and cached.
+    if (Array.isArray(opts.ciStatuses)) {
+      const latest = {};
+      for (const s of opts.ciStatuses) {
+        if (!latest[s.context] || String(s.created_at) > String(latest[s.context].created_at)) latest[s.context] = s;
+      }
+      const parts = Object.keys(latest).sort().map((k) => `${k}=${latest[k].state}`).join(', ');
+      const vals = Object.values(latest);
+      const bad = vals.some((s) => s.state === 'failure' || s.state === 'error');
+      const pend = vals.some((s) => s.state === 'pending');
+      return component('ci', bad ? 'DEGRADED' : pend ? 'UNKNOWN' : 'HEALTHY',
+        parts || 'no commit statuses on clean-main yet', 'opts.ciStatuses');
+    }
+    const nowMs = Date.now();
+    if (_ciCache.report && nowMs - _ciCache.at < 10 * 60 * 1000) return _ciCache.report;
+    const repo = env.HYDI_GITHUB_REPO || 'waveformer1984/HYDI-System-v2';
+    const r = await getJson(fetchImpl, `https://api.github.com/repos/${repo}/commits/clean-main/status`, t);
+    let report;
+    if (!r.ok || !r.body) {
+      report = component('ci', 'UNKNOWN', `GitHub status API: ${r.error || `HTTP ${r.status}`}`, 'api.github.com commits/clean-main/status');
+    } else {
+      const statuses = Array.isArray(r.body.statuses) ? r.body.statuses : [];
+      const latest = {};
+      for (const s of statuses) {
+        if (!latest[s.context] || String(s.created_at) > String(latest[s.context].created_at)) latest[s.context] = s;
+      }
+      const parts = Object.keys(latest).sort().map((k) => `${k}=${latest[k].state}`).join(', ');
+      const vals = Object.values(latest);
+      const bad = vals.some((s) => s.state === 'failure' || s.state === 'error');
+      const pend = vals.some((s) => s.state === 'pending');
+      report = component('ci', bad ? 'DEGRADED' : pend ? 'UNKNOWN' : 'HEALTHY',
+        parts || 'no commit statuses on clean-main yet', 'api.github.com commits/clean-main/status');
+    }
+    _ciCache = { at: nowMs, report };
+    return report;
+  })());
+
   // Auth posture: what protects these surfaces.
   tasks.push(Promise.resolve(component('auth',
     env.HEIDI_MOBILE_TOKEN ? 'HEALTHY' : 'DEGRADED',
@@ -225,6 +290,8 @@ function formatSystemStatus(report) {
 /** Chat phrases that ask for the full report (deterministic, no model call). */
 function isSystemReportQuery(input) {
   const t = String(input || '').trim().toLowerCase();
+  // Short everyday phrasings — "status" is what people actually type.
+  if (['status', 'status?', 'system status', 'how are you', "how's it going", "how's the system", 'what\'s up', 'whats up'].includes(t)) return true;
   return t === 'system report' || t === 'status report' || t === 'health report' || t === '/status' || t === 'full status';
 }
 

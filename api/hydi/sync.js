@@ -14,11 +14,20 @@ function getSupabase() {
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
+  const origin = req.headers.origin;
+  const allowed = String(process.env.HYDI_SYNC_ALLOWED_ORIGINS || process.env.MOBILE_CHAT_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const corsOrigin = origin && allowed.includes(origin) ? origin : null;
+  if (corsOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(corsOrigin ? 204 : 403).end();
 
   try {
     if (req.method === 'GET') {

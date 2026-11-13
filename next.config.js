@@ -26,6 +26,12 @@ const nextConfig = {
     // had never surfaced because lint never actually looked at them.
     dirs: ['pages', 'components', 'lib', 'src', 'hooks', 'workers', 'agents', 'revenue-engine', 'api', 'kilo'],
   },
+  // Standard health contract (Phase 2): every HTTP service answers GET
+  // /health. The web app's health payload lives at /api/health; expose it
+  // at the contract path too. See docs/HEALTH_CONTRACT.md.
+  async rewrites() {
+    return [{ source: '/health', destination: '/api/health' }]
+  },
   webpack: (config, { isServer }) => {
     // Allow require() of .ts files from .js files in the pages/ directory.
     // next dev resolves .ts extensions automatically, but next build's

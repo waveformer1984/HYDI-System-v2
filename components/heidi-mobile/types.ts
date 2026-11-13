@@ -26,12 +26,21 @@ export interface Worker {
   error_count: number | null;
 }
 
+export interface StatusDiagnostics {
+  upstream_valid: boolean;
+  upstream_host: string | null;
+  upstream_uses_default: boolean;
+  service_secret_configured: boolean;
+  device_pending_at_pairing: boolean;
+}
+
 export interface StatusSnapshot {
   state: ConnectionState;
   checked_at: string;
   latency_ms: number;
   api: { reachable: boolean; latency_ms: number | null };
   device_id: string;
+  diagnostics?: StatusDiagnostics;
   health: {
     status: string | null;
     hydi_status: string | null;
@@ -87,11 +96,21 @@ export interface Command {
   completed_at: string | null;
 }
 
+export interface MissionApproval {
+  id: number;
+  goal: string;
+  status: string;
+  priority: number;
+  assigned_agent: string | null;
+  created_at: string | null;
+}
+
 export interface TasksSnapshot {
   checked_at: string;
   approvals: Section<Approval[]>;
   work: Section<{ sessions: WorkSession[]; queue_depth: number }>;
   commands: Section<Command[]>;
+  missions: Section<MissionApproval[]>;
 }
 
 export interface Notification {
@@ -110,4 +129,45 @@ export interface ActivitySnapshot {
   unread_count: number;
 }
 
-export type Tab = 'chat' | 'status' | 'tasks' | 'control';
+export type Tab = 'chat' | 'status' | 'tasks' | 'jobs' | 'control';
+
+export type JobDecision = 'shortlisted' | 'dismissed' | 'applied';
+
+export interface JobLead {
+  id: string;
+  source: string;
+  sourceUrl: string;
+  title: string;
+  description: string;
+  company: string | null;
+  budget: { min: number | null; max: number | null; currency: string; type: string; text?: string | null };
+  skills: string[];
+  postedAt: string | null;
+  score: number;
+  division: string | null;
+  matched: string[];
+  reasons: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  draft: string | null;
+  notifiedAt?: string | null;
+  decision?: { status: JobDecision; at: string } | null;
+}
+
+export interface JobScoutStatus {
+  ranAt?: string;
+  ok?: boolean;
+  fetched?: number;
+  kept?: number;
+  newLeads?: number;
+  newStrong?: number;
+  sources?: Record<string, { ok: boolean; count: number; ms?: number; error?: string }>;
+  notify?: { candidates?: number; sent?: number; batched?: boolean; deferred?: boolean; error?: string };
+}
+
+export interface JobScoutSnapshot {
+  ok: boolean;
+  status: JobScoutStatus | null;
+  decisions: Record<string, { status: JobDecision; at: string }>;
+  leads: JobLead[];
+}

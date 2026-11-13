@@ -58,7 +58,13 @@ const TABLES = [
 class OpsStore {
   constructor(memory) {
     this.memory = memory;
-    this.ready = this.ensure();
+    // Persistence is required for ops tables, but a degraded store must not
+    // take down HeidiCore boot (memory-only mode / unavailable sqlite). The
+    // first ops access will surface the underlying error.
+    this.ready = this.ensure().catch((e) => {
+      console.warn(`[OPS STORE] degraded - ops persistence unavailable: ${e.message}`);
+      return false;
+    });
   }
 
   async ensure() {

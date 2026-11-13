@@ -20,8 +20,14 @@ export function toneForStatus(status: string | null | undefined): Tone {
 }
 
 /** Wording for each connection state: short label, tone, and the next useful action. */
-export function describeState(state: ConnectionState | 'phone_offline' | 'checking'): { label: string; tone: Tone; detail: string } {
+export function describeState(state: ConnectionState | 'phone_offline' | 'checking' | 'stale_status'): { label: string; tone: Tone; detail: string } {
   switch (state) {
+    case 'stale_status':
+      return {
+        label: 'Status outdated',
+        tone: 'warn',
+        detail: 'The last live status check on this phone failed or is very old. The header may still show an old verdict (for example HYDI degraded). Open Status, tap Refresh, then retry chat.',
+      };
     case 'online':
       return { label: 'HYDI online', tone: 'ok', detail: 'HYDI answered, accepted this phone, and reports every tracked subsystem healthy.' };
     case 'degraded':

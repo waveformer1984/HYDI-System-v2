@@ -28,6 +28,21 @@ const { createClient } = require('@supabase/supabase-js');
 const HeidiGoalEngine = require('../evolution/heidi-goals');
 const GoalExecutor = require('../evolution/goal-executor');
 const ActionExecutor = require('./actions/action-executor');
+const { adviseProposal } = require('../lib/governance/action-advisor');
+const {
+  checkAdvisoryAuth,
+  allowedCorsOrigin,
+  bindHost,
+  authorizeHumanApproval,
+} = require('../lib/governance/advisory-auth');
+
+/** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
+function logSafe(value) {
+  return String(value)
+    .replace(/[\r\n]+/g, ' ') // explicit CR/LF so static analysis recognises the sanitiser
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .slice(0, 200);
+}
 
 class HeidiAgent {
   constructor(config = {}) {
@@ -207,68 +222,63 @@ class HeidiAgent {
   }
 
   /**
+   * Kill switch (Phase 4): env HEIDI_PAUSE always wins; a `paused` flag on
+   * the heidi_decision_bounds row is honored when present (forward-compatible
+   * with a future migration — absent column simply reads undefined).
+   */
+  isPaused() {
+    if (process.env.HEIDI_PAUSE === 'true' || process.env.HEIDI_PAUSE === '1') return true;
+    const b = this.decisionBounds;
+    return !!(b && (b.paused === true || b.paused === 'true' || b.paused === 1 || b.paused === '1'));
+  }
+
+  /**
    * Make a decision on a task
    * Returns: { verdict: 'AUTO-APPROVE' | 'REVIEW' | 'BLOCK', reason: string, memory_ids: UUID[] }
    */
   async makeDecision(task) {
     try {
-      // Never auto-approve without explicit enable flag
-      if (!process.env.HEIDI_ALLOW_EXEC) {
-        return { verdict: 'REVIEW', reason: 'HEIDI_ALLOW_EXEC not set', memory_ids: [] };
-      }
-
-      // Check bounds
-      if (!this.decisionBounds) {
-        return { verdict: 'REVIEW', reason: 'Decision bounds not loaded', memory_ids: [] };
-      }
-
-      // Retrieve relevant procedural memory
+      // Retrieve relevant procedural memory (evidence for the audit trail;
+      // confidence is evaluated on the ORIGINAL task value, never boosted).
       const relevantFacts = await this.retrieveRelevantFacts(task);
       const memoryIds = relevantFacts.map(f => f.id);
 
-      const originalConfidence = task.confidence || 0;
-      const threshold = this.decisionBounds.auto_approve_threshold || 0.85;
       let memoryReasoning = '';
-      let adjustedConfidence = originalConfidence;
-
-      // Record memory reasoning but DON'T boost confidence before gate evaluation
       if (relevantFacts.length > 0) {
         const avgFactConfidence = relevantFacts.reduce((sum, f) => sum + (f.confidence || 0), 0) / relevantFacts.length;
         memoryReasoning = ` (verified against ${relevantFacts.length} facts, avg ${(avgFactConfidence * 100).toFixed(0)}% confident)`;
       }
 
-      // Sensitive tasks ALWAYS need human review (financial, crypto, vendor decisions)
-      const sensitiveDivisions = ['financial', 'crypto', 'vendor'];
-      if (sensitiveDivisions.includes(task.division)) {
-        return {
-          verdict: 'REVIEW',
-          reason: `Sensitive (${task.division}) → human approval required${memoryReasoning}`,
-          memory_ids: memoryIds
-        };
-      }
+      // Contract-layer triple gate (Phase 2): proposal is recorded in
+      // heidi_events, the local advisor (qwen2.5:3b) returns a verdict +
+      // confidence, and the decision-bounds row is enforced server-side.
+      // Fail-closed: advisor timeout/malformed output/missing bounds can
+      // only produce REVIEW/BLOCK — never AUTO-APPROVE.
+      const gate = await adviseProposal({
+        proposal: {
+          id: task.id,
+          type: task.type,
+          division: task.division,
+          payload: task.payload,
+          proposer: 'agent_bus',
+        },
+        bounds: this.decisionBounds,
+        execEnabled: process.env.HEIDI_ALLOW_EXEC,
+        paused: this.isPaused(),
+        supabase: this.supabase,
+      });
 
-      // Decision logic (triple gate) — evaluate on ORIGINAL confidence, not boosted
-      if (originalConfidence >= threshold && task.within_bounds) {
-        return {
-          verdict: 'AUTO-APPROVE',
-          reason: `High confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning} and within bounds`,
-          memory_ids: memoryIds
-        };
-      }
+      const verdict = gate.verdict === 'AUTO-APPROVE' && gate.outcome === 'blocked'
+        ? 'REVIEW' // model approved but a non-env gate refused — human decides
+        : gate.verdict;
 
-      if (originalConfidence < 0.5) {
-        return {
-          verdict: 'BLOCK',
-          reason: `Low confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning}`,
-          memory_ids: memoryIds
-        };
-      }
-
-      // Default to review
       return {
-        verdict: 'REVIEW',
-        reason: `Confidence ${(originalConfidence * 100).toFixed(0)}%${memoryReasoning} below threshold ${(threshold * 100).toFixed(0)}%`,
-        memory_ids: memoryIds
+        verdict,
+        execEnabled: gate.execEnabled === true,
+        outcome: gate.outcome,
+        confidence: gate.confidence,
+        reason: `${gate.gates.advisor.reason || gate.gates.bounds.reason || 'gate decision'} [advisor:${gate.gates.advisor.status} bounds:${gate.gates.bounds.pass ? 'pass' : 'fail'}]`,
+        memory_ids: memoryIds,
       };
     } catch (error) {
       console.error('[HEIDI-AGENT] Decision failed:', error.message);
@@ -281,15 +291,19 @@ class HeidiAgent {
    */
   async executeTask(task, decision) {
     try {
-      if (decision.verdict !== 'AUTO-APPROVE') {
-        // Log review/block decision but don't execute
-        await this.logEvent(task, decision.verdict, decision.reason, decision.memory_ids);
+      // Exec stays closed unless HEIDI_ALLOW_EXEC=true AND the gate outcome
+      // is 'authorized'. 'would have executed' is evidence, not a run.
+      if (decision.verdict !== 'AUTO-APPROVE' || decision.execEnabled !== true || decision.outcome !== 'authorized') {
+        const note = decision.outcome === 'would have executed'
+          ? 'would have executed (HEIDI_ALLOW_EXEC off)'
+          : decision.verdict;
+        await this.logEvent(task, note, decision.reason, decision.memory_ids);
         // Mark the task as resolved so the poller doesn't keep reprocessing it
         await this.supabase
           .from('agent_bus')
-          .update({ status: decision.verdict.toLowerCase() })
+          .update({ status: decision.verdict === 'AUTO-APPROVE' ? 'would_have_executed' : decision.verdict.toLowerCase() })
           .eq('id', task.id);
-        return { success: true, executed: false, verdict: decision.verdict };
+        return { success: true, executed: false, verdict: decision.verdict, outcome: decision.outcome };
       }
 
       console.log(`[HEIDI-AGENT] Executing task: ${task.id}`);
@@ -485,6 +499,8 @@ class HeidiAgent {
    */
   async processTaskCycle() {
     if (!this.leaseClaimed) return;
+    // Kill switch: paused means observe-only — leave tasks pending.
+    if (this.isPaused()) return;
 
     try {
       const tasks = await this.pollTasks();
@@ -590,6 +606,16 @@ class HeidiAgent {
       const task = tasks[0];
 
       if (action === 'approve') {
+        // A human approval replaces the confidence/bounds judgement only.
+        // It never overrides HEIDI_ALLOW_EXEC, the pause switch, or the
+        // action registry.
+        const auth = authorizeHumanApproval({ task, env: process.env, paused: this.isPaused() });
+        if (!auth.allowed) {
+          console.log(`[HEIDI-AGENT] Approval of ${logSafe(taskId)} refused: ${logSafe(auth.reason)}`);
+          await this.logEvent(task, 'APPROVAL-REFUSED', `${auth.reason} [gate:${auth.gate}]`, []);
+          return { success: false, executed: false, error: auth.reason, gate: auth.gate };
+        }
+
         // Execute the task
         console.log(`[HEIDI-AGENT] User approved task ${taskId}`);
         await this.supabase
@@ -597,7 +623,14 @@ class HeidiAgent {
           .update({ status: 'approved_by_user', approved_at: new Date().toISOString() })
           .eq('id', taskId);
 
-        const execResult = await this.executeTask(task, { verdict: 'AUTO-APPROVE', reason: 'User approved' });
+        // authorizeHumanApproval above already checked HEIDI_ALLOW_EXEC, the pause
+        // switch and the action registry; the human replaces the advisor verdict.
+        const execResult = await this.executeTask(task, {
+          verdict: 'AUTO-APPROVE',
+          execEnabled: true,
+          outcome: 'authorized',
+          reason: 'User approved',
+        });
         return { success: execResult.success, executed: execResult.executed, action: 'approved' };
       } else {
         // Reject the task
@@ -763,6 +796,12 @@ class HeidiAgent {
   /**
    * Start HTTP server for advisory mode approvals
    */
+  /** Overridable for tests. Exits so PM2 records the failure. */
+  onFatal(error) {
+    console.error('[HEIDI-AGENT] Fatal:', error && error.message);
+    process.exit(1);
+  }
+
   startAdvisoryServer() {
     // 3459 is heidi-core/server.js's own port (see .ports.json) -- advisory
     // mode must not collide with it when both run at once.
@@ -770,12 +809,28 @@ class HeidiAgent {
 
     this.httpServer = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Cache-Control', 'no-store');
+      // CORS only for explicitly allowed origins (e.g. Ursula); never '*'.
+      const corsOrigin = allowedCorsOrigin(req, process.env);
+      if (corsOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      }
 
       if (req.method === 'OPTIONS') {
-        res.writeHead(200);
+        res.writeHead(corsOrigin ? 204 : 403);
         res.end();
+        return;
+      }
+
+      // Every route needs the admin bearer token. No token configured →
+      // refuse everything rather than serve open.
+      const auth = checkAdvisoryAuth(req, process.env);
+      if (!auth.ok) {
+        res.writeHead(auth.status);
+        res.end(JSON.stringify({ error: auth.error }));
         return;
       }
 
@@ -890,14 +945,20 @@ class HeidiAgent {
       res.end(JSON.stringify({ error: 'Not found' }));
     });
 
-    this.httpServer.listen(port, () => {
-      console.log(`[HEIDI-AGENT] Advisory server listening on http://localhost:${port}`);
+    const host = bindHost(process.env);
+    if (!process.env.HEIDI_ADMIN_TOKEN) {
+      console.error('[HEIDI-AGENT] HEIDI_ADMIN_TOKEN not set — advisory API will refuse every request (503)');
+    }
+
+    // Fail loudly on a port conflict (exit non-zero so PM2 shows it) instead
+    // of silently running with no approval API.
+    this.httpServer.on('error', (error) => {
+      console.error(`[HEIDI-AGENT] Advisory server error on ${host}:${port}:`, error.code || '', error.message);
+      this.onFatal(error);
     });
 
-    this.httpServer.on('error', (error) => {
-      if (error.code !== 'EADDRINUSE') {
-        console.error('[HEIDI-AGENT] Advisory server error:', error.message);
-      }
+    this.httpServer.listen(port, host, () => {
+      console.log(`[HEIDI-AGENT] Advisory server listening on http://${host}:${port}`);
     });
   }
 
