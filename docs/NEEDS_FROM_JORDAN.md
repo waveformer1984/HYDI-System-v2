@@ -157,6 +157,41 @@ pm2 save
 
 **Paste back:** `curl -s -o NUL -w "%{http_code}" http://127.0.0.1:3100/api/heidi/health` → `200` from loopback; without Bearer on `/api/devices` → `401`.
 
+## Ursula — approve phones without a shell
+
+Ursula’s **Devices** tab lists pending heidi-mobile registrations. The server route signs
+`POST /api/devices` with `HYDI_SERVICE_SECRET` (never sent to the browser).
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+# HYDI_SERVICE_SECRET must be in .env.local (same value heidi-web uses)
+pm2 restart ursula-local heidi-web-standalone --update-env
+pm2 save
+```
+
+Open Ursula on this PC (`http://127.0.0.1:3100/workspace` → Operator → **Devices**). Approve grants **operator** role.
+
+**Paste back:** “Approved device `<device_id>`” or “no pending devices”.
+
+## Front door watchdog (Tailscale :443 → heidi-web)
+
+`frank-observer` raises **CRIT** when `tailscale serve status` is not `443 → http://127.0.0.1:3000` or `/api/health` fails through that path. Fix is manual only:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tailscale\serve-heidi-web.ps1
+# Never use Funnel. Re-check:
+tailscale serve status
+curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:3000/api/health
+```
+
+**Paste back:** `tailscale serve status` (first 10 lines) + health HTTP code `200`.
+
+## GitHub Pages `deploy` job (if still red)
+
+See `docs/GITHUB_PAGES_DEPLOY.md`. Enable **Settings → Pages → Source: GitHub Actions** once if `enablement: true` is not allowed by org policy.
+
+**Paste back:** “Pages deploy workflow green” or the configure-pages error line.
+
 ## P0 — Clean tree for auto-deploy
 
 ```powershell
@@ -183,6 +218,9 @@ pm2 restart heidi-core hydi-daemon --update-env
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1
+# Optional state-changing blocks:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1 -JobScout
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1 -UrsulaOps
 ```
 
 ## Job scout — division profiles needed
