@@ -4069,6 +4069,7 @@ export class CognitiveCore {
     reflectionModel: string; reflectIntervalMs: number;
     reflections: number;
     cycleTimeouts: { total: number; lastHour: number; skippedSnapshots: number; skippedReflections: number };
+    gateLog: { total: number; lastHour: number; byOutcome: Record<string, number>; recent: Array<Record<string, unknown>> } | null;
   } {
     const hourAgo = Date.now() - 3600_000;
     const lastHour = this.cycleTimeouts.filter((t) => t > hourAgo).length;
@@ -4088,7 +4089,47 @@ export class CognitiveCore {
         skippedSnapshots: this.cycleTimeouts.length,
         skippedReflections: this.cycleTimeouts.length,
       },
+      gateLog: CognitiveCore.readGateLog(),
     };
+  }
+
+  /**
+   * Recent contract-layer gate decisions, written by
+   * lib/governance/action-advisor.js to .runtime/heidi-gate-log.json.
+   * Read synchronously and fail-soft — a missing/corrupt log is null,
+   * never a status-surface failure.
+   */
+  private static readGateLog(): {
+    total: number; lastHour: number; byOutcome: Record<string, number>;
+    recent: Array<Record<string, unknown>>;
+  } | null {
+    try {
+      const fs = require('fs') as typeof import('fs');
+      const path = require('path') as typeof import('path');
+      const p = process.env.HEIDI_GATE_LOG_PATH
+        || path.join(process.cwd(), '.runtime', 'heidi-gate-log.json');
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const entries: Array<Record<string, unknown>> = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.entries) ? parsed.entries : [];
+      const hourAgo = Date.now() - 3600_000;
+      const byOutcome: Record<string, number> = {};
+      let lastHourCount = 0;
+      for (const e of entries) {
+        const outcome = String(e?.outcome || 'unknown');
+        byOutcome[outcome] = (byOutcome[outcome] || 0) + 1;
+        const at = Date.parse(String(e?.at || ''));
+        if (Number.isFinite(at) && at > hourAgo) lastHourCount += 1;
+      }
+      return {
+        total: entries.length,
+        lastHour: lastHourCount,
+        byOutcome,
+        recent: entries.slice(-10).reverse(),
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**

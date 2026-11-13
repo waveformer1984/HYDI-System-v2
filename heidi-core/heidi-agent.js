@@ -28,8 +28,7 @@ const { createClient } = require('@supabase/supabase-js');
 const HeidiGoalEngine = require('../evolution/heidi-goals');
 const GoalExecutor = require('../evolution/goal-executor');
 const ActionExecutor = require('./actions/action-executor');
-const { safeEvaluateTripleGate, VERDICTS } = require('../lib/governance/tripleGate');
-const { registeredActionTypes } = require('../lib/governance/action-registry');
+const { adviseProposal } = require('../lib/governance/action-advisor');
 const {
   checkAdvisoryAuth,
   allowedCorsOrigin,
@@ -250,29 +249,40 @@ class HeidiAgent {
         memoryReasoning = ` (verified against ${relevantFacts.length} facts, avg ${(avgFactConfidence * 100).toFixed(0)}% confident)`;
       }
 
-      // Authoritative verdict: lib/governance/tripleGate (deny on any error).
-      const gate = safeEvaluateTripleGate({
-        execEnabled: process.env.HEIDI_ALLOW_EXEC,
-        bounds: this.decisionBounds,
-        paused: this.isPaused(),
-        knownActions: registeredActionTypes(),
-        task: {
+      // Contract-layer triple gate (Phase 2): proposal is recorded in
+      // heidi_events, the local advisor (qwen2.5:3b) returns a verdict +
+      // confidence, and the decision-bounds row is enforced server-side.
+      // Fail-closed: advisor timeout/malformed output/missing bounds can
+      // only produce REVIEW/BLOCK — never AUTO-APPROVE.
+      const gate = await adviseProposal({
+        proposal: {
+          id: task.id,
           type: task.type,
           division: task.division,
-          confidence: task.confidence || 0,
-          within_bounds: task.within_bounds === true || task.within_bounds === 1 || task.within_bounds === 'true',
           payload: task.payload,
+          proposer: 'agent_bus',
         },
+        bounds: this.decisionBounds,
+        execEnabled: process.env.HEIDI_ALLOW_EXEC,
+        paused: this.isPaused(),
+        supabase: this.supabase,
       });
 
+      const verdict = gate.verdict === 'AUTO-APPROVE' && gate.outcome === 'blocked'
+        ? 'REVIEW' // model approved but a non-env gate refused — human decides
+        : gate.verdict;
+
       return {
-        verdict: gate.verdict,
-        reason: `${gate.reason}${memoryReasoning} [gate:${gate.gate}]`,
+        verdict,
+        execEnabled: gate.execEnabled === true,
+        outcome: gate.outcome,
+        confidence: gate.confidence,
+        reason: `${gate.gates.advisor.reason || gate.gates.bounds.reason || 'gate decision'} [advisor:${gate.gates.advisor.status} bounds:${gate.gates.bounds.pass ? 'pass' : 'fail'}]`,
         memory_ids: memoryIds,
       };
     } catch (error) {
       console.error('[HEIDI-AGENT] Decision failed:', error.message);
-      return { verdict: VERDICTS.REVIEW, reason: 'Decision engine error', memory_ids: [] };
+      return { verdict: 'REVIEW', reason: 'Decision engine error', memory_ids: [] };
     }
   }
 
@@ -281,15 +291,19 @@ class HeidiAgent {
    */
   async executeTask(task, decision) {
     try {
-      if (decision.verdict !== 'AUTO-APPROVE') {
-        // Log review/block decision but don't execute
-        await this.logEvent(task, decision.verdict, decision.reason, decision.memory_ids);
+      // Exec stays closed unless HEIDI_ALLOW_EXEC=true AND the gate outcome
+      // is 'authorized'. 'would have executed' is evidence, not a run.
+      if (decision.verdict !== 'AUTO-APPROVE' || decision.execEnabled !== true || decision.outcome !== 'authorized') {
+        const note = decision.outcome === 'would have executed'
+          ? 'would have executed (HEIDI_ALLOW_EXEC off)'
+          : decision.verdict;
+        await this.logEvent(task, note, decision.reason, decision.memory_ids);
         // Mark the task as resolved so the poller doesn't keep reprocessing it
         await this.supabase
           .from('agent_bus')
-          .update({ status: decision.verdict.toLowerCase() })
+          .update({ status: decision.verdict === 'AUTO-APPROVE' ? 'would_have_executed' : decision.verdict.toLowerCase() })
           .eq('id', task.id);
-        return { success: true, executed: false, verdict: decision.verdict };
+        return { success: true, executed: false, verdict: decision.verdict, outcome: decision.outcome };
       }
 
       console.log(`[HEIDI-AGENT] Executing task: ${task.id}`);
