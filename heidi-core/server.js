@@ -63,6 +63,7 @@ const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
 const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
+const allowlist = require('./approvals/allowlist');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -332,6 +333,13 @@ class HeidiCore {
         if (isJobsQuery(input)) {
           send({ t: formatJobs() });
           send({ done: true, model: 'job-scout', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const allowCmd = allowlist.parseCommand(input);
+        if (allowCmd) {
+          const r = await allowlist.propose(this.memory, allowCmd.spec, allowCmd.args, { actor: 'chat' });
+          send({ t: r.ok ? `Proposed #${r.missionId}: ${r.summary} — reply 'task approve ${r.missionId}' to run it or 'task reject ${r.missionId}' to drop it.` : `Can't propose that: ${r.error}` });
+          send({ done: true, model: 'allowlist', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {
@@ -611,6 +619,21 @@ class HeidiCore {
       }
     });
 
+    // Allowlisted actions — the only three things that can be proposed for
+    // phone approval. GET lists specs; POST proposes (creates a mission that
+    // waits in awaiting_approval — nothing executes here).
+    this.app.get('/allowlist', (req, res) => res.json({ actions: allowlist.listSpecs() }));
+    this.app.post('/allowlist/propose', async (req, res) => {
+      try {
+        const { spec, args } = req.body || {};
+        const r = await allowlist.propose(this.memory, spec, args || {}, { actor: 'api' });
+        if (!r.ok) return res.status(400).json(r);
+        res.json(r);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // TASKS (missions/lifecycle.js). Same auth as every other route. Approve
     // and reject act as a person (`human:<owner>`); the model's tools can't.
     const taskJson = (m) => m && {
@@ -817,6 +840,13 @@ class HeidiCore {
         if (isJobsQuery(input)) {
           send({ t: formatJobs() });
           send({ done: true, model: 'job-scout', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic');
+        }
+        const allowCmd = allowlist.parseCommand(input);
+        if (allowCmd) {
+          const r = await allowlist.propose(this.memory, allowCmd.spec, allowCmd.args, { actor: 'chat' });
+          send({ t: r.ok ? `Proposed #${r.missionId}: ${r.summary} — reply 'task approve ${r.missionId}' to run it or 'task reject ${r.missionId}' to drop it.` : `Can't propose that: ${r.error}` });
+          send({ done: true, model: 'allowlist', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return done('deterministic');
         }
         if (this.memoryRuntime.isMemoryCommand(input)) {

@@ -131,20 +131,28 @@ function annotateSplitBrain(results) {
     if (!app) continue; // not PM2-managed (or no mapping) — nothing to compare
 
     const listeners = listenerPids(port);
-    if (!listeners.size) continue; // port not listening locally — other checks own this
-
     const pm2Pid = Number(app.pid) || null;
     const pm2Status = (app.pm2_env && app.pm2_env.status) || 'unknown';
-    const managedListening = pm2Pid && listeners.has(pm2Pid);
     const pm2Online = pm2Status === 'online' && pm2Pid;
 
     let orphanPids = [];
-    if (!managedListening) {
-      orphanPids = pm2Online
-        ? [...listeners].filter((p) => p !== pm2Pid)
-        : [...listeners];
+    let splitBrain = false;
+    if (listeners.size) {
+      const managedListening = pm2Online && listeners.has(pm2Pid);
+      if (!managedListening) {
+        orphanPids = pm2Online
+          ? [...listeners].filter((p) => p !== pm2Pid)
+          : [...listeners];
+        splitBrain = orphanPids.length > 0;
+      }
+    } else {
+      // Listener table unavailable (sandboxed shell, permissions, non-Windows
+      // netstat differences): the endpoint answered but PM2 does not consider
+      // its app online — that alone is split-brain evidence. Orphan PID is
+      // unknown; report and proposal degrade gracefully.
+      splitBrain = !pm2Online;
     }
-    if (!orphanPids.length) continue; // PM2's own instance owns the port
+    if (!splitBrain) continue; // PM2's own instance owns the port (or unverifiable + PM2 online)
 
     const report = {
       component: r.name,
@@ -157,7 +165,8 @@ function annotateSplitBrain(results) {
       proposedAt: null,
     };
     writeReport(r.name, report);
-    report.proposed = proposeKill(r.name, report);
+    // Only propose a kill when we actually know an orphan PID to kill.
+    report.proposed = orphanPids.length ? proposeKill(r.name, report) : false;
     writeReport(r.name, report);
 
     r.ok = false;
@@ -165,8 +174,10 @@ function annotateSplitBrain(results) {
     r.splitBrain = true;
     r.noAutoRecover = true; // restarting PM2 can't evict the orphan — human decides
     r.orphanPids = orphanPids;
-    r.reason = `SPLIT-BRAIN: port ${port} answered by orphan pid(s) ${orphanPids.join(', ')}; ` +
-      `PM2 ${app.name} status=${pm2Status} pid=${pm2Pid || 'none'}. Orphan not killed; kill proposed via mission inbox.`;
+    r.reason = `SPLIT-BRAIN: port ${port} answered while PM2 ${app.name} status=${pm2Status} pid=${pm2Pid || 'none'}` +
+      (orphanPids.length
+        ? `; orphan pid(s) ${orphanPids.join(', ')} (not killed; kill proposed via mission inbox).`
+        : '; listener table unavailable so orphan pid unknown (not killed).');
   }
 }
 
