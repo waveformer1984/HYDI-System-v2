@@ -82,10 +82,10 @@
       "depends_on": []
     },
     "supabase-rest": {
-      "port": 3001,
+      "port": 54321,
       "name": "Supabase REST API",
       "env_var": "SUPABASE_REST_PORT",
-      "description": "Local PostgREST endpoint",
+      "description": "Local PostgREST endpoint — served through Kong on the same port as `supabase` (paths under /rest/v1). The old :3001 entry was stale; :3001 belongs to rezonate-app.",
       "depends_on": ["supabase"],
       "external": true
     }

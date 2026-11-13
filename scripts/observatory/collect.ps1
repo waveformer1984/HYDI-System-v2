@@ -34,6 +34,35 @@ function Append-Jsonl($path, $obj) {
   [IO.File]::AppendAllText($path, ($obj | ConvertTo-Json -Depth 8 -Compress) + "`n", $Utf8NoBom)
 }
 
+# Bounded docker probe: when the daemon wedges, bare `docker ...` calls hang
+# forever and each observer pass left another orphaned docker.exe (~80 piled
+# up on 2026-11-11). Every probe runs in a job killed after 5s, so a wedged
+# daemon costs one bounded call per pass, never an accumulating pile.
+function Invoke-DockerProbe {
+  param([Parameter(Mandatory=$true)][string]$Arguments)
+  $job = Start-Job -ScriptBlock {
+    param($c)
+    $out = Invoke-Expression "docker $c 2>`$null"
+    "EXIT:$LASTEXITCODE"
+    $out
+  } -ArgumentList $Arguments
+  if (Wait-Job $job -Timeout 5) {
+    $lines = @(Receive-Job $job)
+    Remove-Job $job -Force
+    $code = 0
+    $data = @()
+    foreach ($l in $lines) {
+      if ($l -is [string] -and $l -match '^EXIT:(\d+)$') { $code = [int]$Matches[1] }
+      else { $data += $l }
+    }
+    if ($code -ne 0) { throw "docker $Arguments exited $code" }
+    return ,$data
+  }
+  Stop-Job $job | Out-Null
+  Remove-Job $job -Force
+  throw "docker probe timed out after 5s: docker $Arguments"
+}
+
 function Get-PrevSnapshot {
   $p = Join-Path $OBS 'current.json'
   if (Test-Path $p) {
@@ -110,17 +139,30 @@ function Invoke-Collect {
 
   # ---- DOCKER ----
   try {
-    $psOut = docker ps -a --format '{{json .}}' 2>$null
-    if ($LASTEXITCODE -ne 0) { throw "docker ps exit $LASTEXITCODE" }
+    $psOut = @(Invoke-DockerProbe 'ps -a --format ''{{json .}}''')
+    if (-not $psOut) { throw 'docker ps returned no output' }
     $stats = @{}
-    try { docker stats --no-stream --format '{{json .}}' 2>$null | ForEach-Object { $s = $_ | ConvertFrom-Json; $stats[$s.Name] = $s } } catch { $errors += "docker-stats: $($_.Exception.Message)" }
+    try {
+      foreach ($line in (Invoke-DockerProbe 'stats --no-stream --format ''{{json .}}''')) {
+        try { $s = $line | ConvertFrom-Json; $stats[$s.Name] = $s } catch {}
+      }
+    } catch { $errors += "docker-stats: $($_.Exception.Message)" }
     $rest  = @{}
     try {
-      $ids = docker ps -aq 2>$null
-      if ($ids) { docker inspect $ids --format '{{.Name}}|{{.RestartCount}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>$null | ForEach-Object { $p = $_ -split '\|'; $rest[$p[0].TrimStart('/')] = @{ restarts = [int]$p[1]; health = $p[2] } } }
+      $ids = @(Invoke-DockerProbe 'ps -aq')
+      if ($ids) {
+        $inspectArgs = "inspect $($ids -join ' ') --format '{{.Name}}|{{.RestartCount}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'"
+        foreach ($line in (Invoke-DockerProbe $inspectArgs)) {
+          $p = $line -split '\|'
+          if ($p.Count -ge 3) { $rest[$p[0].TrimStart('/')] = @{ restarts = [int]$p[1]; health = $p[2] } }
+        }
+      }
     } catch { $errors += "docker-inspect: $($_.Exception.Message)" }
     $vmMb = $null
-    try { $vmMb = [math]::Round([int64](docker system info --format '{{.MemTotal}}' 2>$null)/1MB) } catch {}
+    try {
+      $memOut = @(Invoke-DockerProbe 'system info --format ''{{.MemTotal}}''')
+      if ($memOut) { $vmMb = [math]::Round([int64]($memOut -join '')/1MB) }
+    } catch {}
     $containers = @($psOut | ForEach-Object {
       $c = $_ | ConvertFrom-Json
       $n = $c.Names

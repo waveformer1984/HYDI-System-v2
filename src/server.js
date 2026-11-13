@@ -1572,11 +1572,15 @@ async function initializeIntegrations() {
 
 // Create HTTP server for WebSocket support
 const server = http.createServer(app);
+const { attachListenErrorHandler } = require('../lib/governance/http-listen-guard');
+const { bindHost } = require('../lib/governance/advisory-auth');
 
 // Initialize WebSocket chat server
 new ChatWebSocketServer(server);
 
-server.listen(PORT, async () => {
+const pfHost = bindHost(process.env);
+attachListenErrorHandler(server, { label: 'protoforge-core', host: pfHost, port: PORT });
+server.listen(PORT, pfHost, async () => {
   if (require.main === module) {
     const { recordProcessProvenance } = require('../lib/runtime/provenance');
     await recordProcessProvenance('protoforge-core');

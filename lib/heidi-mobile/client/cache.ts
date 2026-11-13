@@ -37,7 +37,7 @@ export interface StoredMessage {
 
 export interface Preferences {
   speakReplies: boolean;
-  lastTab: 'chat' | 'status' | 'tasks' | 'control';
+  lastTab: 'chat' | 'status' | 'tasks' | 'jobs' | 'control';
 }
 
 export const DEFAULT_PREFERENCES: Preferences = { speakReplies: false, lastTab: 'chat' };
@@ -115,7 +115,7 @@ export function loadPreferences(): Preferences {
   const p = read<Partial<Preferences>>('prefs') || {};
   return {
     speakReplies: typeof p.speakReplies === 'boolean' ? p.speakReplies : DEFAULT_PREFERENCES.speakReplies,
-    lastTab: p.lastTab && ['chat', 'status', 'tasks', 'control'].includes(p.lastTab) ? p.lastTab : DEFAULT_PREFERENCES.lastTab,
+    lastTab: p.lastTab && ['chat', 'status', 'tasks', 'jobs', 'control'].includes(p.lastTab) ? p.lastTab : DEFAULT_PREFERENCES.lastTab,
   };
 }
 

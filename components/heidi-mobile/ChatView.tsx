@@ -17,6 +17,7 @@ interface Props {
   online: boolean;
   speakReplies: boolean;
   onAuthError: (_error: ApiError) => void;
+  onUpstreamFailure?: (_error: ApiError) => void;
   onTasksChanged: () => void;
   brief?: { generated_at: string; ct_date: string; lines: string[]; failures: string[] } | null;
 }
@@ -30,7 +31,7 @@ function describeActions(event: Extract<ChatEvent, { type: 'actions' }>): string
   });
 }
 
-export default function ChatView({ online, speakReplies, onAuthError, onTasksChanged, brief }: Props) {
+export default function ChatView({ online, speakReplies, onAuthError, onUpstreamFailure, onTasksChanged, brief }: Props) {
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState('');
   const [interim, setInterim] = useState('');
@@ -175,9 +176,10 @@ export default function ChatView({ online, speakReplies, onAuthError, onTasksCha
         error: outcome.error.message,
       }));
       if (['not_paired', 'unauthorized'].includes(outcome.error.kind)) onAuthError(outcome.error);
+      else if (['network', 'timeout', 'server', 'malformed'].includes(outcome.error.kind)) onUpstreamFailure?.(outcome.error);
     }
     setStreamingId(null);
-  }, [flushDeltas, onAuthError, onTasksChanged, patch, speakReplies]);
+  }, [flushDeltas, onAuthError, onUpstreamFailure, onTasksChanged, patch, speakReplies]);
 
   const cancel = () => controller.current?.abort();
 

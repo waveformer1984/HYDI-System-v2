@@ -1,67 +1,34 @@
 #!/usr/bin/env node
+'use strict';
 /**
- * PM2 Restart Helper for Windows
+ * Restart ONE PM2 app by name. Allowlisted action target — only reachable
+ * through the mission approval pipeline (context.allowlist = pm2_restart).
  *
- * Works around two PM2-on-Windows defects:
+ * Usage: node scripts/pm2-restart.js <pm2-app-name>
  *
- * 1. `pm2 restart <name>` / `pm2 start <name>` fail with "Process N not
- *    found" after a stop — PM2's internal restartProcessId() looks the
- *    process up by PM2 ID, and the ID→pid mapping goes stale.
+ * Safety: the name must look like a PM2 app id/name and the app must exist
+ * in `pm2 jlist` before we touch it.
  *
- * 2. `pm2 restart hydi-boot` has a worse failure mode: it SUCCEEDS while
- *    corrupting bookkeeping. Observed 2026-09-18 (3/3 restarts): PM2 spawns
- *    the replacement fork while the outgoing fork's shutdown is still in
- *    flight, then attributes the outgoing fork's late exit to the new
- *    instance and autorestarts a SECOND fork. HYDI's boot-lease arbitration
- *    correctly stands one fork down (exit 75 → stop_exit_codes), but PM2's
- *    process table then tracks the dead fork: `hydi-boot` reports
- *    "waiting restart" with pid 0 while a live, PM2-spawned but untracked
- *    fork supervises all services. The lease guarantees exactly-one-
- *    supervisor; PM2's record of WHICH fork that is becomes wrong.
- *
- *    HYDI cannot repair PM2's fork attribution. What it CAN do is not
- *    create the second fork in the first place: `pm2 delete` + `pm2 start`
- *    gives PM2 exactly one tracked fork with no outgoing sibling to race.
- *    For hydi-boot this script therefore skips `pm2 restart` entirely.
- *    Simpler single-process apps do not hit the lease race, so they keep
- *    the restart-then-fallback path.
- *
- * After a hydi-boot start, the script verifies bookkeeping consistency:
- * the boot-lease pid (.hydi-boot.lock) and PM2's tracked pid must agree.
- * A mismatch is reported as MISMATCH (not silently ignored) — the safe
- * recovery is to run this script again.
- *
- * Usage:
- *   node scripts/pm2-restart.js [name]     # restart one app (default: hydi-boot)
- *   node scripts/pm2-restart.js all        # restart all apps
- *   node scripts/pm2-restart.js --prod     # restart in production mode
+ * `hydi-boot` is special on Windows: `pm2 restart hydi-boot` can leave PM2
+ * tracking a dead fork while the live supervisor holds the boot lease. For
+ * hydi-boot only this script uses `pm2 delete` + `pm2 start ecosystem.config.js
+ * --only hydi-boot`, then polls until the boot-lease pid and PM2's tracked
+ * pid agree (up to 60s). Exit non-zero on mismatch.
  */
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const ECOSYSTEM = path.join(ROOT, 'ecosystem.config.js');
+const BOOT_AGENT_APP = 'hydi-boot';
+const CONSISTENCY_TIMEOUT_MS = 60000;
+const CONSISTENCY_POLL_MS = 2000;
+
 const BOOT_LEASE_PATH = process.env.HYDI_BOOT_LEASE_PATH
   ? path.resolve(process.env.HYDI_BOOT_LEASE_PATH)
   : path.join(ROOT, '.hydi-boot.lock');
-const target = process.argv[2] || 'hydi-boot';
-const prodFlag = process.argv.includes('--prod') ? ' --env production' : '';
 
-// hydi-boot carries the lease/supervision semantics that make `pm2 restart`
-// non-deterministic on Windows (see header). Everything else restarts fine.
-const BOOT_AGENT_APP = 'hydi-boot';
-
-function run(cmd) {
-  console.log(`> ${cmd}`);
-  try {
-    execSync(cmd, { cwd: ROOT, stdio: 'inherit' });
-  } catch (e) {
-    // PM2 commands may return non-zero exit codes even on success
-  }
-}
-
-/** PID recorded in the HYDI boot lease, or null. */
 function readBootLeasePid() {
   try {
     const lease = JSON.parse(fs.readFileSync(BOOT_LEASE_PATH, 'utf8'));
@@ -69,21 +36,6 @@ function readBootLeasePid() {
   } catch { return null; }
 }
 
-/** PID PM2 currently tracks for `name`, or null. */
-function readPm2Pid(name) {
-  try {
-    const out = execSync('pm2 jlist', { cwd: ROOT, encoding: 'utf8', timeout: 15000 });
-    const app = JSON.parse(out).find((p) => p.name === name);
-    return app && Number.isInteger(app.pid) && app.pid > 0 ? app.pid : null;
-  } catch { return null; }
-}
-
-/**
- * Compare the two views of who the boot authority is.
- * consistent  — PM2 record and lease name the same live pid;
- * mismatch    — they disagree (PM2 is tracking a dead/different fork);
- * incomplete  — one side has no answer yet (boot still starting).
- */
 function checkSupervisorConsistency(pm2Pid, leasePid) {
   if (pm2Pid == null || leasePid == null) {
     return { verdict: 'incomplete', pm2Pid, leasePid, detail: 'one side has not reported a pid yet' };
@@ -97,53 +49,155 @@ function checkSupervisorConsistency(pm2Pid, leasePid) {
   };
 }
 
-async function verifyHydiBootConsistency(timeoutMs = 60000) {
+/** @param {unknown[]} apps parsed pm2 jlist */
+function readPm2Pid(name, apps) {
+  const app = (apps || []).find((p) => p && p.name === name);
+  return app && Number.isInteger(app.pid) && app.pid > 0 ? app.pid : null;
+}
+
+function parseJlist(stdout) {
+  return JSON.parse(stdout);
+}
+
+const APP_RE = /^[a-zA-Z0-9:_-]{1,64}$/;
+
+function defaultPm2(args) {
+  const cmd = process.platform === 'win32' ? 'pm2.cmd' : 'pm2';
+  return spawnSync(cmd, args, { encoding: 'utf8', timeout: 30000, windowsHide: true, cwd: ROOT });
+}
+
+/**
+ * Poll until consistent, mismatch, or timeout.
+ * @param {object} deps
+ * @param {() => number|null} deps.readPm2Pid
+ * @param {() => number|null} deps.readLeasePid
+ * @param {(ms: number) => Promise<void>} deps.sleep
+ * @param {number} [timeoutMs]
+ */
+async function waitForSupervisorConsistency(deps, timeoutMs = CONSISTENCY_TIMEOUT_MS) {
+  const { readPm2Pid: readPm2, readLeasePid, sleep } = deps;
   const deadline = Date.now() + timeoutMs;
-  let last = checkSupervisorConsistency(readPm2Pid(BOOT_AGENT_APP), readBootLeasePid());
-  while (last.verdict === 'incomplete' && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000));
-    last = checkSupervisorConsistency(readPm2Pid(BOOT_AGENT_APP), readBootLeasePid());
+  let last = checkSupervisorConsistency(readPm2(), readLeasePid());
+  while (Date.now() < deadline) {
+    if (last.verdict === 'consistent') return { ok: true, last };
+    if (last.verdict === 'mismatch') return { ok: false, last };
+    await sleep(CONSISTENCY_POLL_MS);
+    last = checkSupervisorConsistency(readPm2(), readLeasePid());
   }
-  console.log(`supervisor consistency: ${last.verdict.toUpperCase()} — ${last.detail}`);
-  return last;
+  if (last.verdict === 'consistent') return { ok: true, last };
+  if (last.verdict === 'mismatch') return { ok: false, last };
+  return { ok: false, last, timedOut: true };
+}
+
+/**
+ * hydi-boot only: delete + start, then consistency poll.
+ * @param {object} deps
+ * @param {(args: string[]) => {status?: number, error?: Error, stdout?: string, stderr?: string}} deps.pm2Run
+ * @param {() => number|null} deps.readLeasePid
+ * @param {(ms: number) => Promise<void>} deps.sleep
+ */
+async function restartHydiBoot(deps) {
+  const { pm2Run, readLeasePid, sleep } = deps;
+  const del = pm2Run(['delete', BOOT_AGENT_APP]);
+  if (del.error || (del.status !== 0 && del.status != null)) {
+    return { ok: false, phase: 'delete', detail: (del.stderr || del.error?.message || 'pm2 delete failed').slice(0, 300) };
+  }
+  const start = pm2Run(['start', ECOSYSTEM, '--only', BOOT_AGENT_APP]);
+  if (start.error || start.status !== 0) {
+    return { ok: false, phase: 'start', detail: (start.stderr || start.error?.message || 'pm2 start failed').slice(0, 300) };
+  }
+
+  const readPm2FromJlist = () => {
+    const list = pm2Run(['jlist']);
+    if (list.error || list.status !== 0 || !list.stdout) return null;
+    try {
+      return readPm2Pid(BOOT_AGENT_APP, parseJlist(list.stdout));
+    } catch {
+      return null;
+    }
+  };
+
+  const waited = await waitForSupervisorConsistency({
+    readPm2Pid: readPm2FromJlist,
+    readLeasePid,
+    sleep,
+  });
+  return { ...waited, phase: 'consistency' };
+}
+
+function listApps(pm2Run) {
+  const list = pm2Run(['jlist']);
+  if (list.error || list.status !== 0) {
+    throw new Error(`pm2 jlist failed: ${(list.stderr || list.error?.message || 'unknown').slice(0, 300)}`);
+  }
+  try {
+    return parseJlist(list.stdout);
+  } catch {
+    throw new Error('pm2 jlist returned non-JSON');
+  }
 }
 
 async function main() {
-  if (target === 'all') {
-    // Restart all HYDI apps
-    console.log('Restarting all HYDI PM2 processes...');
-    run('pm2 delete all');
-    run(`pm2 start ecosystem.config.js${prodFlag}`);
-    await verifyHydiBootConsistency();
-  } else if (target === BOOT_AGENT_APP) {
-    // Deterministic path for the lease-bearing supervisor — never `pm2
-    // restart`, which provably produces the double-fork bookkeeping race.
-    console.log(`Restarting ${target} via delete + start (pm2 restart is unsafe for ${target} on Windows — see header)`);
-    run(`pm2 delete ${target}`);
-    run(`pm2 start ${ECOSYSTEM} --only ${target}${prodFlag}`);
-    await verifyHydiBootConsistency();
-  } else {
-    // Restart a single non-supervisor app
-    console.log(`Restarting ${target}...`);
-    try {
-      execSync(`pm2 restart ${target}`, { cwd: ROOT, stdio: 'pipe' });
-      console.log(`pm2 restart ${target} succeeded`);
-      return;
-    } catch (e) {
-      console.log(`pm2 restart ${target} failed (${e.message.split('\n')[0]}), falling back to delete + start...`);
-    }
-    run(`pm2 delete ${target}`);
-    run(`pm2 start ${ECOSYSTEM} --only ${target}${prodFlag}`);
+  const app = process.argv[2];
+  if (!app || !APP_RE.test(app)) {
+    console.error('usage: node scripts/pm2-restart.js <pm2-app-name>');
+    process.exit(2);
+  }
+  const pm2Run = defaultPm2;
+  let apps;
+  try {
+    apps = listApps(pm2Run);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  const names = new Set((apps || []).flatMap((a) => [a.name, String(a.pm_id)]));
+  if (!names.has(app)) {
+    console.error(`no PM2 app named '${app}'. Known: ${[...names].slice(0, 30).join(', ')}`);
+    process.exit(1);
   }
 
-  console.log('Done. Use `pm2 logs` to check status.');
+  if (app === BOOT_AGENT_APP) {
+    const result = await restartHydiBoot({
+      pm2Run,
+      readLeasePid: readBootLeasePid,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    });
+    if (!result.ok) {
+      const label = result.last?.verdict || result.phase;
+      console.error(`hydi-boot restart failed (${label}): ${result.detail || result.last?.detail || 'unknown'}`);
+      process.exit(1);
+    }
+    console.log(`restarted ${app} — ${result.last.detail}`);
+    process.exit(0);
+  }
+
+  const r = pm2Run(['restart', app]);
+  if (r.error || r.status !== 0) {
+    console.error(`pm2 restart ${app} failed: ${(r.stderr || r.error?.message || 'unknown').slice(0, 300)}`);
+    process.exit(1);
+  }
+  console.log(`restarted ${app}`);
+  process.exit(0);
 }
 
-module.exports = { checkSupervisorConsistency, readBootLeasePid, readPm2Pid, BOOT_LEASE_PATH };
+module.exports = {
+  checkSupervisorConsistency,
+  readBootLeasePid,
+  readPm2Pid,
+  parseJlist,
+  waitForSupervisorConsistency,
+  restartHydiBoot,
+  BOOT_LEASE_PATH,
+  BOOT_AGENT_APP,
+  ECOSYSTEM,
+  CONSISTENCY_TIMEOUT_MS,
+  CONSISTENCY_POLL_MS,
+};
 
 if (require.main === module) {
   main().catch((e) => {
-    console.error(`pm2-restart failed: ${e.message}`);
+    console.error(`pm2-restart failed: ${e instanceof Error ? e.message : e}`);
     process.exit(1);
   });
 }

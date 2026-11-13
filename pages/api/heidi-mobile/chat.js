@@ -21,8 +21,10 @@ export const config = { api: { bodyParser: { sizeLimit: '32kb' } } };
 
 const MAX_MESSAGE_LENGTH = 4000;
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
-const TOTAL_TIMEOUT_MS = 180 * 1000;
-const IDLE_TIMEOUT_MS = 90 * 1000;
+const TOTAL_TIMEOUT_MS = 45 * 1000;
+// First-byte budget: if HYDI has not started replying in 15s the phone gets
+// a clear "busy" answer instead of an endless spinner.
+const IDLE_TIMEOUT_MS = 15 * 1000;
 const KEEPALIVE_MS = 15 * 1000;
 
 export default async function handler(req, res) {
@@ -70,7 +72,7 @@ export default async function handler(req, res) {
   if (!upstream.ok) {
     clearTimeout(idleTimer);
     if (clientGone) return;
-    if (idleTimedOut) return res.status(504).json({ error: 'timeout', message: 'HYDI did not start replying in time.' });
+    if (idleTimedOut) return res.status(504).json({ error: 'busy', message: 'HYDI is busy right now — try again in a minute.' });
     return sendUpstreamFailure(res, upstream);
   }
 

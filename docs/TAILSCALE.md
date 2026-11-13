@@ -1,5 +1,7 @@
 # Tailscale: reaching the HYDI PC from phone and agents
 
+**Local sync contract:** phone clients use the same `api/mobile-status` and `api/hydi/sync` payloads whether they hit Frank over tailnet or legacy Vercel — see `docs/LOCAL_SYNC_CONTRACT.md`.
+
 Tailnet `tailc50af2.ts.net`. The HYDI PC is `heidi-pc` (Windows 11, canonical
 tree `C:\Users\Owner\HYDI-System-v2`). **Everything here is tailnet-only
 except the walkie backend on :8443** (see the table). **Never enable Tailscale Funnel

@@ -1,0 +1,174 @@
+{
+  "exhaustive": {
+    "nbHits": true,
+    "typo": true
+  },
+  "exhaustiveNbHits": true,
+  "exhaustiveTypo": true,
+  "hits": [
+    {
+      "_tags": [
+        "comment",
+        "author_DanielBulicDev",
+        "story_45438502"
+      ],
+      "author": "DanielBulicDev",
+      "comment_text": "SEEKING WORK | Remote (Europe, USA, Germany, Taiwan)<p>Location: Germany&#x2F;Taiwan<p>Remote: Yes<p>Willing to relocate: No<p>Technologies: Angular, Spring Boot, Next.js, Nest.js, Express.js, HTML, CSS, SCSS, TypeScript, Java, SQL, MongoDB<p>Portfolio:\n<a href=\"https:&#x2F;&#x2F;danielbulic.dev&#x2F;en&#x2F;projects&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;danielbulic.dev&#x2F;en&#x2F;projects&#x2F;</a><p>Resume-CV (english):\n<a href=\"https:&#x2F;&#x2F;drive.google.com&#x2F;file&#x2F;d&#x2F;18PPv5GN893soCy2Pc0fjfWg6H1UgLcxS&#x2F;view\" rel=\"nofollow\">https:&#x2F;&#x2F;drive.google.com&#x2F;file&#x2F;d&#x2F;18PPv5GN893soCy2Pc0fjfWg6H1U...</a><p>Resume-CV (german):\n<a href=\"https:&#x2F;&#x2F;drive.google.com&#x2F;file&#x2F;d&#x2F;1jlj9VKSJ62Av7wsDJeSJ601htAEc0pMR&#x2F;view\" rel=\"nofollow\">https:&#x2F;&#x2F;drive.google.com&#x2F;file&#x2F;d&#x2F;1jlj9VKSJ62Av7wsDJeSJ601htAE...</a><p>Email: info@danielbulic.dev<p>GitHub: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;bulicovic\" rel=\"nofollow\">https:&#x2F;&#x2F;github.com&#x2F;bulicovic</a><p>Hello, I am Daniel, a freelance full-stack software developer and consultant with over 8 years of experience in developing scalable, high-performance web applications and services. I specialize in accessibility in web applications and have developed fully automated tests for this purpose. I have experience in Angular, Spring Boot (Java&#x2F;Kotlin), Node.js, and DevOps practices.<p>My Service includes:<p>- Consulting on accessibility, provide information and guidelines<p><pre><code>    - How developers implement accessibility (with Angular, React.js, Vue.js, Next.js, etc.)\n    - How accessibility is tested automatically from end to end\n    - How this can be integrated into the CI&#x2F;CD pipeline.\n</code></pre>\n- Consulting and development of web applications with Angular.<p>- Consulting and development of REST APIs with Spring Boot.<p>I have delivered complex and innovative solutions in industries such as IoT, energy, financial services, and digital transformation.<p>My expertise includes ensuring code quality through refactoring, applying the test pyramid, and integrating CI&#x2F;CD pipelines. I am passionate about building future-ready technology, with a strong commitment to clean architecture, performance optimization, the continuous adoption of best practices, and staying at the forefront of modern frameworks and technologies.",
+      "created_at": "2025-10-15T07:46:54Z",
+      "created_at_i": 1760514414,
+      "objectID": "45589292",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:53:00Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_ksk385",
+        "story_45438502"
+      ],
+      "author": "ksk385",
+      "children": [
+        45653167,
+        45721441
+      ],
+      "comment_text": "SEEKING WORK Location: Greater New York Area Remote: Yes (US-based) Willing to relocate: No Services - Web development, Data engineering, Cloud sysadmin + DevOps, Software consulting, Tech leadership\nAbout Me: I’m Karan Krishnani, an independent software consultant with over 15 years of experience in full-stack development, cloud architectures, and AI integrations. I’m currently looking for projects as a fractional embedded team member (10–20 hours&#x2F;week). My background includes building scalable solutions for industries like healthcare, government, and financial services.<p>What my last client had to say about my work: Karan is a reliable and results-oriented individual who consistently delivered high-quality work.<p>Technologies:<p>Languages: JavaScript&#x2F;TypeScript, Java, Python, Swift, PHP | Frontend: React&#x2F;Redux, Next.js, Vue, Angular, TailwindCSS | Backend: Node.js&#x2F;Express, Apollo GraphQL, Sequelize | Cloud: AWS, Azure, GCP, Heroku, Netlify | AI&#x2F;ML: Hugging Face, Jupyter, DataBricks, Transformers.js | Observability: AppDynamics, Sentry, DataDog, Grafana | Other Tools: Docker, Terraform, Figma, Git, SST<p>Résumé&#x2F;CV: <a href=\"https:&#x2F;&#x2F;karankrishnani.com&#x2F;resume\" rel=\"nofollow\">https:&#x2F;&#x2F;karankrishnani.com&#x2F;resume</a><p>LinkedIn: <a href=\"https:&#x2F;&#x2F;linkedin.com&#x2F;in&#x2F;karan-krishnani\" rel=\"nofollow\">https:&#x2F;&#x2F;linkedin.com&#x2F;in&#x2F;karan-krishnani</a><p>Email: karan.krishnani at gmail dot com",
+      "created_at": "2025-10-15T00:49:24Z",
+      "created_at_i": 1760489364,
+      "objectID": "45586775",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:52:46Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_xisnextbigthing",
+        "story_45438502"
+      ],
+      "author": "xisnextbigthing",
+      "comment_text": "SEEKING WORK - Istanbul, Turkey &#x2F; REMOTE<p>Hi, I&#x27;m a full-stack developer with 10+ years of experience. I worked on a wide range of projects with clients from mostly English speaking countries. Currently available.<p>I try to work on my clients projects like they&#x27;re my own and strive to do best both technically and business-wise.<p>- MSc in CompSci<p>+ JS (React, Node.js, Vanilla ES5+)<p>+ HTML5 (Offline Apps), CSS (Sass, CSS Modules)<p>+ PHP (Laravel, WordPress, Symfony)<p>+ Python (Flask, Scrapy, wxPython), Conversion Optimization, UX, App Performance, Selenium, RDBMS (PostgreSQL, MySQL), NoSQL, Software Architecture, Docker, DevOps<p>I am also open to interesting and challenging work, involving research and learning.<p>You can see some reviews about my work here:\n<a href=\"https:&#x2F;&#x2F;gasoved.github.io&#x2F;testimonials&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;gasoved.github.io&#x2F;testimonials&#x2F;</a><p>Feel free to drop me an email:\ngasoved [at] gmail",
+      "created_at": "2025-10-14T17:14:23Z",
+      "created_at_i": 1760462063,
+      "objectID": "45582490",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:52:30Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_Gualdrapo",
+        "story_45438502"
+      ],
+      "author": "Gualdrapo",
+      "comment_text": "SEEKING WORK | Remote<p><pre><code>    Location: Bogotá, Colombia\n    Remote: Yes\n    Willing to relocate: No\n    Technologies: HTML, CSS, JavaScript, SVG, TeX&#x2F;ConTeXt, PHP, Jekyll\n    Portfolio: https:&#x2F;&#x2F;miler.codeberg.page&#x2F;\n    Résumé-CV: https:&#x2F;&#x2F;codeberg.org&#x2F;miler&#x2F;curriculum-vitae&#x2F;raw&#x2F;branch&#x2F;main&#x2F;curriculum-en.pdf\n    Email: Please see Portfolio or CV&#x2F;Résumé\n    GitHub: https:&#x2F;&#x2F;github.com&#x2F;acidrums4&#x2F;\n</code></pre>\nProfessional graphic designer with experience in both frontend and backend (PHP; Wordpress, Framer, some Joomla and some Typo3), iconography, editorial design&#x2F;typesetting with ConTeXt and general graphic design. Please feel free to check my portfolio for some examples of my work.",
+      "created_at": "2025-10-14T13:08:46Z",
+      "created_at_i": 1760447326,
+      "objectID": "45579587",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:52:19Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_SaaSDesigner",
+        "story_45438502"
+      ],
+      "author": "SaaSDesigner",
+      "comment_text": "SEEKING WORK | REMOTE | WORLDWIDE<p>I’m Brendan, a dedicated SaaS Product &amp; UX Designer (B.A. Interaction Design from Canada). For 9+ years, I’ve delivered high-converting UI&#x2F;UX designs for ambitious startups and founders across web and mobile applications.<p>---<p>My design partnership includes:<p>• SaaS UX&#x2F;UI Optimization for Results - Stop using clunky interfaces that repel high-value users. I&#x27;ll design sleek, modern SaaS apps, dashboards, and mobile experiences engineered to increase user engagement and drive retention. We’ll focus on tangible metrics and results.<p>• Continuous Design-to-Development Handoffs - Eliminate development bottlenecks and wasted engineering time. I&#x27;ll provide continuous, development-ready designs with custom workflows, helping you achieve smooth, fast handoffs. This allows your team to focus on core business growth and deliver iterative improvements rapidly.<p>• Interactive, Clickable Prototypes - Avoid expensive rework and delays. I&#x27;ll help you validate core concepts by testing ideas early with high-fidelity, clickable prototypes. We&#x27;ll use these to gather crucial user feedback and validate user flows in order to save time, resources, and reduce product risk.<p>• Scalable Design Systems - Stop wasting developer time on repetitive tasks. I&#x27;ll help establish a single source of truth that will enable brand consistency and dramatically reduces future design &amp; development debt.<p>• Skills: Figma, Design Systems, SaaS Design, Dashboard Design, User Experience, User Interface, UX Design, UI Design, Product Design, UI Designer<p>---<p>• Retainer, ongoing UI &#x2F; UX design arrangements available.<p>• Portfolio: <a href=\"https:&#x2F;&#x2F;SaaSDesigner.com\" rel=\"nofollow\">https:&#x2F;&#x2F;SaaSDesigner.com</a><p>• Location: Toronto, Canada (GMT-4)<p>• Email: brendan@saasdesigner.com",
+      "created_at": "2025-10-14T11:23:15Z",
+      "created_at_i": 1760440995,
+      "objectID": "45578674",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:52:14Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_oschvr",
+        "story_45438502"
+      ],
+      "author": "oschvr",
+      "comment_text": "SEEKING WORK | REMOTE | EUROPE<p>I’m a cloud infrastructure and DevOps specialist who helps startups and scale-ups build reliable, cost-effective systems. I bring deep expertise in architecting and managing mission-critical infrastructure that served hundreds of thousands to millions of users. I’ve been working in the fintech space for the last 6y<p>- Cloud Platforms: AWS (Solutions Architect Profesional), GCP (Professional Cloud Architect), Oracle Cloud\n- Kubernetes &amp; Containers: (Certified Kubernetes Administrator), Helm, Docker, GKE\n- Infrastructure-as-Code: Terraform, GitOps with ArgoCD\n- Databases: MongoDB, PostgreSQL, Redis, Elasticsearch, Firebase\n- Development: Python (FastAPI), React Native, React\n- Security: PKI&#x2F;mTLS, SIEM&#x2F;XDR, ISO 27001 compliance\n- Monitoring: Prometheus, Grafana, Kibana<p>I’m looking (preferably) for short to mid term contracts (3-12 months)<p>I speak English, Spanish and French<p>Hit me up hey@oschvr.com",
+      "created_at": "2025-10-13T21:32:55Z",
+      "created_at_i": 1760391175,
+      "objectID": "45573566",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:51:55Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_george87",
+        "story_45438502"
+      ],
+      "author": "george87",
+      "comment_text": "SEEKING WORK | EUROPE | REMOTE<p>Multifaceted software engineer with 15 years of experience in tech, specializing in bespoke software development.<p>I design, develop, and deliver complete solutions, from engaging user-facing apps and visualizations to robust backend systems and efficient data pipelines.<p>Reach out to me at geotanjazz@gmail.com or via www.linkedin.com&#x2F;in&#x2F;georgetanev.",
+      "created_at": "2025-10-13T21:13:13Z",
+      "created_at_i": 1760389993,
+      "objectID": "45573386",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:51:55Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_IvanLudvig",
+        "story_45438502"
+      ],
+      "author": "IvanLudvig",
+      "comment_text": "SEEKING WORK | Italy&#x2F;EU | Remote<p>I have 5+ years of professional experience in full-stack web development. I&#x27;m especially passionate about data visualizations and web3.<p>Tech: TypeScript&#x2F;JavaScript, React, Next.js, Node, WebGPU<p>Some of my work: <a href=\"https:&#x2F;&#x2F;ivanludvig.github.io&#x2F;work&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;ivanludvig.github.io&#x2F;work&#x2F;</a><p>GitHub: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;IvanLudvig\" rel=\"nofollow\">https:&#x2F;&#x2F;github.com&#x2F;IvanLudvig</a><p>My rate is $36&#x2F;hour or fixed per project<p>Email in profile",
+      "created_at": "2025-10-13T17:44:07Z",
+      "created_at_i": 1760377447,
+      "objectID": "45571219",
+      "parent_id": 45438502,
+      "story_id": 45438502,
+      "story_title": "Ask HN: Freelancer? Seeking freelancer? (October 2025)",
+      "updated_at": "2026-03-05T22:51:48Z"
+    }
+  ],
+  "hitsPerPage": 500,
+  "nbHits": 8,
+  "nbPages": 1,
+  "page": 0,
+  "params": "tags=comment%2Cstory_45438502&hitsPerPage=500&advancedSyntax=true&analyticsTags=backend",
+  "processingTimeMS": 42,
+  "processingTimingsMS": {
+    "_request": {
+      "queue": 3,
+      "roundTrip": 13
+    },
+    "afterFetch": {
+      "format": {
+        "highlighting": 11,
+        "total": 13
+      },
+      "merge": {
+        "mergeLoop": {
+          "prepareNextHit": 39,
+          "total": 39
+        },
+        "total": 40
+      },
+      "total": 40
+    },
+    "fetch": {
+      "total": 1
+    },
+    "total": 43
+  },
+  "query": "",
+  "serverTimeMS": 60
+}

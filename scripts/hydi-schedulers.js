@@ -34,6 +34,7 @@ const JOBS = [
   { name: 'hydi-protoforge-scout',       script: 'scripts/protoforge-opportunity-scheduler.js', intervalMs: envMs('PROTOFORGE_SCOUT_INTERVAL_MS', 86400000), timeoutMs: envMs('PROTOFORGE_SCOUT_TIMEOUT_MS', 60000) },
   { name: 'hydi-stuck-job-scheduler',    script: 'scripts/stuck-job-scheduler.js',              intervalMs: envMs('STUCK_JOB_INTERVAL_MS', 3600000),  timeoutMs: envMs('STUCK_JOB_TIMEOUT_MS', 120000) },
   { name: 'hydi-revenue-reconciliation', script: 'scripts/revenue-reconciliation-scheduler.js', intervalMs: envMs('RECONCILIATION_INTERVAL_MS', 86400000), timeoutMs: envMs('RECONCILIATION_TIMEOUT_MS', 180000) },
+  { name: 'heidi-job-scout',             script: 'scripts/job-scout.js',                        intervalMs: envMs('JOB_SCOUT_INTERVAL_MS', 10800000), timeoutMs: envMs('JOB_SCOUT_TIMEOUT_MS', 240000) },
   { name: 'hydi-failed-webhook-retry',   script: 'scripts/failed-webhook-scheduler.js',         intervalMs: envMs('WEBHOOK_RETRY_INTERVAL_MS', 1800000), timeoutMs: envMs('WEBHOOK_RETRY_TIMEOUT_MS', 120000) },
   // revenue-autopilot-tick is a loop too (isDirectRun → run loop, no --once
   // CLI) — it stays its own PM2 app like stripe-webhook-listener.

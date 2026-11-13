@@ -23,7 +23,10 @@ function isOpsQuery(input) {
 }
 
 function parseOpsCommand(input) {
-  const m = String(input || '').trim().match(/^ops\s*(\w+)?\s*(.*)$/i);
+  // Bounded, unambiguous tokenization: cap length and use explicit single
+  // separators so no input can trigger polynomial backtracking.
+  const s = String(input || '').trim().slice(0, 200);
+  const m = s.match(/^ops(?:\s+([a-z]+))?(?:\s+([\s\S]+))?$/i);
   if (!m) return null;
   return { cmd: (m[1] || 'status').toLowerCase(), arg: (m[2] || '').trim() };
 }
@@ -74,6 +77,13 @@ async function runOpsCommand(agent, cmd) {
     case 'resume': {
       await agent.store.setControl('paused', '0', 'operator');
       return 'ops agent resumed';
+    }
+    case 'mode': {
+      if (!cmd.arg || !['observe', 'approval_required'].includes(cmd.arg)) {
+        return `usage: ops mode <observe|approval_required> (current: ${(await agent.store.getControl('mode')) || agent.mode})`;
+      }
+      await agent.store.setControl('mode', cmd.arg, 'operator');
+      return `ops agent mode = ${cmd.arg}`;
     }
     case 'runbooks':
       return RUNBOOK_TEXT;

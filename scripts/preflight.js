@@ -317,7 +317,7 @@ async function checkDocker() {
 
 function checkDockerDaemon() {
   return new Promise((resolve) => {
-    exec('docker info --format "{{.ServerVersion}}"', { timeout: 8000 }, (err, stdout) => {
+    exec('docker info --format "{{.ServerVersion}}"', { timeout: 5000 }, (err, stdout) => {
       resolve(!err && stdout.trim().length > 0);
     });
   });
