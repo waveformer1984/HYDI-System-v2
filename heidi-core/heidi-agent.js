@@ -623,7 +623,15 @@ class HeidiAgent {
           .update({ status: 'approved_by_user', approved_at: new Date().toISOString() })
           .eq('id', taskId);
 
-        const execResult = await this.executeTask(task, { verdict: 'AUTO-APPROVE', reason: 'User approved' });
+        // authorizeHumanApproval already enforced exec flag + pause +
+        // registry; a human approval through the advisory API is itself the
+        // authorization, so the decision carries outcome 'authorized'.
+        const execResult = await this.executeTask(task, {
+          verdict: 'AUTO-APPROVE',
+          execEnabled: true,
+          outcome: 'authorized',
+          reason: 'User approved',
+        });
         return { success: execResult.success, executed: execResult.executed, action: 'approved' };
       } else {
         // Reject the task

@@ -28,6 +28,8 @@
  */
 
 import { Pool, QueryResultRow } from 'pg';
+import * as fs from 'fs';
+import * as path from 'path';
 import { devPatchEnabled, revenueAdvanceEnabled, shouldAutoApplyPatch, GATE_DEV_PATCH_DISABLED, GATE_REVENUE_ADVANCE_DISABLED } from './executor-env-gates';
 import { HeidiIdentityModel, HeidiIdentity, AutonomyLevel } from './HeidiIdentity';
 import { GoalSystem, Goal, GoalStatus } from './GoalSystem';
@@ -4104,8 +4106,6 @@ export class CognitiveCore {
     recent: Array<Record<string, unknown>>;
   } | null {
     try {
-      const fs = require('fs') as typeof import('fs');
-      const path = require('path') as typeof import('path');
       const p = process.env.HEIDI_GATE_LOG_PATH
         || path.join(process.cwd(), '.runtime', 'heidi-gate-log.json');
       const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
