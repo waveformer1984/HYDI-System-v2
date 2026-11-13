@@ -59,9 +59,21 @@ Log 'running pm2 resurrect'
 $ping = & pm2 ping 2>&1 | Out-String
 Log ("pm2 ping: " + $ping.Trim())
 
-# 6. Brief app census (names + status only; jlist can be slow on this host).
+# 6. Brief app census (names + status only; jlist can be slow on this host —
+#    it shells out to WMI per app, so allow up to ~60s across two attempts).
+$census = $null
+foreach ($attempt in 1..2) {
+  try {
+    $job = Start-Job -ScriptBlock { & pm2 jlist 2>$null }
+    if (Wait-Job $job -Timeout 45) { $census = Receive-Job $job }
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    if ($census) { break }
+  } catch { }
+  Log "app census attempt $attempt produced nothing, retrying"
+  Start-Sleep -Seconds 10
+}
 try {
-  $apps = & pm2 jlist 2>$null | ConvertFrom-Json
+  $apps = $census | ConvertFrom-Json
   $online = @($apps | Where-Object { $_.pm2_env.status -eq 'online' }).Count
   $total = @($apps).Count
   Log ("apps: $online/$total online")
