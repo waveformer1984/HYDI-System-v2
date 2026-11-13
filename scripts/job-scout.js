@@ -12,9 +12,26 @@
  */
 
 const { runScout } = require('../lib/job-scout/scout');
+const { createNotification } = require('../lib/notifications/notify');
+
+function createSupabase() {
+  const url = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return null;
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(url, key);
+}
+
+// Strong-lead alerts ride lib/notifications/notify.js → notifications table
+// (+ best-effort web push). No Supabase key → no notifications, scan still runs.
+function buildNotifyFn() {
+  const supabase = createSupabase();
+  if (!supabase) return null;
+  return (input) => createNotification(supabase, input);
+}
 
 async function main() {
-  const summary = await runScout();
+  const summary = await runScout({ notifyFn: buildNotifyFn() });
   const parts = Object.entries(summary.sources).map(([k, v]) => `${k}=${v.ok ? v.count : `ERR(${v.error})`}`);
   console.log(`[job-scout] fetched=${summary.fetched} kept=${summary.kept} new=${summary.newLeads} strong=${summary.newStrong} ${parts.join(' ')}`);
   process.exit(summary.ok ? 0 : 1);

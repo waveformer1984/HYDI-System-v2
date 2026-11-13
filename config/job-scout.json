@@ -2,6 +2,10 @@
   "_comment": "Heidi job scout — which boards to read, what to search for, and how to rank leads against ProtoForge divisions. Starter profile: edit keywords, rates and divisions to match what you actually want to take on. Heidi only reads and drafts; it never applies.",
   "minScore": 35,
   "draftScore": 60,
+  "notifyScore": 75,
+  "notify": {
+    "quietHours": { "start": "22:00", "end": "07:00", "timezone": "America/Chicago" }
+  },
   "maxLeads": 400,
   "retentionDays": 30,
   "sources": {
