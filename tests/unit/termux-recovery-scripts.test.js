@@ -10,6 +10,7 @@ describe('Termux recovery scripts', () => {
     'termux/hydi-storage-audit.sh',
     'termux/hydi-storage-recover.sh',
     'termux/hydi-recovery.sh',
+    'termux/phone-audit-phase0.sh',
   ];
 
   for (const rel of scripts) {
@@ -26,6 +27,14 @@ describe('Termux recovery scripts', () => {
     expect(body).toMatch(/\.ollama/);
     expect(body).toMatch(/heidi_memory\.db/);
     expect(body).toMatch(/--dry-run/);
+  });
+
+  it('phone-audit-phase0 avoids heredocs and covers Phase 0 ports', () => {
+    const body = fs.readFileSync(path.join(ROOT, 'termux/phone-audit-phase0.sh'), 'utf8');
+    expect(body).not.toMatch(/<<-?\s*['"]?EOF/);
+    expect(body).toMatch(/8080/);
+    expect(body).toMatch(/settings_enable_monitor_phantom_procs/);
+    expect(body).toMatch(/FRANK_IP/);
   });
 
   it('hydi-doctor probes api/health on listening ports', () => {

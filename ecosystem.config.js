@@ -652,8 +652,18 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       args: '',
-      env: { NODE_ENV: 'development' },
-      env_production: { NODE_ENV: 'production' },
+      env: {
+        NODE_ENV: 'development',
+        HEIDI_ALLOW_EXEC: 'false',
+        HEIDI_BIND_HOST: '127.0.0.1',
+        HEIDI_ADVISORY_ALLOWED_ORIGINS: 'http://127.0.0.1:3100',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        HEIDI_ALLOW_EXEC: 'false',
+        HEIDI_BIND_HOST: '127.0.0.1',
+        HEIDI_ADVISORY_ALLOWED_ORIGINS: 'http://127.0.0.1:3100',
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M',
@@ -809,6 +819,27 @@ module.exports = {
       // Long-lived 60s loop: guarantees a fresh observatory sample, writes
       // the combined snapshot to .runtime/observation/frank.json, and posts
       // #alerts when a critical issue holds for two passes. Read-only.
+      name: 'proto-yi',
+      script: 'src/index.js',
+      cwd: 'protoforge-applications/proto-yi',
+      instances: 1,
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production', PORT: '3010' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: '../../logs/pm2-proto-yi.err.log',
+      out_file: '../../logs/pm2-proto-yi.out.log',
+      merge_logs: true,
+      time: true,
+      kill_timeout: 5000
+    },
+    {
       name: 'ursula-local',
       script: 'node_modules/next/dist/bin/next',
       args: 'start --hostname 127.0.0.1 --port 3100',

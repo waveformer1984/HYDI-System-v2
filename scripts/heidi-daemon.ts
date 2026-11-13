@@ -104,9 +104,10 @@ async function probePersistence(): Promise<PersistenceTruth> {
 
 let processProvenance: Record<string, unknown> | null = null;
 
-function writeStatusSnapshot(status: LoopStatus): void {
+function writeStatusSnapshot(status: LoopStatus, core?: CognitiveCore): void {
   writeDaemonStatus(STATUS_ROOT, {
     pid: process.pid,
+    spine: core?.getSpineStatus?.() ?? null,
     state: status.state,
     cycleCount: status.cycleCount,
     lastCycleAt: status.lastCycleAt,
@@ -888,7 +889,7 @@ async function main(): Promise<void> {
       })
       .catch(() => { /* probe is fail-soft; keep last known truth */ })
       .finally(() => {
-        writeStatusSnapshot(core.getLoopStatus());
+        writeStatusSnapshot(core.getLoopStatus(), core);
         statusProbeInFlight = false;
       });
   }, 30000);
@@ -896,7 +897,7 @@ async function main(): Promise<void> {
   // 9. Wait for shutdown
   console.log('[daemon] Daemon is running. Press Ctrl+C to stop.');
   console.log('');
-  writeStatusSnapshot(core.getLoopStatus());
+  writeStatusSnapshot(core.getLoopStatus(), core);
 
   // Keep the process alive
   await new Promise<void>((resolve) => {

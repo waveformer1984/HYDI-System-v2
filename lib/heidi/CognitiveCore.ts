@@ -27,6 +27,8 @@
  *   AUTONOMY POLICY → AUTHORIZATION → EXECUTION → VERIFICATION → AUDIT
  */
 
+import * as nodeFs from 'fs';
+import * as nodePath from 'path';
 import { Pool, QueryResultRow } from 'pg';
 import { devPatchEnabled, revenueAdvanceEnabled, shouldAutoApplyPatch, GATE_DEV_PATCH_DISABLED, GATE_REVENUE_ADVANCE_DISABLED } from './executor-env-gates';
 import { HeidiIdentityModel, HeidiIdentity, AutonomyLevel } from './HeidiIdentity';
@@ -483,6 +485,19 @@ export class CognitiveCore {
   private inFlightWork: Promise<CognitiveState> | null = null; // the cycle promise that owns cycleInFlight
   private startedAt: number | null = null;
   private runtimeCommit: string | null | undefined; // undefined = not yet resolved
+
+  // ─── Phase-1 spine (perceive→record→reflect) ─────────────────────────
+  private snapshotCount = 0;
+  private lastSnapshotAt: string | null = null;
+  private lastReflectionAt = 0;      // epoch ms of last completed reflection
+  private lastReflectionId: string | null = null;
+  private reflectionInFlight = false;
+  // Silent-degradation metrics: a timed-out cycle never reaches RECORD, so
+  // it writes no snapshot and triggers no reflection. Track the timestamps
+  // so the spine status can show total + last-hour timeouts and the gap
+  // between cycles run and snapshots written.
+  private cycleTimeouts: number[] = [];
+  private reflectionCount = 0;
 
   constructor(config?: DBConfig, bridge?: ExecutionBridge, opts?: { missionProducer?: MissionProducer | null }) {
     this.pool = new Pool({
@@ -2728,6 +2743,12 @@ export class CognitiveCore {
       // recorded durationMs: 0.
       state.durationMs = Date.now() - startTime;
       await this.recordCycle(state);
+      // Phase-1 spine: every completed cycle also lands in
+      // heidi_state_snapshots (perceive→record) and may trigger a bounded
+      // local-model reflection into heidi_reflections. Both best-effort —
+      // a spine failure must never fail the cycle.
+      await this.recordSnapshot(state);
+      this.maybeReflect(state);
     } catch (e) {
       errors.push(`record: ${e instanceof Error ? e.message : 'unknown'}`);
     }
@@ -3813,6 +3834,8 @@ export class CognitiveCore {
    */
   private async recordTimeoutHeartbeat(): Promise<void> {
     if (!this.pool) return;
+    this.cycleTimeouts.push(Date.now());
+    if (this.cycleTimeouts.length > 500) this.cycleTimeouts.splice(0, this.cycleTimeouts.length - 500);
     const write = this.pool.query(
       `INSERT INTO heidi_events (event_type, payload, created_at)
        VALUES ($1, $2, now())`,
@@ -3900,6 +3923,212 @@ export class CognitiveCore {
       );
     } catch {
       // heidi_events may have different schema — don't fail the cycle
+    }
+  }
+
+  // ─── Phase-1 spine: snapshot + reflect ────────────────────────────────
+
+  /** Compact perceive→record row: one heidi_state_snapshots insert per cycle. */
+  private async recordSnapshot(state: CognitiveState): Promise<void> {
+    if (!this.pool) return;
+    const payload = {
+      runtimeIdentity: this.runtimeIdentity(),
+      cycleId: state.cycleId,
+      phase: state.phase,
+      systemHealth: state.perception?.systemHealth ?? 'unknown',
+      components: (state.perception?.components ?? []).map((c) => ({
+        name: c.name, status: c.status, confidence: c.confidence,
+      })),
+      activeGoals: state.activeGoals.length,
+      pendingWork: state.pendingWork.length,
+      selectedCapability: state.selectedAction?.capabilityId ?? null,
+      authorized: state.authorizationResult?.authorized ?? null,
+      executed: state.executionResult?.executed ?? null,
+      outcome: state.executionResult?.outcome ?? null,
+      verified: state.verificationResult?.verified ?? null,
+      outcomeClassification: state.learningResult?.outcomeClassification ?? null,
+      errors: state.errors,
+      durationMs: state.durationMs,
+    };
+    const write = this.pool.query(
+      `INSERT INTO heidi_state_snapshots (cycle_id, source, payload, captured_at)
+       VALUES ($1, $2, $3, now())`,
+      [state.cycleId, 'cognitive-loop', JSON.stringify(payload)],
+    );
+    await Promise.race([
+      write,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('snapshot write timeout')), 5000)),
+    ]);
+    this.snapshotCount += 1;
+    this.lastSnapshotAt = new Date().toISOString();
+  }
+
+  /**
+   * Reflect on a timer, not a parallel loop: fires at most once per
+   * HEIDI_REFLECT_INTERVAL_MS (default 15 min) and never overlaps itself.
+   * Detached — the 3B model can take tens of seconds on this host and must
+   * not eat the 30s cycle budget.
+   */
+  private maybeReflect(state: CognitiveState): void {
+    const intervalMs = parseInt(process.env.HEIDI_REFLECT_INTERVAL_MS || '900000', 10);
+    if (this.reflectionInFlight) return;
+    if (Date.now() - this.lastReflectionAt < intervalMs) return;
+    this.reflectionInFlight = true;
+    this.reflectOnce(state)
+      .catch((e) => {
+        // Reflection failure is evidence, not a cycle failure.
+        console.warn(`[spine] reflect failed: ${e instanceof Error ? e.message : 'unknown'}`);
+      })
+      .finally(() => { this.reflectionInFlight = false; });
+  }
+
+  /** Local-only reflection: qwen2.5:3b over recent cycle evidence → heidi_reflections. */
+  private async reflectOnce(state: CognitiveState): Promise<void> {
+    if (!this.pool) return;
+    const model = process.env.HEIDI_REFLECT_MODEL || 'qwen2.5:3b';
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+
+    // Evidence: last 5 snapshots + this cycle's outcome — bounded read.
+    const recentRows = await this.pool.query<QueryResultRow>(
+      `SELECT payload, captured_at FROM heidi_state_snapshots
+       ORDER BY captured_at DESC LIMIT 5`,
+    ).then((r) => r.rows).catch(() => [] as QueryResultRow[]);
+    const evidence = recentRows.map((r) => {
+      const p = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
+      return {
+        at: r.captured_at,
+        health: p?.systemHealth,
+        capability: p?.selectedCapability,
+        outcome: p?.outcome,
+        errors: Array.isArray(p?.errors) ? p.errors.slice(0, 3) : [],
+      };
+    });
+
+    const prompt = [
+      'You are Heidi, a local-first operations mind on a Windows workstation named Frank.',
+      'Given these recent system cycle observations, write ONE short reflection (2-4 sentences)',
+      'about system health, recurring errors, and what deserves attention. Plain text, no preamble.',
+      '',
+      JSON.stringify({ now: new Date().toISOString(), current: { health: state.perception?.systemHealth, capability: state.selectedAction?.capabilityId, outcome: state.executionResult?.outcome }, recent: evidence }),
+    ].join('\n');
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 120000);
+    let text = '';
+    try {
+      const res = await fetch(`${ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt,
+          stream: false,
+          options: { num_predict: 220, temperature: 0.4 },
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`ollama ${res.status}`);
+      const data = await res.json() as { response?: string };
+      text = (data.response || '').trim();
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!text) throw new Error('empty reflection');
+
+    const confMatch = text.match(/confidence[:\s]+(0\.\d+|1\.0?)/i);
+    const confidence = confMatch ? Math.min(1, Math.max(0, parseFloat(confMatch[1]))) : 0.5;
+    const theme = text.split(/[.\n]/)[0].slice(0, 120) || 'spine reflection';
+
+    const ins = await this.pool.query<QueryResultRow>(
+      `INSERT INTO heidi_reflections
+         (task_id, theme, confidence, was_correct, evaluations, timestamp, cycle)
+       VALUES ($1, $2, $3, $4, $5, now(), $6)
+       RETURNING id`,
+      [
+        'heidi-spine',
+        theme,
+        confidence,
+        false,
+        JSON.stringify({
+          kind: 'llm_reflection',
+          model,
+          text,
+          cycleId: state.cycleId,
+          evidenceCount: evidence.length,
+        }),
+        this.cycleCount,
+      ],
+    );
+    this.lastReflectionAt = Date.now();
+    this.lastReflectionId = ins.rows?.[0]?.id ? String(ins.rows[0].id) : null;
+    this.reflectionCount += 1;
+  }
+
+  /** Spine status for /status surfaces — counts + last write timestamps. */
+  getSpineStatus(): {
+    snapshots: number; lastSnapshotAt: string | null;
+    lastReflectionAt: number; lastReflectionId: string | null;
+    reflectionModel: string; reflectIntervalMs: number;
+    reflections: number;
+    cycleTimeouts: { total: number; lastHour: number; skippedSnapshots: number; skippedReflections: number };
+    gateLog: { total: number; lastHour: number; byOutcome: Record<string, number>; recent: Array<Record<string, unknown>> } | null;
+  } {
+    const hourAgo = Date.now() - 3600_000;
+    const lastHour = this.cycleTimeouts.filter((t) => t > hourAgo).length;
+    return {
+      snapshots: this.snapshotCount,
+      lastSnapshotAt: this.lastSnapshotAt,
+      lastReflectionAt: this.lastReflectionAt,
+      lastReflectionId: this.lastReflectionId,
+      reflectionModel: process.env.HEIDI_REFLECT_MODEL || 'qwen2.5:3b',
+      reflectIntervalMs: parseInt(process.env.HEIDI_REFLECT_INTERVAL_MS || '900000', 10),
+      reflections: this.reflectionCount,
+      cycleTimeouts: {
+        total: this.cycleTimeouts.length,
+        lastHour,
+        // Every timed-out cycle skips both spine writes; snapshots/reflections
+        // can also be skipped by in-flight guards, so this is a floor, not exact.
+        skippedSnapshots: this.cycleTimeouts.length,
+        skippedReflections: this.cycleTimeouts.length,
+      },
+      gateLog: CognitiveCore.readGateLog(),
+    };
+  }
+
+  /**
+   * Recent contract-layer gate decisions, written by
+   * lib/governance/action-advisor.js to .runtime/heidi-gate-log.json.
+   * Read synchronously and fail-soft — a missing/corrupt log is null,
+   * never a status-surface failure.
+   */
+  private static readGateLog(): {
+    total: number; lastHour: number; byOutcome: Record<string, number>;
+    recent: Array<Record<string, unknown>>;
+  } | null {
+    try {
+      const p = process.env.HEIDI_GATE_LOG_PATH
+        || nodePath.join(process.cwd(), '.runtime', 'heidi-gate-log.json');
+      const parsed = JSON.parse(nodeFs.readFileSync(p, 'utf8'));
+      const entries: Array<Record<string, unknown>> = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.entries) ? parsed.entries : [];
+      const hourAgo = Date.now() - 3600_000;
+      const byOutcome: Record<string, number> = {};
+      let lastHourCount = 0;
+      for (const e of entries) {
+        const outcome = String(e?.outcome || 'unknown');
+        byOutcome[outcome] = (byOutcome[outcome] || 0) + 1;
+        const at = Date.parse(String(e?.at || ''));
+        if (Number.isFinite(at) && at > hourAgo) lastHourCount += 1;
+      }
+      return {
+        total: entries.length,
+        lastHour: lastHourCount,
+        byOutcome,
+        recent: entries.slice(-10).reverse(),
+      };
+    } catch {
+      return null;
     }
   }
 

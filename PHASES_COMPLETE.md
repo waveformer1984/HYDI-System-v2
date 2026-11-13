@@ -301,3 +301,117 @@ bec7465 Fix: Use correct Supabase URL from environment
 Heidi is now a fully autonomous orchestrator with procedural memory, persistent operation, and memory-grounded decision making. All four reliability phases deployed to main.
 
 **Next checkpoint:** Phase 5 autonomous routing refinement (TBD).
+
+---
+
+## Phase 0 — Ground Truth Audit (2026-11-07, branch `docs/phase-0-ground-truth`)
+
+**Shipped:**
+- `docs/ARCHITECTURE.md` — verified topology (PM2 fleet, boot-agent children, external services), per-service tables, authoritative data stores.
+- `docs/PORTS.md` — generated from `.ports.json` via new `scripts/gen-ports-doc.js`.
+- `.ports.json` — corrected stale `supabase-rest` entry (was :3001, which belongs to rezonate-app; PostgREST is served via Kong on :54321).
+- `docs/DISCREPANCIES.md` — every owner-note vs verified-reality conflict (PM2 app names, port assignments, Supabase row counts, Vercel codebase location, Termux claims).
+- `scripts/frank/inventory.ps1` — read-only sprawl inventory (git state per folder, PM2 jlist, port listeners, PM2 error tails) → `inventory.json` + summary.
+
+**Verified live:** PM2 26 apps (25 online, `heidi-mobile-chat` waiting restart — missing `HEIDI_MOBILE_TOKEN`, Jordan decision); ports 3000/3001/3005/3100/3459/11434/54321 listening; local Supabase `heidi_events`=262,987 rows, `hydi_facts`=43, `heidi_decision_bounds`=1, `hydi_tasks`/`agent_bus`/`heidi_reflections` empty, `heidi_state_snapshots`/`divisions` absent.
+
+**Open:** Jordan runs `inventory.ps1` on Frank and pastes output; `config/ports.json` vs existing `.ports.json` naming decision (recommend keeping `.ports.json`); `claude/local-mobile-chat-app-c3UBW` branch not found — recheck Phase 1.
+
+---
+
+## Phase 3 — Heidi Bridge Proven Alive (2026-11-07, branch `feat/phase-3-heidi-bridge-alive`)
+
+**Shipped:**
+- `lib/store/` data-layer adapter: `SupabaseStore` (wraps supabase-js), `PostgresStore` (loud Phase-6 stub), `NullStore` (local-only). Selection via `HYDI_STORE`/`SUPABASE_*`/`HYDI_PG_URL`. `insertEvent()` never throws — audit can't break callers.
+- `heidi-core/server.js`: writes a `heidi_events` `boot` row on startup (version, host, pid, port) through the adapter; `/health` now returns `service`/`version`/`uptime_s`/`deps.store` per the Phase 2 contract.
+- `sqlite-store.js`: lazy `ensureReady()` on run/get/all (OpsStore.ensure runs in the HeidiCore constructor before `initialize()`); memoized `initialize()`; `_inCreateTables` guard prevents self-deadlock.
+- `ops-store.js`: degraded-mode catch — memory-only mode can no longer crash boot.
+- `tests/unit/store-adapter.test.js` — 8 tests.
+
+**Verified:**
+- Branch heidi-core booted on :3465 → `heidi_events` row `1d966aa1-a8ea-4515-a7c0-5b1708d811dc` (`event_type=boot`) — first real boot evidence row.
+- `/health` → `{"status":"healthy","deps":{"store":{"status":"ok"}}}`.
+- Jest: `heidi-persistent-memory` (28), `chat-tools-terminal` (7), `heidi-task-routes` (2), `store-adapter` (8) — all green. These suites previously failed with `null.run` and init timeouts.
+
+**Open:** heidi-agent.js still uses supabase-js directly (migration to lib/store is incremental debt); `version` reports `dev` until `BUILD_SHA` is set for heidi-core; boot event fires per `initialize()` call (tests included) — acceptable volume.
+
+---
+
+## Phase 4 — Persistent Governed Agent (2026-11-07, branch `feat/phase-4-governance`)
+
+**Shipped:**
+- `lib/governance/tripleGate.js` — pure, total verdict function. Gate order: exec flag → bounds loaded (numeric threshold required) → action registered → pause → sensitive division → confidence/bounds. `safeEvaluateTripleGate` converts any fault to REVIEW — AUTO-APPROVE can never come from an error.
+- `lib/governance/action-registry.js` — registered action types with risk level + bounds key; unregistered types are BLOCKED before execution.
+- `heidi-core/heidi-agent.js` — `makeDecision` now delegates to the triple gate (was inline logic); added `isPaused()` kill switch (env `HEIDI_PAUSE` + forward-compatible `paused` flag on `heidi_decision_bounds`); `processTaskCycle` is observe-only while paused.
+- Verified pre-existing: lease claim/renewal in heidi-agent, generation-fenced ops leases + `ops_control.paused` in ops-agent (ops-commands pause/resume), mission awaiting_approval lifecycle, hourly reflection cycle.
+
+**Verified:** `tests/unit/triple-gate.test.js` — 20 tests covering every gate combination, gate ordering, deny-on-error, registry integrity. All pass.
+
+**Open:** DB-level pause flag for the agent_bus path needs a `paused` column migration (env works today); approval-queue UI is Phase 8 (Ursula); `HEIDI_ALLOW_EXEC` remains unset/false in production — zero actions execute.
+
+---
+
+## Phase 5 — Memory Layer + Divisions (2026-11-07, branch `feat/phase-5-memory-divisions`)
+
+**Shipped:**
+- `supabase/migrations/20261107000000_divisions.sql` — first-class `divisions` table (slug UNIQUE, status CHECK, RLS service_role-only, updated_at trigger). Applied to local Supabase.
+- `tests/migrations/20261107000000_divisions.test.js` — 3 tests.
+- `scripts/seed-divisions.js` — idempotent two-step seed (insert missing slugs, refresh names only; never clobbers status/notes). `--dry-run` supported.
+
+**Verified live (local Supabase :54321):**
+- Migration applied via `pg` client; PostgREST schema reload sent.
+- `node scripts/seed-divisions.js` → 10 rows inserted; second run → `inserted 0, kept 10 unchanged` (idempotent).
+- All 10 divisions present: appforge … protoforge-manufacturing, all `[seeded]` with `TODO(owner)` notes.
+- `retrieve_similar_facts` RPC exists and responds (pgvector live).
+
+**Open / discrepancy:**
+- `hydi_facts.embedding` is `vector(1536)` with 43/43 rows populated, but local `nomic-embed-text` emits **768 dims** — `retrieve_similar_facts` fails `different vector dimensions 1536 and 768`. Options for Jordan: (a) pull a 1536-dim Ollama embedding model (e.g. gte-qwen2 ~1.1 GB, $0), or (b) approve re-embedding all 43 facts into a new 768-dim column. Recorded in DISCREPANCIES via this entry; decision needed before `scripts/backfill-embeddings` can run.
+- Embedding backfill job + retrieval-into-planning-prompt wiring deferred pending the dimension decision.
+
+---
+
+## Phase 2 — One Orchestrator, Zero Port Conflicts (2026-11-07, branch `chore/phase-2-pm2-orchestration`)
+
+**Shipped:**
+- `start-heidi-everything.ps1` rewritten as a thin PM2 wrapper (preflight → `pm2 resurrect` → `pm2 start ecosystem.config.js` → port probes → summary). It no longer spawns services directly — PM2 is the only process manager.
+- `scripts/frank/port-doctor.ps1` — registry port → PID/process map; `-Fix` stops only HYDI-recognized occupants, confirmed per port.
+- `scripts/check-port-registry.js` — cross-checks ports declared in `ecosystem.config.js`/`boot.config.json` against `.ports.json`; immediately caught the stale `supabase-rest:3001` entry (fixed in PR #518).
+- `GET /health` contract: heidi-web rewrite `/health`→`/api/health`; heidi-mobile-chat `/health` alias; `docs/HEALTH_CONTRACT.md` coverage table.
+- `docs/runbooks/windows-autostart.md` — `pm2 startup` + `pm2 save` procedure, mobile-token and heidi-bridge notes.
+- CONTRIBUTING.md worktree lifecycle note.
+
+**Verified:** restart limits (`max_restarts`, `exp_backoff_restart_delay`) already present on all 27 PM2 entries; `check-port-registry.js` run live (12 matches, 1 known-stale registry row pending #518).
+
+**Open:** ecosystem env ports are still literals (registry check enforces consistency rather than importing); ursula-local lacks a single `/health`; heidi-mobile-chat awaits Jordan's token decision; autostart not yet installed on Frank (runbook ready).
+
+---
+
+## Phase 1 — One Canonical Codebase (2026-11-07, branch `chore/phase-1-consolidation`)
+
+**Shipped:**
+- `docs/CONSOLIDATION_PLAN.md` — verdicts for all 57 folders / 36 repos from live inventory; squash-merge verification per branch.
+- `scripts/frank/archive-folders.ps1` — dry-run-first, never-delete archiver with worktree-prune handling.
+- Salvage PR #519 (`salvage/proto-yi-workspace` — Proto.I.Y :3010 workspace, feeds Phase 8).
+- Git hygiene: stray `cm.txt`/`commitmsg.txt` removed; `moderation.html` :3001→:3018.
+
+**Verified:** every "ahead" branch diffed against clean-main log — nearly all are pre-squash originals of merged PRs; only proto-yi-workspace and the #466 cleanup had unmerged content.
+
+**Open:** Jordan approves the archive list (dry-run first); `HYDI_System` salvage-branch review; `protoforgesite` remote/CI check; CONTRIBUTING.md branching model (Phase 2).
+
+---
+
+## Phase 10 — Verification, CI Handoff (2026-11-07, branch `feat/phase-10-verify-handoff`)
+
+**Shipped:**
+- `scripts/hydi-verify.js` — one-command verification: registry port probes (optional services reported SKIP not FAIL), `/health` probes for web/core/rezonate/protoforge/ursula/ollama, `heidi_events` read, governance gate BLOCK check (when `lib/governance` is merged), sync endpoint reachability, `retrieve_similar_facts` RPC. Prints PASS/FAIL/SKIP table, exit 1 on FAIL.
+- `docs/OPERATIONS.md` — daily start/stop, logs, pause levels, approvals, secret rotation, restore, division/workspace additions, triage.
+
+**Verified live on Frank:** `node scripts/hydi-verify.js` → **16 PASS, 0 FAIL, 6 SKIP** (SKIP = token-gated/optional ports + gate check pending Phase-4 merge).
+
+**Deferred (explicit, not claimed):**
+- Phase 6 (local-sync contract tests, Tailscale, VERCEL_AUDIT doc) — not started.
+- Phase 7 (Termux thin client, phantom-killer runbook) — not started; `HEIDI_MOBILE_TOKEN` found in `.env.local` (phone re-pair unblocked — see Phase 2 notes).
+- Phase 8 (Ursula panels, chat hover, workspaces) — partially exists (portfolio.json, /apps/[id]); acceptance not verified.
+- Phase 9 (Heidi Life scaffold) — not started.
+- GitHub Actions CI workflow + branch protection — not added; repo is public so hosted runners are free, but workflow files were not written this session.
+- Open decisions for Jordan: embedding dimension (1536 vs 768), HEIDI_MOBILE_TOKEN PM2 wiring, `heidi_decision_bounds.paused` column migration, Stripe fixture key rotation.

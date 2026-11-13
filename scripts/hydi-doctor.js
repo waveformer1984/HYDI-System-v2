@@ -157,7 +157,7 @@ async function runDoctor() {
 
   // 6. Docker containers — use shared resolver for deterministic discovery
   const { resolveDocker } = require('./resolve-docker');
-  const dockerInfo = resolveDocker({ timeoutMs: 8000 });
+  const dockerInfo = resolveDocker({ timeoutMs: 5000 });
 
   results.push(check('Docker daemon', () => {
     if (dockerInfo.status === 'unavailable') {

@@ -9,6 +9,10 @@
 const path = require('path');
 const ToolRegistry = require('../../heidi-core/tools/tool-registry');
 
+// These tests exercise the direct-action tools themselves, so arm them.
+// The default (flag unset) is covered in the dedicated describe below.
+process.env.HEIDI_CHAT_DIRECT_ACTIONS = 'true';
+
 function fakeMemory(agent) {
   return {
     getAgent: jest.fn().mockResolvedValue(agent),
@@ -278,6 +282,71 @@ describe('ToolRegistry: level-3 tools', () => {
       const registry = buildRegistry();
       const text = `${JSON.stringify({ name: 'system_status', arguments: {} })} ${JSON.stringify({ name: 'system_status', arguments: {} })}`;
       expect(registry.extractToolCalls(text)).toEqual([{ function: { name: 'system_status', arguments: {} } }]);
+    });
+  });
+
+  describe('direct actions disabled (HEIDI_CHAT_DIRECT_ACTIONS unset — the default)', () => {
+    beforeEach(() => { delete process.env.HEIDI_CHAT_DIRECT_ACTIONS; });
+    afterEach(() => { process.env.HEIDI_CHAT_DIRECT_ACTIONS = 'true'; });
+
+    it('refuses run_command even for a level-4 agent, without touching ActionExecutor', async () => {
+      const memory = fakeMemory({ permission_level: 4, enabled: 1 });
+      const actions = fakeActions();
+      const registry = new ToolRegistry(memory, { actions });
+
+      const res = await registry.execute('run_command', { command: 'git', args: ['status'] }, 'Heidi');
+
+      expect(res.error).toMatch(/disabled for direct chat execution/);
+      expect(res.error).toMatch(/create_mission/);
+      expect(actions.execute).not.toHaveBeenCalled();
+    });
+
+    it('refuses restart_service even for a level-4 agent', async () => {
+      const memory = fakeMemory({ permission_level: 4, enabled: 1 });
+      const actions = fakeActions();
+      const registry = new ToolRegistry(memory, { actions });
+
+      const res = await registry.execute('restart_service', { service: 'heidi-mobile-chat' }, 'Heidi');
+
+      expect(res.error).toMatch(/disabled for direct chat execution/);
+      expect(actions.execute).not.toHaveBeenCalled();
+    });
+
+    it('still allows level-1 read tools while direct actions are off', async () => {
+      const memory = fakeMemory({ permission_level: 1, enabled: 1 });
+      memory.listAgents = jest.fn().mockResolvedValue([]);
+      const registry = new ToolRegistry(memory, {});
+
+      const res = await registry.execute('list_agents', {}, 'Heidi');
+      expect(res).toEqual([]);
+    });
+
+    it('does not advertise direct-action tools to the model', () => {
+      const registry = new ToolRegistry(fakeMemory({ permission_level: 4, enabled: 1 }), {});
+      const names = registry.toOllamaTools().map((t) => t.function.name);
+      expect(names).not.toContain('run_command');
+      expect(names).not.toContain('restart_service');
+      expect(names).toContain('create_mission');
+      expect(names).toContain('system_status');
+    });
+
+    it('ignores model-emitted calls to disabled direct-action tools', () => {
+      const registry = new ToolRegistry(fakeMemory({ permission_level: 1, enabled: 1 }), {});
+      const text = JSON.stringify({ name: 'run_command', arguments: { command: 'git', args: ['status'] } });
+      expect(registry.extractToolCalls(text)).toEqual([]);
+    });
+
+    it('audits the refusal as a warning with the disabled marker', async () => {
+      const memory = fakeMemory({ permission_level: 4, enabled: 1 });
+      const registry = new ToolRegistry(memory, { actions: fakeActions() });
+
+      await registry.execute('run_command', { command: 'git', args: [] }, 'Heidi');
+
+      expect(memory.storeSystemState).toHaveBeenCalledWith(
+        'tool_execution',
+        expect.objectContaining({ tool: 'run_command', allowed: false, denied: 'direct_actions_disabled' }),
+        'warning'
+      );
     });
   });
 });

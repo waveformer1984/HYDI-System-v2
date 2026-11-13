@@ -74,6 +74,9 @@ async function run(overrides = {}) {
     root: makeRoot({ daemon: goodDaemon, frank: goodFrank }),
     memoryRuntime: memoryRuntime(),
     legacyMemory: legacy(),
+    // Deterministic probes for the disk + CI components (no fs/GitHub in tests).
+    diskInfo: { freeGB: 200, totalGB: 500 },
+    ciStatuses: [],
     ...overrides,
   });
 }
@@ -160,8 +163,8 @@ describe('system status', () => {
   });
 
   it('recognizes the report phrases only', () => {
-    for (const q of ['system report', 'Status Report', ' health report ', '/status', 'full status']) expect(isSystemReportQuery(q)).toBe(true);
-    for (const q of ['status', 'what is the status of the deploy?', 'report']) expect(isSystemReportQuery(q)).toBe(false);
+    for (const q of ['system report', 'Status Report', ' health report ', '/status', 'full status', 'status', 'how are you', "what's up", 'system status']) expect(isSystemReportQuery(q)).toBe(true);
+    for (const q of ['what is the status of the deploy?', 'report', 'status of the build']) expect(isSystemReportQuery(q)).toBe(false);
   });
 });
 

@@ -9,10 +9,36 @@
 // never evidence of anything.
 
 import { guard } from '../../../lib/heidi-mobile/guard.js';
+import { resolveBaseUrl } from '../../../lib/heidi-mobile/hydiClient.js';
 import { normalizeHealth, normalizeSystemStatus, deriveConnectionState } from '../../../lib/heidi-mobile/normalize.js';
 
 function describeError(source, result) {
-  return { source, kind: result.kind, message: result.message, reason: result.reason };
+  const row = { source, kind: result.kind, message: result.message, reason: result.reason };
+  if (result.kind === 'unconfigured') {
+    row.message = 'HYDI_API_URL is missing or not a valid http(s) URL. On Frank, leave it unset so the BFF talks to heidi-web on 127.0.0.1:3000, or set it to that same origin — not port 3006 (legacy mobile chat) or protoforge-core :3005.';
+  } else if (result.kind === 'network' || result.kind === 'timeout') {
+    row.message = `${result.message} The Heidi page loaded because heidi-web answered; this check failed when the BFF called HYDI at the configured upstream host.`;
+  }
+  return row;
+}
+
+function buildDiagnostics(session) {
+  const base = resolveBaseUrl();
+  let upstream_host = null;
+  if (base) {
+    try {
+      upstream_host = new URL(base).host;
+    } catch (_) {
+      upstream_host = null;
+    }
+  }
+  return {
+    upstream_valid: Boolean(base),
+    upstream_host,
+    upstream_uses_default: !process.env.HYDI_API_URL,
+    service_secret_configured: Boolean(process.env.HYDI_SERVICE_SECRET),
+    device_pending_at_pairing: Boolean(session?.pending),
+  };
 }
 
 export default async function handler(req, res) {
@@ -37,8 +63,10 @@ export default async function handler(req, res) {
   const reachable = healthResult.ok || systemResult.ok
     || !['network', 'timeout', 'unconfigured'].includes(systemResult.kind);
 
+  const state = deriveConnectionState(healthResult, systemResult, system);
+
   return res.status(200).json({
-    state: deriveConnectionState(healthResult, systemResult, system),
+    state,
     checked_at: new Date().toISOString(),
     latency_ms: Date.now() - started,
     api: { reachable, latency_ms: systemResult.latencyMs ?? null },
@@ -46,5 +74,6 @@ export default async function handler(req, res) {
     health,
     system,
     errors,
+    diagnostics: buildDiagnostics(g.session),
   });
 }

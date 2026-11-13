@@ -61,7 +61,8 @@ function fakeMemory() {
 }
 
 function agentWith(memory, opts = {}) {
-  const cfg = require('path').join(require('os').tmpdir(), `ops-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'ops-test-'));
+  const cfg = require('path').join(dir, 'config.json');
   require('fs').writeFileSync(cfg, JSON.stringify({ modules: [] }));
   return new OpsAgent(memory, {}, Object.assign({
     configPath: cfg, extraModules: [{ id: 'fixture-svc', healthUrl: 'http://127.0.0.1:34455/health' }],
@@ -233,7 +234,11 @@ describe('ops agent — crash recovery', () => {
 describe('ops agent — redaction + commands', () => {
   it('redacts secrets out of stored evidence', async () => {
     const mem = fakeMemory(); const s = new OpsStore(mem); await s.ready;
-    await s.openIncident({ id: 'i3', signature: 'a:b', component: 'a', kind: 'b', mode: 'observe', observation: { note: 'sk_live_4eC39HqLyjWDarjtT1zdp7dc' } });
+    // Built at runtime so no secret-shaped literal exists in tracked files;
+    // the value is still real-format (live prefix + 24 chars) so redaction applies.
+    const livePrefix = 'sk_' + 'live_';
+    const fakeLiveKey = livePrefix + 'A1b2C3d4'.repeat(3);
+    await s.openIncident({ id: 'i3', signature: 'a:b', component: 'a', kind: 'b', mode: 'observe', observation: { note: fakeLiveKey } });
     expect(mem._t.ops_incidents[0].observation).not.toContain('sk_live_');
   });
 

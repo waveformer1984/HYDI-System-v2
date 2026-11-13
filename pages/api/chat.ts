@@ -32,6 +32,7 @@ import {
 } from '../../lib/heidi/ConversationContext';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import { streamChat as streamHeidiCoreChat } from '../../lib/heidi-core-chat';
+import { parseTaskCommand } from '../../heidi-core/missions/lifecycle';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
 import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer';
@@ -64,6 +65,34 @@ function refuseUnauthorized(res: NextApiResponse, what: string): void {
   });
   res.write('data: [DONE]\n\n');
   res.end();
+}
+
+/**
+ * heidi-core understands "task approve|reject|cancel|done <id>" and records
+ * the decision as `human:<owner>` — a label resolved inside heidi-core, not
+ * an authenticated identity. /api/chat is reachable by anything that can
+ * reach port 3000 (the tailnet included), so decision commands are gated
+ * here: only the local console (loopback socket, no proxy forwarding
+ * headers — covers the PC dashboard and the server-side mobile BFF call)
+ * or a valid x-hydi-service-token holder may decide. Reads ("tasks",
+ * "task 12") stay open.
+ */
+const TASK_DECISION_CMDS = new Set(['approve', 'reject', 'cancel', 'done']);
+
+function isLocalConsoleRequest(req: NextApiRequest): boolean {
+  const remote = req.socket && req.socket.remoteAddress;
+  if (remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') return false;
+  // A reverse proxy (tailscale serve, port-forward, tunnel) terminates on
+  // loopback but leaves forwarding headers — those clients are not the
+  // local console even though the socket peer is.
+  return req.headers['x-forwarded-for'] === undefined
+    && req.headers['x-real-ip'] === undefined
+    && req.headers['forwarded'] === undefined;
+}
+
+function isTaskDecisionCommand(message: string): boolean {
+  const parsed = parseTaskCommand(message);
+  return !!parsed && TASK_DECISION_CMDS.has(parsed.cmd);
 }
 
 /** Clip at a word boundary so labels never cut mid-word ("no legit"). */
@@ -1939,6 +1968,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // heidi-core: conversation history + long-term memory, saved per turn.
+    if (isTaskDecisionCommand(message) && !isLocalConsoleRequest(req) && !chatAuthorized(req)) {
+      return refuseUnauthorized(res, 'approving, rejecting, or cancelling governed tasks');
+    }
     if (process.env.HEIDI_DASHBOARD_CORE_CHAT !== 'false' && await answerViaHeidiCore(res, message, conversationId)) {
       return;
     }

@@ -33,8 +33,22 @@ async function main() {
   const targetComponent = componentArg ? componentArg.split('=')[1] : null;
 
   const { OperationalIntelligence } = require('../lib/operational/OperationalIntelligence');
+  const recoveryMutex = require('../lib/operational/recovery-mutex');
 
-  const oi = new OperationalIntelligence(path.resolve(__dirname, '..'));
+  const root = path.resolve(__dirname, '..');
+  const oi = new OperationalIntelligence(root);
+
+  // Cross-process mutex: a second recover for the same component exits here
+  // instead of running a competing recovery alongside the first.
+  const lockComponent = targetComponent || 'all';
+  const lock = recoveryMutex.acquire(root, lockComponent);
+  if (!lock.ok) {
+    console.log(`recovery already in progress for ${lockComponent} (pid ${lock.holder.pid}, started ${lock.holder.at})`);
+    await oi.destroy().catch(() => {});
+    process.exit(0);
+  }
+  const unlock = () => recoveryMutex.release(root, lockComponent);
+  process.on('exit', unlock);
 
   try {
     // Phase 4: Dry-run mode — evaluate policy without executing
