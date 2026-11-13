@@ -82,6 +82,12 @@ export interface DaemonStatusSnapshot {
       skippedSnapshots: number;
       skippedReflections: number;
     };
+    gateLog?: {
+      total: number;
+      lastHour: number;
+      byOutcome: Record<string, number>;
+      recent: Array<Record<string, unknown>>;
+    } | null;
   } | null;
 }
 
