@@ -59,7 +59,7 @@ jobs:
           Write-Host "schema=$($o.schema) ts=$($o.ts) collect_ms=$($o.collect_ms) findings=$($o.findings_active.Count)"
       - name: Upload observatory artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: observatory-snapshot
           path: .observatory/
