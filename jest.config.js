@@ -27,6 +27,9 @@ module.exports = {
 
   testPathIgnorePatterns: [
     '/node_modules/',
+    // Build output can contain a stale copy of the test tree
+    // (apps/ursula-frontend/.next/standalone/tests/...) — never run it.
+    '/.next/',
     '/tests/hdi-adversarial.test.js',
     '/tests/hdi-everything-wrong.test.js',
     // Tier 2 -- reachable via `npm run test:local`, never silently dropped.
