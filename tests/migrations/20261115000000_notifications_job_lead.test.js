@@ -29,6 +29,7 @@ describe('Migration 20261115000000 – notifications job_lead category', () => {
       'worker_failure', 'security_event', 'deployment_failure', 'agent_crash',
       'task_completed', 'document_generated', 'build_completed', 'deployment_completed',
       'approval_required', 'destructive_action_confirmation',
+      'operator_escalation',
     ].forEach((c) => expect(sql).toMatch(new RegExp(`'${c}'`)));
   });
 
