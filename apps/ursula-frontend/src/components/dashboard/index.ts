@@ -10,3 +10,4 @@ export { NetworkPanel } from './NetworkPanel';
 export { LogsPanel } from './LogsPanel';
 export { NotificationsPanel } from './NotificationsPanel';
 export { SettingsPanel } from './SettingsPanel';
+export { DevicesPanel } from './DevicesPanel';

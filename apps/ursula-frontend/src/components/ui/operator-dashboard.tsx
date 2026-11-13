@@ -15,8 +15,9 @@ import {
   LogsPanel,
   NotificationsPanel,
   SettingsPanel,
+  DevicesPanel,
 } from '@/components/dashboard';
-import { Activity, Layers, Bot, ListTodo, Brain, Coins, Shield, Cpu, Wifi, Terminal, Bell, Settings } from 'lucide-react';
+import { Activity, Layers, Bot, ListTodo, Brain, Coins, Shield, Cpu, Wifi, Terminal, Bell, Settings, Smartphone } from 'lucide-react';
 
 export default function OperatorDashboard() {
   const { connected, lastUpdate, mode, notifications } = useDashboard();
@@ -54,6 +55,9 @@ export default function OperatorDashboard() {
             <TabsTrigger value="health" className="flex items-center gap-1.5">
               <Activity className="h-4 w-4" /> System Health
             </TabsTrigger>
+            <TabsTrigger value="devices" className="flex items-center gap-1.5">
+              <Smartphone className="h-4 w-4" /> Devices
+            </TabsTrigger>
             <TabsTrigger value="fabric" className="flex items-center gap-1.5">
               <Layers className="h-4 w-4" /> Event Fabric
             </TabsTrigger>
@@ -90,6 +94,7 @@ export default function OperatorDashboard() {
           </TabsList>
 
           <TabsContent value="health"><SystemHealthPanel /></TabsContent>
+          <TabsContent value="devices"><DevicesPanel /></TabsContent>
           <TabsContent value="fabric"><EventFabricPanel /></TabsContent>
           <TabsContent value="agents"><AgentStatusPanel /></TabsContent>
           <TabsContent value="tasks"><TaskQueuePanel /></TabsContent>
