@@ -75,6 +75,13 @@ export interface DaemonStatusSnapshot {
     lastReflectionId: string | null;
     reflectionModel: string;
     reflectIntervalMs: number;
+    reflections?: number;
+    cycleTimeouts?: {
+      total: number;
+      lastHour: number;
+      skippedSnapshots: number;
+      skippedReflections: number;
+    };
   } | null;
 }
 

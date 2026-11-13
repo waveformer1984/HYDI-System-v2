@@ -490,6 +490,12 @@ export class CognitiveCore {
   private lastReflectionAt = 0;      // epoch ms of last completed reflection
   private lastReflectionId: string | null = null;
   private reflectionInFlight = false;
+  // Silent-degradation metrics: a timed-out cycle never reaches RECORD, so
+  // it writes no snapshot and triggers no reflection. Track the timestamps
+  // so the spine status can show total + last-hour timeouts and the gap
+  // between cycles run and snapshots written.
+  private cycleTimeouts: number[] = [];
+  private reflectionCount = 0;
 
   constructor(config?: DBConfig, bridge?: ExecutionBridge, opts?: { missionProducer?: MissionProducer | null }) {
     this.pool = new Pool({
@@ -3826,6 +3832,8 @@ export class CognitiveCore {
    */
   private async recordTimeoutHeartbeat(): Promise<void> {
     if (!this.pool) return;
+    this.cycleTimeouts.push(Date.now());
+    if (this.cycleTimeouts.length > 500) this.cycleTimeouts.splice(0, this.cycleTimeouts.length - 500);
     const write = this.pool.query(
       `INSERT INTO heidi_events (event_type, payload, created_at)
        VALUES ($1, $2, now())`,
@@ -4051,6 +4059,7 @@ export class CognitiveCore {
     );
     this.lastReflectionAt = Date.now();
     this.lastReflectionId = ins.rows?.[0]?.id ? String(ins.rows[0].id) : null;
+    this.reflectionCount += 1;
   }
 
   /** Spine status for /status surfaces — counts + last write timestamps. */
@@ -4058,7 +4067,11 @@ export class CognitiveCore {
     snapshots: number; lastSnapshotAt: string | null;
     lastReflectionAt: number; lastReflectionId: string | null;
     reflectionModel: string; reflectIntervalMs: number;
+    reflections: number;
+    cycleTimeouts: { total: number; lastHour: number; skippedSnapshots: number; skippedReflections: number };
   } {
+    const hourAgo = Date.now() - 3600_000;
+    const lastHour = this.cycleTimeouts.filter((t) => t > hourAgo).length;
     return {
       snapshots: this.snapshotCount,
       lastSnapshotAt: this.lastSnapshotAt,
@@ -4066,6 +4079,15 @@ export class CognitiveCore {
       lastReflectionId: this.lastReflectionId,
       reflectionModel: process.env.HEIDI_REFLECT_MODEL || 'qwen2.5:3b',
       reflectIntervalMs: parseInt(process.env.HEIDI_REFLECT_INTERVAL_MS || '900000', 10),
+      reflections: this.reflectionCount,
+      cycleTimeouts: {
+        total: this.cycleTimeouts.length,
+        lastHour,
+        // Every timed-out cycle skips both spine writes; snapshots/reflections
+        // can also be skipped by in-flight guards, so this is a floor, not exact.
+        skippedSnapshots: this.cycleTimeouts.length,
+        skippedReflections: this.cycleTimeouts.length,
+      },
     };
   }
 
