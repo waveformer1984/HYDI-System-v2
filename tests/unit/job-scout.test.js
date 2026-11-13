@@ -293,3 +293,70 @@ describe('job scout — Heidi chat command', () => {
     expect(text).toMatch(/never applies/);
   });
 });
+
+describe('job scout — optional local-model drafts', () => {
+  const { draftFor, llmDraftPrompt } = require('../../lib/job-scout/draft');
+
+  const lead = { id: 'x:1', title: 'Build a dashboard', description: 'Need a React dashboard.', matched: ['react'], sourceUrl: 'https://example.com/1' };
+  const division = { name: 'AppForge', pitch: 'web builds' };
+
+  const ollamaFetch = (text) => async (url) => {
+    expect(url).toBe('http://localhost:11434/api/generate');
+    return { ok: true, json: async () => ({ response: text }) };
+  };
+  const envOn = { JOB_SCOUT_LLM_DRAFTS: 'true' };
+
+  it('stays on the template unless JOB_SCOUT_LLM_DRAFTS=true', async () => {
+    const d = await draftFor(lead, division, { env: {}, fetchImpl: ollamaFetch('LLM TEXT [EDIT: q]') });
+    expect(d).toMatch(/\[EDIT:/);
+    expect(d).not.toMatch(/LLM TEXT/);
+  });
+
+  it('uses the model output when the flag is on and it keeps an [EDIT: …] placeholder', async () => {
+    const d = await draftFor(lead, division, { env: envOn, fetchImpl: ollamaFetch('LLM draft body [EDIT: add budget] — Jordan, ProtoForge') });
+    expect(d).toMatch(/LLM draft body/);
+    expect(d).toMatch(/\[EDIT: add budget\]/);
+  });
+
+  it('falls back to the template on transport error, timeout or missing placeholder', async () => {
+    const failing = async () => { throw new Error('connection refused'); };
+    for (const fetchImpl of [failing, ollamaFetch('no placeholder here'), async () => ({ ok: false, status: 500, json: async () => ({}) })]) {
+      const d = await draftFor(lead, division, { env: envOn, fetchImpl });
+      expect(d).toMatch(/Build a dashboard/);
+      expect(d).toMatch(/\[EDIT:/);
+      expect(d).not.toMatch(/no placeholder/);
+    }
+  });
+
+  it('honours the timeout by aborting a hung model', async () => {
+    const hung = (url, init) => new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted'))));
+    const d = await draftFor(lead, division, { env: envOn, fetchImpl: hung, timeoutMs: 25 });
+    expect(d).toMatch(/\[EDIT:/);
+  });
+
+  it('prompt carries the post and our pitch, and never asks the model to send anything', () => {
+    const p = llmDraftPrompt(lead, division);
+    expect(p).toMatch(/Build a dashboard/);
+    expect(p).toMatch(/web builds/);
+    expect(p).toMatch(/placeholder/);
+    expect(p).not.toMatch(/send (the|this|it)/i);
+  });
+
+  it('runScout drafts via the flag and never contacts a paid endpoint', async () => {
+    const { dir, env } = tmpEnv();
+    const urls = [];
+    const fetchImpl = async (url, init) => {
+      urls.push(url);
+      if (url.includes('11434')) return { ok: true, json: async () => ({ response: 'Local draft [EDIT: tweak]' }) };
+      return fakeFetch(ALL)(url);
+    };
+    const summary = await runScout({ config: CONFIG, env: { ...env, JOB_SCOUT_LLM_DRAFTS: 'true' }, now: NOW, fetchImpl, sleep: noSleep });
+    expect(summary.ok).toBe(true);
+    expect(urls.some((u) => u.includes('11434'))).toBe(true);
+    expect(urls.every((u) => u.includes('11434') || /^https:\/\//.test(u))).toBe(true);
+    const { leads } = JSON.parse(fs.readFileSync(path.join(dir, 'leads.json'), 'utf8'));
+    const strong = leads.filter((l) => l.draft);
+    expect(strong.length).toBeGreaterThan(0);
+    expect(strong.every((l) => l.draft.includes('[EDIT:'))).toBe(true);
+  });
+});
