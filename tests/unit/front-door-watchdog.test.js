@@ -34,4 +34,44 @@ describe('front-door watchdog', () => {
     const list = buildFixList({ frontDoor: { ok: true }, now: Date.now() });
     expect(list.items.some((i) => i.kind === 'front_door')).toBe(false);
   });
+
+  describe('collectFrontDoorEvidence', () => {
+    const { collectFrontDoorEvidence, serveHostname } = require('../../lib/observation/front-door-probe');
+    const execOk = (text) => (cmd, args, opts, cb) => { cb(null, text, ''); return {}; };
+
+    it('reads the front-door hostname from serve status', () => {
+      expect(serveHostname(GOOD_SERVE)).toBe('heidi-pc.tailc50af2.ts.net');
+    });
+
+    it('a working :3000 never masks a broken Tailscale front door', async () => {
+      const raw = await collectFrontDoorEvidence({
+        execImpl: execOk(GOOD_SERVE),
+        probeFront: async () => ({ ok: false, error: 'ECONNREFUSED', via: 'tailscale-https' }),
+        probeDirect: async () => ({ ok: true, status: 200 }),
+      });
+      expect(raw.healthProbe.ok).toBe(false);
+      expect(raw.backendDirect.ok).toBe(true);
+      expect(evaluateFrontDoor(raw).ok).toBe(false);
+    });
+
+    it('probes the hostname from serve status, not localhost', async () => {
+      const seen = [];
+      const raw = await collectFrontDoorEvidence({
+        execImpl: execOk(GOOD_SERVE),
+        probeFront: async (h) => { seen.push(h); return { ok: true, status: 200 }; },
+        probeDirect: async () => ({ ok: true, status: 200 }),
+      });
+      expect(seen).toEqual(['heidi-pc.tailc50af2.ts.net']);
+      expect(evaluateFrontDoor(raw).ok).toBe(true);
+    });
+
+    it('unknown hostname is not OK', async () => {
+      const raw = await collectFrontDoorEvidence({
+        execImpl: execOk('|-- / proxy http://127.0.0.1:3000'),
+        probeFront: async () => ({ ok: true, status: 200 }),
+        probeDirect: async () => ({ ok: true, status: 200 }),
+      });
+      expect(raw.healthProbe).toMatchObject({ ok: false, error: 'front-door hostname unknown' });
+    });
+  });
 });
