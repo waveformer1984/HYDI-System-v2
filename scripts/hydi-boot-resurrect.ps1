@@ -1,4 +1,4 @@
-# hydi-boot-resurrect.ps1 — governed PM2 resurrect for the PM2Resurrect scheduled task.
+# hydi-boot-resurrect.ps1 - governed PM2 resurrect for the PM2Resurrect scheduled task.
 # Single boot path on Frank: this script is the only thing \PM2Resurrect runs.
 # Order: wait for Docker + local Supabase Postgres (apps depend on them),
 # then pm2 resurrect, then verify the daemon answers and apps came up.
@@ -37,7 +37,7 @@ while ((Get-Date) -lt $dockerDeadline) {
   Log 'docker daemon not ready, retrying in 10s'
   Start-Sleep -Seconds 10
 }
-Log ("docker daemon: " + $(if ($dockerUp) { 'up' } else { 'TIMEOUT after 5m — continuing anyway' }))
+Log ("docker daemon: " + $(if ($dockerUp) { 'up' } else { 'TIMEOUT after 5m - continuing anyway' }))
 
 # 2. Wait for local Supabase Postgres (kong :54321 is the API surface; db :54322 direct).
 $dbDeadline = (Get-Date).AddMinutes(3)
@@ -46,15 +46,15 @@ while ((Get-Date) -lt $dbDeadline) {
   if ((Test-Port 54322) -or (Test-Port 54321)) { $dbUp = $true; break }
   Start-Sleep -Seconds 10
 }
-Log ("supabase postgres/kong: " + $(if ($dbUp) { 'reachable' } else { 'TIMEOUT after 3m — continuing anyway' }))
+Log ("supabase postgres/kong: " + $(if ($dbUp) { 'reachable' } else { 'TIMEOUT after 3m - continuing anyway' }))
 
 # 3. Resurrect the PM2 fleet from dump.pm2.
 Log 'running pm2 resurrect'
 & pm2 resurrect 2>&1 | ForEach-Object { Log ("pm2: " + $_) }
 
-# 3b. Kong gate — heidi-web's init blocks on Supabase REST; a dead Kong
+# 3b. Kong gate - heidi-web's init blocks on Supabase REST; a dead Kong
 #     leaves /heidi answering 000 for minutes (observed 2026-11-12). TCP
-#     connect is not enough — probe the REST root for a real HTTP response,
+#     connect is not enough - probe the REST root for a real HTTP response,
 #     and if the container is down, start it and wait (bounded).
 function Test-KongRest {
   try {
@@ -71,12 +71,12 @@ while ((Get-Date) -lt $kongDeadline) {
   if (Test-KongRest) { $kongOk = $true; break }
   $cs = (& docker inspect -f '{{.State.Status}}' supabase_kong_HYDI-System-v2 2>$null)
   if ($cs -ne 'running') {
-    Log "kong container status=$cs — attempting docker start"
+    Log "kong container status=$cs - attempting docker start"
     & docker start supabase_kong_HYDI-System-v2 2>&1 | ForEach-Object { Log "docker start kong: $_" }
   }
   Start-Sleep -Seconds 10
 }
-Log ("kong REST gate: " + $(if ($kongOk) { 'healthy' } else { 'TIMEOUT after 3m — heidi-web may stall on init' }))
+Log ("kong REST gate: " + $(if ($kongOk) { 'healthy' } else { 'TIMEOUT after 3m - heidi-web may stall on init' }))
 
 # 4. Persist current process list so future resurrects match reality.
 & pm2 save 2>&1 | ForEach-Object { Log ("pm2 save: " + $_) }
@@ -85,7 +85,7 @@ Log ("kong REST gate: " + $(if ($kongOk) { 'healthy' } else { 'TIMEOUT after 3m 
 $ping = & pm2 ping 2>&1 | Out-String
 Log ("pm2 ping: " + $ping.Trim())
 
-# 6. Brief app census (names + status only; jlist can be slow on this host —
+# 6. Brief app census (names + status only; jlist can be slow on this host -
 #    it shells out to WMI per app, so allow up to ~60s across two attempts).
 $census = $null
 foreach ($attempt in 1..2) {
@@ -104,7 +104,7 @@ try {
   $total = @($apps).Count
   Log ("apps: $online/$total online")
 } catch {
-  Log 'app census failed (jlist error) — check pm2 logs manually'
+  Log 'app census failed (jlist error) - check pm2 logs manually'
 }
 
 Log '=== hydi-boot-resurrect done ==='
