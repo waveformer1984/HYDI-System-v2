@@ -887,6 +887,9 @@ module.exports = {
     },
     {
       name: 'ollama-serve',
+      // Wrapper (not the raw exe): PM2 can't tree-kill on Windows, so the
+      // wrapper sweeps stale `ollama serve`/llama-server orphans at startup
+      // before spawning its own — self-healing on every restart.
       script: 'scripts/ollama-serve.js',
       cwd: __dirname,
       instances: 1,

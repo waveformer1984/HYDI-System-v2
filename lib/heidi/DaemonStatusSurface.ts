@@ -86,6 +86,7 @@ export interface DaemonStatusSnapshot {
       total: number;
       lastHour: number;
       byOutcome: Record<string, number>;
+      orphaned: number;
       recent: Array<Record<string, unknown>>;
     } | null;
   } | null;

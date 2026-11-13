@@ -3384,6 +3384,68 @@ export class CognitiveCore {
         };
       }
 
+      // Triple gate (Phase 2.5): capabilities above R0 (anything with real
+      // side effects) must pass the local advisor + decision-bounds gate
+      // before dispatch. R0 capabilities are read-only perception and stay
+      // on the contract-authority path alone. With HEIDI_ALLOW_EXEC off the
+      // gate can only return 'would have executed'/'blocked' — execution
+      // requires 'authorized', so this is dormant-cost only when a side-
+      // effecting capability is actually selected.
+      const capRisk = this.registry.get(action.capabilityId)?.riskLevel;
+      if (capRisk && capRisk !== 'R0') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { adviseProposal } = require('../governance/action-advisor') as {
+            adviseProposal: (o: Record<string, unknown>) => Promise<{ outcome: string; verdict: string; confidence: number | null }>;
+          };
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { loadAuthorityBounds } = require('./AuthorityBounds') as {
+            loadAuthorityBounds: (p: unknown) => Promise<{ ok: boolean; bounds?: Record<string, unknown> }>;
+          };
+          const boundsResult = this.pool ? await loadAuthorityBounds(this.pool) : { ok: false };
+          const gate = await adviseProposal({
+            proposal: {
+              type: 'operational_decision',
+              division: 'ops',
+              payload: { capabilityId: action.capabilityId, params: action.params || {} },
+              proposer: 'cognitive-core',
+            },
+            bounds: boundsResult.ok ? boundsResult.bounds : null,
+            execEnabled: process.env.HEIDI_ALLOW_EXEC,
+            recordEvent: this.pool
+              ? async (row: { event_type: string; division: string; payload: unknown; created_at: string }) => {
+                  await this.pool!.query(
+                    `INSERT INTO heidi_events (event_type, division, payload, created_at)
+                     VALUES ($1, $2, $3, $4)`,
+                    [row.event_type, row.division, JSON.stringify(row.payload), row.created_at],
+                  );
+                }
+              : undefined,
+          });
+          if (gate.outcome !== 'authorized') {
+            return {
+              executed: false,
+              actionType: action.actionType,
+              capabilityId: action.capabilityId,
+              outcome: 'skipped',
+              details: `triple gate ${gate.outcome} (${gate.verdict} @ ${gate.confidence ?? 'n/a'}) — execution stays closed`,
+              evidence: [{ gate: true, outcome: gate.outcome, verdict: gate.verdict }],
+              rawResult: null,
+            };
+          }
+        } catch (gateErr) {
+          return {
+            executed: false,
+            actionType: action.actionType,
+            capabilityId: action.capabilityId,
+            outcome: 'skipped',
+            details: `triple gate error (fail-closed): ${gateErr instanceof Error ? gateErr.message : 'unknown'}`,
+            evidence: [{ gate: true, error: true }],
+            rawResult: null,
+          };
+        }
+      }
+
       const capResult = await this.registry.execute(action.capabilityId, action.params, ctx);
 
       return {
@@ -4069,7 +4131,7 @@ export class CognitiveCore {
     reflectionModel: string; reflectIntervalMs: number;
     reflections: number;
     cycleTimeouts: { total: number; lastHour: number; skippedSnapshots: number; skippedReflections: number };
-    gateLog: { total: number; lastHour: number; byOutcome: Record<string, number>; recent: Array<Record<string, unknown>> } | null;
+    gateLog: { total: number; lastHour: number; byOutcome: Record<string, number>; orphaned: number; recent: Array<Record<string, unknown>> } | null;
   } {
     const hourAgo = Date.now() - 3600_000;
     const lastHour = this.cycleTimeouts.filter((t) => t > hourAgo).length;
@@ -4101,7 +4163,7 @@ export class CognitiveCore {
    */
   private static readGateLog(): {
     total: number; lastHour: number; byOutcome: Record<string, number>;
-    recent: Array<Record<string, unknown>>;
+    orphaned: number; recent: Array<Record<string, unknown>>;
   } | null {
     try {
       const fs = require('fs') as typeof import('fs');
@@ -4115,16 +4177,21 @@ export class CognitiveCore {
       const hourAgo = Date.now() - 3600_000;
       const byOutcome: Record<string, number> = {};
       let lastHourCount = 0;
+      let orphaned = 0;
       for (const e of entries) {
         const outcome = String(e?.outcome || 'unknown');
         byOutcome[outcome] = (byOutcome[outcome] || 0) + 1;
         const at = Date.parse(String(e?.at || ''));
         if (Number.isFinite(at) && at > hourAgo) lastHourCount += 1;
+        // A proposal whose terminal 'decided' row never reached heidi_events
+        // (both writes failed) is an orphan — counted, never hidden.
+        if (e?.decidedRecorded === false) orphaned += 1;
       }
       return {
         total: entries.length,
         lastHour: lastHourCount,
         byOutcome,
+        orphaned,
         recent: entries.slice(-10).reverse(),
       };
     } catch {

@@ -18,6 +18,28 @@ import { evaluateAction, type ActionAuthorization } from './governance/ActionCho
 import { recordActionRefusal } from './heidi/DecisionEvidence';
 import { callProtoforgeTool } from './protoforge-mcp-client';
 
+// Contract-layer triple gate (Phase 2.5): every side-effecting action
+// (R1+) is evaluated by the local advisor against heidi_decision_bounds
+// before dispatch. R0 read-only actions are perception, not actions, and
+// stay on the chokepoint alone. With HEIDI_ALLOW_EXEC off the gate can
+// only return 'would have executed'/'blocked' — execution requires
+// 'authorized'.
+const { adviseProposal } = require('./governance/action-advisor') as {
+  adviseProposal: (opts: {
+    proposal: Record<string, unknown>;
+    bounds: unknown;
+    execEnabled: unknown;
+    supabase: unknown;
+  }) => Promise<{ outcome: string; verdict: string; confidence: number | null; gates: Record<string, unknown> }>;
+};
+
+type AdvisorFn = (opts: {
+  proposal: Record<string, unknown>;
+  bounds: unknown;
+  execEnabled: unknown;
+  supabase: unknown;
+}) => Promise<{ outcome: string; verdict: string; confidence: number | null; gates: Record<string, unknown> }>;
+
 export type { ActionAuthorization } from './governance/ActionChokepoint';
 
 export interface ExecutorAction {
@@ -51,9 +73,39 @@ export const WRITABLE_TABLES = new Set(['sessions']);
 
 export class ActionExecutor {
   private supabase: SupabaseClient;
+  private boundsCache: { row: unknown; at: number } | null = null;
+  private advisor: AdvisorFn;
+  private injectedBounds: unknown;
 
-  constructor(supabase: SupabaseClient) {
+  constructor(
+    supabase: SupabaseClient,
+    opts?: { advisor?: AdvisorFn; bounds?: unknown },
+  ) {
     this.supabase = supabase;
+    this.advisor = opts?.advisor ?? adviseProposal;
+    this.injectedBounds = opts?.bounds;
+  }
+
+  /** heidi_decision_bounds row, cached 60s. null on any failure (gate fails closed). */
+  private async loadDecisionBounds(): Promise<unknown> {
+    if (this.injectedBounds !== undefined) return this.injectedBounds;
+    if (this.boundsCache && Date.now() - this.boundsCache.at < 60_000) {
+      return this.boundsCache.row;
+    }
+    try {
+      const { data, error } = await this.supabase
+        .from('heidi_decision_bounds')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const row = !error && data ? data : null;
+      this.boundsCache = { row, at: Date.now() };
+      return row;
+    } catch {
+      this.boundsCache = { row: null, at: Date.now() };
+      return null;
+    }
   }
 
   /**
@@ -89,6 +141,38 @@ export class ActionExecutor {
         status: 'failed',
         error: `[${decision.code}] ${decision.reason}`,
       };
+    }
+
+    // Triple gate (Phase 2.5): side-effecting actions (anything above R0)
+    // must also pass the advisor + decision-bounds gate. The proposal type
+    // maps to 'operational_decision' — the action-registry domain — with
+    // the real action type carried in payload.actionType for the advisor.
+    if (decision.risk !== 'R0') {
+      const gate = await this.advisor({
+        proposal: {
+          type: 'operational_decision',
+          division: 'ops',
+          payload: { actionType: action.type, ...(action.payload || {}) },
+          proposer: `action-executor:${decision.requester}`,
+        },
+        bounds: await this.loadDecisionBounds(),
+        execEnabled: process.env.HEIDI_ALLOW_EXEC,
+        supabase: this.supabase,
+      });
+      if (gate.outcome !== 'authorized') {
+        await recordActionRefusal(this.supabase, {
+          decision: {
+            ...decision,
+            code: 'AUTHORIZATION_REQUIRED',
+            reason: `triple gate outcome '${gate.outcome}' (verdict ${gate.verdict}, confidence ${gate.confidence}) — execution stays closed`,
+          },
+          sessionId,
+        });
+        return {
+          status: 'failed',
+          error: `[GATE_${gate.outcome.toUpperCase().replace(/ /g, '_')}] triple gate refused '${action.type}': ${gate.verdict} @ ${gate.confidence ?? 'n/a'}`,
+        };
+      }
     }
 
     try {

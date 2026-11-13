@@ -35,7 +35,7 @@ const ROOT = path.join(__dirname, '..', '..');
  */
 const EXECUTOR_REGISTRY = {
   // ── lib/ action-executor path (evaluateAction chokepoint) ──────────
-  'lib/action-executor.ts': 'lib/governance/ActionChokepoint.ts evaluateAction',
+  'lib/action-executor.ts': 'ActionChokepoint evaluateAction + action-advisor triple gate (non-R0)',
   'lib/governance/ActionChokepoint.ts': 'IS the chokepoint',
   'lib/action-approval.ts': 'mints signed authorization for ActionChokepoint',
   'lib/agents/base-agent.ts': 'routes through lib/action-executor.ts',
@@ -50,7 +50,7 @@ const EXECUTOR_REGISTRY = {
   'lib/protoforge/dispatcher.ts': 'protoforge dispatch — gated upstream by auto-gate',
 
   // ── heidi-core agent_bus / server path ──────────────────────────────
-  'heidi-core/actions/action-executor.js': 'own allowlists (scripts/commands/domains) + isSafe()',
+  'heidi-core/actions/action-executor.js': 'own allowlists + action-advisor triple gate (side-effect types)',
   'heidi-core/heidi-agent.js': 'action-advisor triple gate (Phase 2)',
   'heidi-core/server.js': '/act token + isSafe() + mission lifecycle gates',
   'heidi-core/missions/mission-worker.js': 'mission lifecycle approval gates',
@@ -139,4 +139,27 @@ describe('contract-layer executor registry', () => {
     expect(EXECUTOR_REGISTRY['lib/governance/ActionChokepoint.ts']).toBeDefined();
     expect(EXECUTOR_REGISTRY['lib/heidi/AuthorityBounds.js']).toBeDefined();
   });
+});
+
+/**
+ * Phase 2.5: registration is not enough — every execution path must
+ * actually pass through a named gate. These files MUST contain the gate
+ * call; removing the wiring fails this test even though the file stays
+ * registered.
+ */
+const REQUIRED_GATES = {
+  'heidi-core/heidi-agent.js': /adviseProposal/,
+  'lib/action-executor.ts': /adviseProposal/,
+  'heidi-core/actions/action-executor.js': /adviseProposal/,
+  'lib/human-actions/detector.js': /adviseProposal/,
+  'lib/heidi/CognitiveCore.ts': /adviseProposal/,
+};
+
+describe('every execution path is gated, not merely registered', () => {
+  for (const [file, pattern] of Object.entries(REQUIRED_GATES)) {
+    it(`${file} routes through the triple gate`, () => {
+      const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+      expect(src).toMatch(pattern);
+    });
+  }
 });

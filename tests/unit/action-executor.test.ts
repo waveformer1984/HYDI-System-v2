@@ -7,6 +7,14 @@
 import { ActionExecutor } from '../../lib/action-executor';
 import { mintSignedAuthorization } from '../helpers/signTestAuth';
 
+// These tests exercise the action handlers, not the Phase 2.5 triple gate —
+// inject an authorized advisor verdict + a usable bounds row so the gate
+// passes and the handler under test actually runs.
+const TEST_GATE = {
+  advisor: async () => ({ outcome: 'authorized', verdict: 'AUTO-APPROVE', confidence: 0.95, gates: {} }),
+  bounds: { auto_approve_threshold: 0.85, max_auto_approve_amount: 100 },
+};
+
 type QueryResult = { data?: unknown; error?: { message: string } | null };
 
 function fakeSupabase(result: QueryResult) {
@@ -60,7 +68,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('create_task inserts and returns the new task id', async () => {
     const { supabase, calls } = fakeSupabase({ data: { id: 'task-1' }, error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'create_task', payload: { task_name: 'do_it' } }, 'sess-1');
     expect(res.status).toBe('completed');
     expect(res.result).toEqual({ task_id: 'task-1', task_name: 'do_it' });
@@ -69,7 +77,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('create_task surfaces a DB error truthfully', async () => {
     const { supabase } = fakeSupabase({ data: null, error: { message: 'permission denied' } });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'create_task', payload: { task_name: 'x' } }, 'sess-1');
     expect(res.status).toBe('failed');
     expect(res.error).toBe('permission denied');
@@ -77,7 +85,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('fetch_data rejects tables that are not allowlisted', async () => {
     const { supabase } = fakeSupabase({ data: [], error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'fetch_data', payload: { table: 'secrets' } }, 'sess-1');
     expect(res.status).toBe('failed');
     expect(res.error).toMatch(/not readable/);
@@ -85,7 +93,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('fetch_data reads an allowlisted table and reports a row count', async () => {
     const { supabase } = fakeSupabase({ data: [{ id: 1 }, { id: 2 }], error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'fetch_data', payload: { table: 'actions', limit: 5 } }, 'sess-1');
     expect(res.status).toBe('completed');
     expect(res.result).toEqual({ rows: [{ id: 1 }, { id: 2 }], count: 2 });
@@ -93,7 +101,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('update_database rejects non-writable tables', async () => {
     const { supabase } = fakeSupabase({ error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute(
       { type: 'update_database', payload: { table: 'actions', values: { x: 1 }, match: { id: 1 } } },
       'sess-1',
@@ -104,7 +112,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('update_database requires non-empty values and match', async () => {
     const { supabase } = fakeSupabase({ error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute(
       { type: 'update_database', payload: { table: 'sessions', values: { x: 1 }, match: {} } },
       'sess-1',
@@ -115,7 +123,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('schedule_event rejects an invalid timestamp', async () => {
     const { supabase } = fakeSupabase({ data: { id: 'e1' }, error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'schedule_event', payload: { scheduled_for: 'not-a-date' } }, 'sess-1');
     expect(res.status).toBe('failed');
     expect(res.error).toMatch(/valid ISO/);
@@ -123,7 +131,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('schedule_event persists a valid ISO timestamp', async () => {
     const { supabase } = fakeSupabase({ data: { id: 'e1' }, error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const iso = '2030-01-01T00:00:00.000Z';
     const res = await exec.execute({ type: 'schedule_event', payload: { scheduled_for: iso } }, 'sess-1');
     expect(res.status).toBe('completed');
@@ -132,7 +140,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('send_email fails truthfully when credentials are not configured', async () => {
     const { supabase } = fakeSupabase({ error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     // Phase 3: send_email is R3 and the chokepoint now refuses it before
     // dispatch unless an approval record is produced. This test's intent is the
     // credential behaviour -- that a missing key fails honestly rather than
@@ -153,7 +161,7 @@ describe('lib/action-executor ActionExecutor', () => {
 
   it('rejects an unsupported action type', async () => {
     const { supabase } = fakeSupabase({ error: null });
-    const exec = new ActionExecutor(supabase);
+    const exec = new ActionExecutor(supabase, TEST_GATE);
     const res = await exec.execute({ type: 'mine_bitcoin', payload: {} }, 'sess-1');
     expect(res.status).toBe('failed');
     // Phase 3: an unmodelled action is now stopped by the chokepoint at R5

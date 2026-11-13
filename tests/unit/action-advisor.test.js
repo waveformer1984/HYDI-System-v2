@@ -221,6 +221,52 @@ describe('adviseProposal — gate outcomes', () => {
     expect(d.events[1].payload.gates.bounds).toBeDefined();
   });
 
+  it('decision write fails twice -> errored_blocked + orphan marked in gate log', async () => {
+    let n = 0;
+    const d = makeDeps({
+      recordEvent: async (row) => {
+        n += 1;
+        if (n === 1) { d.events.push(row); return; } // proposed ok
+        throw new Error('db down'); // both decided attempts fail
+      },
+    });
+    const r = await adviseProposal({ ...GOOD, ...d });
+    expect(r.outcome).toBe('errored_blocked');
+    expect(r.decidedRecorded).toBe(false);
+    const raw = JSON.parse(fs.readFileSync(d.gateLogPath, 'utf8'));
+    expect(raw.entries[0].decidedRecorded).toBe(false);
+    expect(raw.entries[0].outcome).toBe('errored_blocked');
+  });
+
+  it('decision write fails once then succeeds -> outcome preserved, recorded', async () => {
+    let n = 0;
+    const d = makeDeps({
+      recordEvent: async (row) => {
+        n += 1;
+        if (n === 2) throw new Error('transient');
+        d.events.push(row);
+      },
+    });
+    const r = await adviseProposal({ ...GOOD, ...d });
+    expect(r.outcome).toBe('would have executed');
+    expect(r.decidedRecorded).toBe(true);
+    const events = d.events.map((e) => e.payload.event);
+    expect(events).toEqual(['proposed', 'decided']);
+  });
+
+  it('already-blocked outcome stays blocked even when decision write fails', async () => {
+    const d = makeDeps({
+      callModel: async () => JSON.stringify({ verdict: 'BLOCK', confidence: 0.9, reason: 'no' }),
+      recordEvent: async (row) => {
+        if (row.payload && row.payload.event === 'decided') throw new Error('db down');
+        d.events.push(row);
+      },
+    });
+    const r = await adviseProposal({ ...GOOD, ...d });
+    expect(r.outcome).toBe('blocked');
+    expect(r.decidedRecorded).toBe(false);
+  });
+
   it('gate log file is appended and readable', async () => {
     const d = makeDeps();
     await adviseProposal({ ...GOOD, ...d });

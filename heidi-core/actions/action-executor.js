@@ -118,12 +118,99 @@ class ActionExecutor {
   }
 
   /**
+   * Triple gate (Phase 2.5): side-effecting action types must pass the
+   * contract-layer advisor + decision-bounds gate before dispatch. This is
+   * the single chokepoint every heidi-core caller funnels through —
+   * /act, autonomous detections, tool-registry, mission worker. Read-only
+   * types (read_file, log_event) are perception/logging, not actions.
+   * Fails closed: no Supabase, no bounds row, advisor timeout/malformed
+   * output, or HEIDI_ALLOW_EXEC off can only produce blocked outcomes.
+   */
+  static SIDE_EFFECT_TYPES = new Set(['run_script', 'run_command', 'write_file', 'api_call']);
+
+  _gateSupabase() {
+    if (this._supabase !== undefined) return this._supabase;
+    try {
+      if (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)) {
+        const { createClient } = require('@supabase/supabase-js');
+        this._supabase = createClient(
+          process.env.SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
+        );
+      } else {
+        this._supabase = null;
+      }
+    } catch {
+      this._supabase = null;
+    }
+    return this._supabase;
+  }
+
+  async _gateBounds() {
+    if (this._boundsCache && Date.now() - this._boundsCache.at < 60_000) {
+      return this._boundsCache.row;
+    }
+    const supabase = this._gateSupabase();
+    let row = null;
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('heidi_decision_bounds')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) row = data;
+      } catch { /* fail closed below */ }
+    }
+    this._boundsCache = { row, at: Date.now() };
+    return row;
+  }
+
+  async _tripleGate(action) {
+    const { adviseProposal } = require('../../lib/governance/action-advisor');
+    return adviseProposal({
+      proposal: {
+        // heidi-core action types are not agent_bus registry types — the
+        // proposal envelope is operational_decision; the real type rides
+        // in payload.actionType for the advisor and the audit row.
+        type: 'operational_decision',
+        division: 'ops',
+        payload: {
+          actionType: action.type,
+          target: action.target ?? null,
+          command: action.command ?? null,
+          args: action.args ?? null,
+        },
+        proposer: 'heidi-core-action-executor',
+      },
+      bounds: await this._gateBounds(),
+      execEnabled: process.env.HEIDI_ALLOW_EXEC,
+      supabase: this._gateSupabase(),
+    });
+  }
+
+  /**
    * Main execution entry point
    */
   async execute(action) {
     // Safety check #1: Is this action type approved?
     if (!this.approvedActions.has(action.type)) {
       throw new Error(`Action type '${action.type}' is not approved`);
+    }
+
+    // Triple gate: side-effecting types only.
+    if (ActionExecutor.SIDE_EFFECT_TYPES.has(action.type)) {
+      const gate = await this._tripleGate(action);
+      if (gate.outcome !== 'authorized') {
+        const err = new Error(
+          `[GATE_${String(gate.outcome).toUpperCase().replace(/ /g, '_')}] ` +
+          `triple gate refused '${action.type}': ${gate.verdict}` +
+          (gate.confidence != null ? ` @ ${gate.confidence}` : ''),
+        );
+        err.gateOutcome = gate.outcome;
+        throw err;
+      }
     }
 
     // Safety check #2: Does it have required fields?

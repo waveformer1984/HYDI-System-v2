@@ -18,6 +18,13 @@
 import { ActionExecutor } from '../../lib/action-executor';
 import { mintSignedAuthorization } from '../helpers/signTestAuth';
 
+// Handler-level tests: inject an authorized triple-gate verdict + bounds so
+// the Phase 2.5 advisor gate passes and the behavior under test runs.
+const TEST_GATE = {
+  advisor: async () => ({ outcome: 'authorized', verdict: 'AUTO-APPROVE', confidence: 0.95, gates: {} }),
+  bounds: { auto_approve_threshold: 0.85, max_auto_approve_amount: 100 },
+};
+
 /** Minimal Supabase stub -- enough for the low-risk paths to run. */
 function fakeSupabase() {
   const builder: any = {
@@ -53,7 +60,7 @@ afterEach(() => {
 
 describe('Phase 3 — send_email is refused without authorization AND sends nothing', () => {
   test('unauthorized send_email fails closed with no network request', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute(
       { type: 'send_email', payload: { to: 'victim@example.com', subject: 'hi', body: 'x' } },
       'session-1',
@@ -67,7 +74,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
   });
 
   test('a malformed authorization is refused and still sends nothing', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute(
       { type: 'send_email', payload: { to: 'victim@example.com' } },
       'session-1',
@@ -80,7 +87,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
   });
 
   test('a complete approval record DOES permit the send — the gate is not a wall', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const payload = { to: 'lead@example.com', subject: 'hi', body: 'x' };
     const res = await exec.execute(
       { type: 'send_email', payload },
@@ -94,7 +101,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
   });
 
   test('an approval minted for a DIFFERENT session is refused — it cannot be replayed', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const payload = { to: 'lead@example.com', subject: 'hi', body: 'x' };
     const res = await exec.execute(
       { type: 'send_email', payload },
@@ -108,7 +115,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
   });
 
   test('an approval minted for a DIFFERENT payload is refused — the binding is to the action', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute(
       { type: 'send_email', payload: { to: 'attacker@evil.com', subject: 'hi', body: 'x' } },
       'session-1',
@@ -122,7 +129,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
   });
 
   test('a stripped/altered signature is refused', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const payload = { to: 'lead@example.com', subject: 'hi', body: 'x' };
     const auth = mintSignedAuthorization({ type: 'send_email', sessionId: 'session-1', payload });
     auth.signature = auth.signature!.slice(0, -2) + '00'; // tamper
@@ -140,7 +147,7 @@ describe('Phase 3 — send_email is refused without authorization AND sends noth
 
 describe('Phase 3 — tier behaviour through the real executor', () => {
   test('an unknown action type is refused as R5, not merely "unsupported"', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute({ type: 'exfiltrate_all_secrets', payload: {} }, 'session-1');
 
     expect(res.status).toBe('failed');
@@ -151,7 +158,7 @@ describe('Phase 3 — tier behaviour through the real executor', () => {
   });
 
   test('update_database (R1) runs autonomously — its own allowlist is the bound', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute(
       { type: 'update_database', payload: { table: 'sessions', values: { x: 1 } } },
       'session-1',
@@ -162,7 +169,7 @@ describe('Phase 3 — tier behaviour through the real executor', () => {
   });
 
   test('update_database on a non-writable table is still rejected by the allowlist', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute(
       { type: 'update_database', payload: { table: 'ledger', values: { x: 1 } } },
       'session-1',
@@ -172,7 +179,7 @@ describe('Phase 3 — tier behaviour through the real executor', () => {
   });
 
   test('R0/R1 actions still run autonomously — the gate must not freeze ordinary work', async () => {
-    const exec = new ActionExecutor(fakeSupabase());
+    const exec = new ActionExecutor(fakeSupabase(), TEST_GATE);
     const res = await exec.execute({ type: 'fetch_data', payload: { table: 'memories' } }, 'session-1');
     // Whatever the data outcome, it must NOT have been refused by governance.
     expect(String(res.error ?? '')).not.toMatch(/AUTHORIZATION_REQUIRED|UNKNOWN_ACTION|PROHIBITED/);
