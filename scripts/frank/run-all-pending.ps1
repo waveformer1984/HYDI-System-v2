@@ -1,6 +1,7 @@
 # Aggregate Frank-side pending checks (read-only by default).
 param(
-  [switch]$ApplyArchive
+  [switch]$ApplyArchive,
+  [switch]$JobScout   # state-changing: pulls, migrates local Supabase, restarts PM2, runs one scan
 )
 
 $ErrorActionPreference = 'Continue'
@@ -53,5 +54,21 @@ if ($ApplyArchive) {
 Write-Host "`n=== port registry (node) ===" -ForegroundColor Cyan
 node scripts/check-port-registry.js
 node scripts/sync-ports-registry.js --check
+
+if ($JobScout) {
+  Write-Host "`n=== job-scout go-live (STATE-CHANGING — see docs/NEEDS_FROM_JORDAN.md) ===" -ForegroundColor Yellow
+  Write-Host "1) git pull" -ForegroundColor Cyan
+  git pull
+  Write-Host "`n2) local Supabase migration (job_lead notification category)" -ForegroundColor Cyan
+  npx supabase migration up
+  Write-Host "`n3) pm2 restart hydi-schedulers heidi-web-standalone ursula-local --update-env" -ForegroundColor Cyan
+  pm2 restart hydi-schedulers heidi-web-standalone ursula-local --update-env
+  Write-Host "`n4) node scripts/job-scout.js --once" -ForegroundColor Cyan
+  node scripts/job-scout.js --once
+  Write-Host "`n5) npm run runtime:audit" -ForegroundColor Cyan
+  npm run runtime:audit
+} else {
+  Write-Host "`n(job-scout go-live skipped — re-run with -JobScout after the job-scout PRs merge)" -ForegroundColor DarkGray
+}
 
 Write-Host "`nDone. See docs/NEEDS_FROM_JORDAN.md for paste-back items." -ForegroundColor Green
