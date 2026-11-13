@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Briefcase, Search, FileText, Star, Clock, CheckCircle2, AlertCircle,
-  ExternalLink, X, Copy, RefreshCw, Bookmark,
+  ExternalLink, X, Copy, RefreshCw, Bookmark, Play,
 } from 'lucide-react';
 import { useMode } from '@/lib/mode-context';
 
@@ -96,6 +96,9 @@ export default function FreelanceModule() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterKey>('open');
   const [openDraft, setOpenDraft] = useState<string | null>(null);
+  const [scanIntervalMs, setScanIntervalMs] = useState(10800000);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const load = useCallback(async () => {
     if (!isLive) { setLeads(SAMPLE); setStatus(null); setError(null); return; }
@@ -106,6 +109,7 @@ export default function FreelanceModule() {
       if (!body.ok) throw new Error(body.error || `HTTP ${res.status}`);
       setLeads(body.leads || []);
       setStatus(body.status || null);
+      if (typeof body.scanIntervalMs === 'number' && body.scanIntervalMs > 0) setScanIntervalMs(body.scanIntervalMs);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'could not load leads');
@@ -139,9 +143,29 @@ export default function FreelanceModule() {
     }
   }, [isLive]);
 
+  const runScanNow = useCallback(async () => {
+    if (!isLive) return;
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const res = await fetch('/api/job-scout/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ursula-request': '1' },
+      });
+      const body = await res.json();
+      setRunMsg(body.ok ? 'Scan mission filed with heidi-core — it runs on the next scheduler tick.' : `Could not file scan mission: ${body.error || `HTTP ${res.status}`}`);
+    } catch (e: unknown) {
+      setRunMsg(`Could not file scan mission: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setRunning(false);
+    }
+  }, [isLive]);
+
   const filtered = useMemo(() => leads.filter((l) => matchesFilter(l, filter)), [leads, filter]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, leads.filter((l) => matchesFilter(l, f.key)).length])), [leads]);
   const strong = leads.filter((l) => l.score >= 75 && matchesFilter(l, 'open')).length;
+  const scanAgeMs = status && status.ranAt ? Date.now() - Date.parse(status.ranAt) : null;
+  const stale = scanAgeMs != null && scanAgeMs > 2 * scanIntervalMs;
 
   return (
     <div className="h-full overflow-y-auto p-6" style={{ background: 'var(--bg-editor)' }}>
@@ -157,6 +181,11 @@ export default function FreelanceModule() {
         <button onClick={load} disabled={loading} className="ml-auto flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded border" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
           <RefreshCw size={10} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
+        {isLive && (
+          <button onClick={runScanNow} disabled={running} className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded border" style={{ borderColor: 'var(--border-color)', color: '#58a6ff' }}>
+            <Play size={10} /> {running ? 'Filing…' : 'Run scan now'}
+          </button>
+        )}
       </div>
       <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
         Heidi scans Freelancer.com, Remotive, RemoteOK and HN &ldquo;Seeking freelancer&rdquo; every 3 hours and ranks posts against your divisions. She never applies — you shortlist, edit the draft and apply on the site yourself.
@@ -177,6 +206,18 @@ export default function FreelanceModule() {
           ) : (
             <span>No scan yet — heidi-job-scout runs under hydi-schedulers (or run <code>node scripts/job-scout.js --once</code>).</span>
           )}
+        </div>
+      )}
+      {/* Stale scan banner — status.json older than 2x the scan interval */}
+      {isLive && stale && (
+        <div className="mb-4 p-3 rounded-md border text-[11px] font-mono flex items-center gap-2" style={{ background: '#f8514915', borderColor: '#f8514960', color: '#f85149' }}>
+          <AlertCircle size={12} />
+          Scan is stale — last run {ago(status?.ranAt || null)} (over 2× the {Math.round(scanIntervalMs / 3600000)}h interval). The scheduler may be down; use “Run scan now” to file a mission.
+        </div>
+      )}
+      {runMsg && (
+        <div className="mb-4 p-2 rounded text-[11px] font-mono" style={{ background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+          {runMsg}
         </div>
       )}
       {error && (
