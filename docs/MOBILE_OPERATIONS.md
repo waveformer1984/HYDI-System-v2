@@ -2,6 +2,30 @@
 
 Cursor agents use the always-on rules in [`.cursor/rules/hydi-mobile-operations.mdc`](../.cursor/rules/hydi-mobile-operations.mdc) for mobile-first execution, Tailscale/MCP boundaries, and repository-safe autonomy. Cloud VM setup: [CURSOR_CLOUD_AGENT.md](./CURSOR_CLOUD_AGENT.md). Unified capability + task lifecycle: [EXECUTION_FABRIC.md](./EXECUTION_FABRIC.md) (`/api/mobile-ops/fabric`).
 
+## Frank host vitals on `/heidi` (2026-11-14)
+
+The Heidi Mobile PWA **Status** tab includes a **Frank host** card when the BFF
+can read `.observatory/current.json` on the machine serving `heidi-web` (same
+evidence as `frank-observer` — no extra polling). Thresholds: C: &lt; 5 GB free,
+RAM &lt; 1 GB free, or failed `kong_54321` / `db_tcp_54322` probes → **degraded**;
+missing or stale observatory → **stale** (never shown as healthy). Implementation:
+`lib/heidi-mobile/frank-host-health.js`, `GET /api/heidi-mobile/status`.
+
+**Multi-agent coordination (phone → cloud + Frank):**
+
+| Owner | Scope |
+|-------|--------|
+| **Devin on Frank** | `scripts/frank/*`, PM2/Docker on the PC, token file under `%USERPROFILE%\.hydi\`, disk reclaim (elevated), reboot only when recovery is verified |
+| **Cursor cloud** | Repo PRs, mobile BFF/UI, hermetic unit tests — no tailnet unless `TS_AUTHKEY` / MCP secrets are configured |
+| **Either — check open PRs first** | `lib/mobile-chat/token-file.js`, `docs/NEEDS_FROM_JORDAN.md` |
+
+**Recovery:** Treat a live Claude Desktop session as **not** proof of post-reboot
+access. Tailscale **Unattended** must be evidenced separately. Do not reboot Frank
+for “fixes” while C: is critically low (~1.7 GB reported 2026-11-14) without a
+verified way back in.
+
+---
+
 Status as of 2026-07-15. This document covers the mobile command-center
 surface built on branch `claude/hydi-mobile-operations-ozd777`: real-time
 status, worker fleet control, push notifications, device-scoped auth/RBAC,

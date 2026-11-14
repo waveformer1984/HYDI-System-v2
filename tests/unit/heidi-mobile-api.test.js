@@ -281,7 +281,8 @@ describe('GET /api/heidi-mobile/status', () => {
   it('reports online only for an authenticated, healthy snapshot', async () => {
     const res = await call('status');
     expect(res.statusCode).toBe(200);
-    expect(res.body.state).toBe('online');
+    // Frank evidence is usually stale in Jest (no live observatory); that must not read as "online".
+    expect(res.body.state).toBe(res.body.frank_host?.stale ? 'degraded' : 'online');
     expect(res.body.system.subsystems[0]).toMatchObject({ name: 'hydi_core', status: 'healthy' });
     expect(res.body.errors).toEqual([]);
     expect(res.body.diagnostics).toMatchObject({
@@ -292,6 +293,14 @@ describe('GET /api/heidi-mobile/status', () => {
       device_pending_at_pairing: false,
     });
     expect(calls.find((c) => c.path === '/api/status/system').auth.valid).toBe(true);
+    expect(res.body.frank_host).toMatchObject({
+      state: expect.stringMatching(/^(healthy|degraded|stale|unknown)$/),
+      stale: expect.any(Boolean),
+      metrics: expect.objectContaining({
+        kong: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
+        db: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
+      }),
+    });
   });
 
   it('reports degraded when HYDI says so', async () => {
