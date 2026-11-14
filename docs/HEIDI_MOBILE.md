@@ -163,6 +163,31 @@ Roles: `operator` can chat, view everything, approve/reject, and control workers
 - `public/heidi.webmanifest`, `public/heidi-sw.js`, `public/heidi-icons/*`: PWA (icons copied from the existing `icons/`)
 - Tests: `tests/unit/heidi-mobile-*.test.*`, `tests/unit/actions-list-api.test.js`
 
+## Port 3006 chat (`launch-heidi-mobile.js` / PM2 `heidi-mobile-chat`)
+
+PM2 sets `HEIDI_MOBILE_REQUIRE_TOKEN=1`. Without device login the process
+refuses to start (exit 78). Token resolution:
+
+1. `HEIDI_MOBILE_TOKEN` in the environment (wins over the file).
+2. Else the contents of `HEIDI_MOBILE_TOKEN_FILE` (trimmed whitespace).
+3. Else default `%USERPROFILE%\.hydi\heidi-mobile-token`.
+
+`ecosystem.config.js` sets `HEIDI_MOBILE_TOKEN_FILE` to that default path using
+`os.homedir()` so `pm2 resurrect` after reboot can start the chat without a
+shell secret. Never commit the token or log it.
+
+**One-time setup on Frank** (copy from the existing Desktop file without
+echoing it; Desktop may be cloud-synced, which is why the live copy lives under
+`~\.hydi`):
+
+```powershell
+New-Item -ItemType Directory -Force $env:USERPROFILE\.hydi | Out-Null
+Copy-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" "$env:USERPROFILE\.hydi\heidi-mobile-token"
+pm2 restart heidi-mobile-chat --update-env; pm2 save
+```
+
+Paths inside the repository tree are refused for `HEIDI_MOBILE_TOKEN_FILE`.
+
 ## Relationship to the older mobile clients
 
 `hydi-mobile-protoforge.html`, `docs/index.html` (GitHub Pages),

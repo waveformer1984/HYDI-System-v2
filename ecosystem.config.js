@@ -34,6 +34,9 @@
  *   pm2 start ecosystem.config.js --env production
  */
 const path = require('path');
+const os = require('os');
+
+const HEIDI_MOBILE_TOKEN_FILE = path.join(os.homedir(), '.hydi', 'heidi-mobile-token');
 
 module.exports = {
   apps: [
@@ -759,17 +762,27 @@ module.exports = {
       // it; boot.config.json marks the module supervisor:'pm2'.
       // HEIDI_MOBILE_REQUIRE_TOKEN=1: the server refuses to start (exit 78,
       // not restarted) unless HEIDI_MOBILE_TOKEN is in the environment, so it
-      // can never come up on the tailnet without device login. The token is
-      // never written here: start it from a shell that has it, with
-      //   pm2 start ecosystem.config.js --only heidi-mobile-chat --update-env
+      // can never come up on the tailnet without device login. The token value
+      // is never in this file; PM2 reads HEIDI_MOBILE_TOKEN_FILE (default
+      // ~/.hydi/heidi-mobile-token) at process start. See CLAUDE.md.
       name: 'heidi-mobile-chat',
       script: 'launch-heidi-mobile.js',
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       args: '',
-      env: { NODE_ENV: 'development', HEIDI_MOBILE_PORT: '3006', HEIDI_MOBILE_REQUIRE_TOKEN: '1' },
-      env_production: { NODE_ENV: 'production', HEIDI_MOBILE_PORT: '3006', HEIDI_MOBILE_REQUIRE_TOKEN: '1' },
+      env: {
+        NODE_ENV: 'development',
+        HEIDI_MOBILE_PORT: '3006',
+        HEIDI_MOBILE_REQUIRE_TOKEN: '1',
+        HEIDI_MOBILE_TOKEN_FILE: HEIDI_MOBILE_TOKEN_FILE,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        HEIDI_MOBILE_PORT: '3006',
+        HEIDI_MOBILE_REQUIRE_TOKEN: '1',
+        HEIDI_MOBILE_TOKEN_FILE: HEIDI_MOBILE_TOKEN_FILE,
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M',

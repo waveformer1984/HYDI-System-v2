@@ -18,6 +18,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+require('./lib/mobile-chat/token-file').applyHeidiMobileTokenFromFile(__dirname);
+
 // HEIDI_MOBILE_PORT preferred; HEIDI_PORT kept for start-hydi.js compat, but
 // beware: heidi-core's server.js reads the same HEIDI_PORT for ITS port.
 const PORT = parseInt(process.env.HEIDI_MOBILE_PORT || process.env.HEIDI_PORT || '3006');
@@ -396,7 +398,7 @@ const TLS_KEY = process.env.HEIDI_TLS_KEY;
 // app's stop_exit_codes, so PM2 does not loop on it.
 if (require.main === module && process.env.HEIDI_MOBILE_REQUIRE_TOKEN === '1' && !process.env.HEIDI_MOBILE_TOKEN) {
     console.error('[heidi-mobile] HEIDI_MOBILE_REQUIRE_TOKEN=1 but HEIDI_MOBILE_TOKEN is not set; refusing to start without device login.');
-    console.error('[heidi-mobile] Start it from a shell that has the token: pm2 start ecosystem.config.js --only heidi-mobile-chat --update-env');
+    console.error('[heidi-mobile] Set HEIDI_MOBILE_TOKEN, or place the token in %USERPROFILE%\\.hydi\\heidi-mobile-token (see CLAUDE.md), then: pm2 restart heidi-mobile-chat --update-env');
     process.exit(78);
 }
 

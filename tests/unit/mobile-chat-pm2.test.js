@@ -6,6 +6,7 @@
  * hand-started process that nothing restarted.
  */
 
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -18,9 +19,11 @@ describe('heidi-mobile-chat under PM2', () => {
   it('is declared in ecosystem.config.js on :3006 with the token requirement', () => {
     expect(app).toBeDefined();
     expect(app.script).toBe('launch-heidi-mobile.js');
+    const expectedTokenFile = path.join(os.homedir(), '.hydi', 'heidi-mobile-token');
     for (const env of [app.env, app.env_production]) {
       expect(env.HEIDI_MOBILE_PORT).toBe('3006');
       expect(env.HEIDI_MOBILE_REQUIRE_TOKEN).toBe('1');
+      expect(env.HEIDI_MOBILE_TOKEN_FILE).toBe(expectedTokenFile);
       expect(env.HEIDI_MOBILE_TOKEN).toBeUndefined(); // never a secret in the file
     }
     expect(app.stop_exit_codes).toContain(78);
@@ -32,7 +35,12 @@ describe('heidi-mobile-chat under PM2', () => {
   });
 
   it('refuses to start (exit 78) when the token is required but missing', () => {
-    const env = { ...process.env, HEIDI_MOBILE_REQUIRE_TOKEN: '1', HEIDI_MOBILE_PORT: '0' };
+    const env = {
+      ...process.env,
+      HEIDI_MOBILE_REQUIRE_TOKEN: '1',
+      HEIDI_MOBILE_PORT: '0',
+      HEIDI_MOBILE_TOKEN_FILE: path.join(os.tmpdir(), `heidi-mobile-missing-${Date.now()}`),
+    };
     delete env.HEIDI_MOBILE_TOKEN;
     const r = spawnSync(process.execPath, ['launch-heidi-mobile.js'], { cwd: ROOT, env, timeout: 20000, encoding: 'utf8', windowsHide: true });
     expect(r.status).toBe(78);
