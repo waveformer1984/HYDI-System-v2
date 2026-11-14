@@ -80,6 +80,7 @@ function summarizeRuntime(runtime) {
     counts: runtime.counts || {},
     rows: Array.isArray(runtime.rows) ? runtime.rows : [],
     repoHead: runtime.repoHead || null,
+    pm2UnreadableReason: runtime.pm2UnreadableReason || null,
     degradesHealth: degradesApiHealth(runtime),
   };
 }

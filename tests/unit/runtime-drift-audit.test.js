@@ -207,11 +207,20 @@ describe('auditDrift verdicts', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('surfaces a custom pm2 unreadable reason', () => {
+    const result = auditDrift({ pm2Readable: false, pm2UnreadableReason: 'pm2 jlist did not answer within 120s' });
+    expect(result.pm2UnreadableReason).toBe('pm2 jlist did not answer within 120s');
+    expect(result.rows[0].suggestion).toBe('pm2 jlist did not answer within 120s');
+  });
+
   it('PM2 unreadable is UNKNOWN overall, with no rows and not OK', () => {
     const result = auditDrift({ pm2Readable: false, declared: [declared('hydi-daemon')], running: [running('hydi-daemon')], repoHead: HEAD });
     expect(result.overall).toBe('UNKNOWN');
     expect(result.ok).toBe(false);
-    expect(result.rows).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].name).toBe('pm2');
+    expect(result.rows[0].verdict).toBe('UNKNOWN');
+    expect(result.pm2UnreadableReason).toMatch(/unreadable/);
     expect(result.degradesHealth).toBe(true);
     expect(result.suggestion).toMatch(/not OK/);
     expect(result.suggestion).toMatch(/No process was restarted/);
