@@ -181,12 +181,18 @@ echoing it; Desktop may be cloud-synced, which is why the live copy lives under
 `~\.hydi`):
 
 ```powershell
+# UTF-16 Desktop exports double byte length vs token length — re-save as UTF-8 if so:
+(Get-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt").Length
 New-Item -ItemType Directory -Force $env:USERPROFILE\.hydi | Out-Null
 Copy-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" "$env:USERPROFILE\.hydi\heidi-mobile-token"
+# Restart from a shell that does NOT export HEIDI_MOBILE_TOKEN (file wins only when env unset):
 pm2 restart heidi-mobile-chat --update-env; pm2 save
+Remove-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" -ErrorAction SilentlyContinue
 ```
 
-Paths inside the repository tree are refused for `HEIDI_MOBILE_TOKEN_FILE`.
+The file must be **UTF-8 plain text** with printable ASCII only (NUL or UTF-16 garbage is
+rejected at startup with `token file invalid`). Paths inside the repository tree are refused
+for `HEIDI_MOBILE_TOKEN_FILE` (case-insensitive on Windows).
 
 ## Relationship to the older mobile clients
 

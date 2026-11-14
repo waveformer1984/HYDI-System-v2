@@ -168,11 +168,14 @@ An explicit `HEIDI_MOBILE_TOKEN` in the environment always wins over the file.
 One-time setup on Frank (do not print the token):
 
 ```powershell
+(Get-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt").Length
+# ~2× token length ⇒ re-save as UTF-8 before copy.
 New-Item -ItemType Directory -Force $env:USERPROFILE\.hydi | Out-Null
 Copy-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" "$env:USERPROFILE\.hydi\heidi-mobile-token"
 pm2 restart heidi-mobile-chat --update-env; pm2 save
 ```
 
+Token file must be UTF-8 printable ASCII (`lib/mobile-chat/token-file.js` rejects NUL/UTF-16 garbage).
 The Desktop file may be cloud-synced; the copy under `~\.hydi` is local only.
 
 #### No console windows from background processes
