@@ -160,11 +160,13 @@ pm2 save
 ## Ursula — approve phones without a shell
 
 Ursula’s **Devices** tab lists pending heidi-mobile registrations. The server route signs
-`POST /api/devices` with `HYDI_SERVICE_SECRET` (never sent to the browser).
+`POST /api/devices` with `HYDI_SERVICE_SECRET` (never sent to the browser). Since PR #569,
+`/api/devices` also requires `URSULA_ADMIN_TOKEN` (see the section above) — approving a phone
+from the Devices tab sends it as Bearer, so both env vars must be set in `.env.local`.
 
 ```powershell
 cd C:\Users\Owner\HYDI-System-v2
-# HYDI_SERVICE_SECRET must be in .env.local (same value heidi-web uses)
+# HYDI_SERVICE_SECRET and URSULA_ADMIN_TOKEN must be in .env.local
 pm2 restart ursula-local heidi-web-standalone --update-env
 pm2 save
 ```
