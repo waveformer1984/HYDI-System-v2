@@ -16,6 +16,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const board = require('../lib/forge-board/sdk');
 const disk = require('../lib/storage/disk');
+const { readBuildStamp } = require('../lib/runtime/provenance');
 
 const APP_NAME = 'frank-auto-deploy';
 const INTERVAL_MS = 5 * 60 * 1000;
@@ -141,6 +142,42 @@ function writeAlertState(alertStatePath, reason) {
 
 function clearAlertState(alertStatePath) {
   try { fs.unlinkSync(alertStatePath); } catch { /* already absent */ }
+}
+
+/**
+ * The commit a stale-build rebuild was last attempted for and failed. One
+ * failed rebuild of a commit is enough: without this marker the loop would
+ * rebuild (and roll back) the same commit every five minutes. A new commit
+ * on clean-main, or a successful rebuild, clears it.
+ */
+function readRebuildMarker(markerPath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    return typeof parsed.commit === 'string' ? parsed.commit : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRebuildMarker(markerPath, commit) {
+  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+  fs.writeFileSync(markerPath, JSON.stringify({ commit, at: new Date().toISOString() }));
+}
+
+function clearRebuildMarker(markerPath) {
+  try { fs.unlinkSync(markerPath); } catch { /* already absent */ }
+}
+
+/**
+ * The health checks a deploy must pass: every check that was passing before
+ * the deploy started, plus heidi-web (the app being deployed) always. A
+ * service that was already down — e.g. heidi-mobile-chat waiting for its
+ * token after a reboot — cannot be made healthy by a deploy, and requiring
+ * it would roll back every deploy until someone restarted it by hand.
+ */
+function requiredChecks(baseline, checks = HEALTH_CHECKS) {
+  const passing = new Set(((baseline && baseline.results) || []).filter((r) => r.ok).map((r) => r.name));
+  return checks.filter((check) => check.name === 'heidi-web' || passing.has(check.name));
 }
 
 function postSucceeded(result) {
@@ -406,6 +443,8 @@ async function runAutoDeploy(overrides = {}) {
   const post = overrides.post || ((channel, body) => board.post(channel, body, null, { sender: 'hydi-daemon' }));
   const log = overrides.log || ((message) => console.error(message));
   const lockPath = overrides.lockPath || path.join(root, '.runtime', 'frank-auto-deploy.lock');
+  const rebuildMarkerPath = overrides.rebuildMarkerPath || path.join(root, '.runtime', 'frank-auto-deploy-rebuild.json');
+  const readStamp = overrides.readBuildStamp || readBuildStamp;
   const lock = (overrides.acquireLock || acquireLock)(lockPath);
   if (!lock) return { status: 'lock_held' };
 
@@ -416,6 +455,11 @@ async function runAutoDeploy(overrides = {}) {
   let lockChanged = false;
   let swapped = false;
   let prTitles = [];
+  // rebuild: clean-main has not moved, but the live .next was built from an
+  // older commit (e.g. someone pulled by hand). liveCommit is that commit.
+  let rebuild = false;
+  let liveCommit = null;
+  let skippedChecks = [];
   const fsx = overrides.fsx || realFs;
 
   // A rejected board post must never be silent: one stderr line with the
@@ -460,8 +504,16 @@ async function runAutoDeploy(overrides = {}) {
       oldCommit = (await mustRun(run, 'git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim();
       newCommit = (await mustRun(run, 'git', ['rev-parse', 'origin/clean-main'], { cwd: root })).stdout.trim();
       if (oldCommit === newCommit) {
-        result = { status: 'noop' };
+        const stamp = readStamp(root);
+        const stampSha = stamp && stamp.gitSha;
+        if (stampSha && stampSha !== newCommit && readRebuildMarker(rebuildMarkerPath) !== newCommit) {
+          rebuild = true;
+          liveCommit = stampSha;
+        } else {
+          result = { status: 'noop' };
+        }
       } else {
+        clearRebuildMarker(rebuildMarkerPath);
         const ancestor = await run('git', ['merge-base', '--is-ancestor', oldCommit, newCommit], { cwd: root });
         if (!ancestor || ancestor.code !== 0) {
           const reason = 'local clean-main cannot fast-forward to origin/clean-main';
@@ -493,12 +545,19 @@ async function runAutoDeploy(overrides = {}) {
     }
 
     if (!result) {
-      const log = await mustRun(run, 'git', ['log', '--format=%B%x1e', `${oldCommit}..${newCommit}`], { cwd: root });
-      prTitles = parseMergedPrTitles(log.stdout);
-      const lockDiff = await mustRun(run, 'git', ['diff', '--name-only', oldCommit, newCommit, '--', 'package-lock.json'], { cwd: root });
-      lockChanged = lockDiff.stdout.split(/\r?\n/).some((line) => line.trim() === 'package-lock.json');
+      // What must be healthy afterwards is decided by what is healthy now.
+      const baseline = await waitForHealth({ ...healthOptions, timeoutMs: 0 });
+      healthOptions.checks = requiredChecks(baseline);
+      skippedChecks = HEALTH_CHECKS.map((c) => c.name).filter((n) => !healthOptions.checks.some((c) => c.name === n));
 
-      await mustRun(run, 'git', ['merge', '--ff-only', 'origin/clean-main'], { cwd: root });
+      if (!rebuild) {
+        const log = await mustRun(run, 'git', ['log', '--format=%B%x1e', `${oldCommit}..${newCommit}`], { cwd: root });
+        prTitles = parseMergedPrTitles(log.stdout);
+        const lockDiff = await mustRun(run, 'git', ['diff', '--name-only', oldCommit, newCommit, '--', 'package-lock.json'], { cwd: root });
+        lockChanged = lockDiff.stdout.split(/\r?\n/).some((line) => line.trim() === 'package-lock.json');
+
+        await mustRun(run, 'git', ['merge', '--ff-only', 'origin/clean-main'], { cwd: root });
+      }
       updated = true;
       if (lockChanged) {
         await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
@@ -510,29 +569,36 @@ async function runAutoDeploy(overrides = {}) {
       await restartApps(run, root, platform, swap.stoppedWeb ? [WEB_APP] : []);
 
       const health = await waitForHealth(healthOptions);
+      const from = rebuild ? liveCommit : oldCommit;
+      const what = rebuild ? 'Frank rebuilt a stale build' : 'Frank deployed';
+      const notRequired = skippedChecks.length ? [`Not required (already down before the deploy): ${skippedChecks.join(', ')}`] : [];
       if (!health.ok) {
         const failing = health.results.filter((check) => !check.ok).map((check) => check.name).join(', ');
         const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped, fsx });
+        if (rebuild) writeRebuildMarker(rebuildMarkerPath, newCommit);
         await alert(
           `rollback:${newCommit}`,
-          `Frank auto-deploy rolled back ${newCommit.slice(0, 8)} to ${oldCommit.slice(0, 8)}; failing check: ${failing}. Rollback health: ${healthText(rollbackHealth)}.`,
+          `Frank auto-deploy rolled back ${newCommit.slice(0, 8)} to ${from.slice(0, 8)}; failing check: ${failing}. Rollback health: ${healthText(rollbackHealth)}.`,
         );
         await postToBoard('ops', [
-          `Frank deploy rolled back: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}→${oldCommit.slice(0, 8)}`,
+          `${what} — rolled back: ${from.slice(0, 8)}→${newCommit.slice(0, 8)}→${from.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Failed health: ${healthText(health)}`,
+          ...notRequired,
           `Rollback health: ${healthText(rollbackHealth)}`,
           `Duration: ${Math.round((now() - started) / 1000)}s`,
         ].join('\n'));
-        result = { status: 'rolled_back', oldCommit, newCommit, health, rollbackHealth };
+        result = { status: 'rolled_back', oldCommit: from, newCommit, health, rollbackHealth, rebuild };
       } else {
+        if (rebuild) clearRebuildMarker(rebuildMarkerPath);
         await postToBoard('ops', [
-          `Frank deployed: ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)}`,
+          `${what}: ${from.slice(0, 8)}→${newCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
           `Health: ${healthText(health)}`,
+          ...notRequired,
           `Duration: ${Math.round((now() - started) / 1000)}s`,
         ].join('\n'));
-        result = { status: 'deployed', oldCommit, newCommit, health };
+        result = { status: 'deployed', oldCommit: from, newCommit, health, rebuild };
       }
     }
   } catch (error) {
@@ -540,6 +606,7 @@ async function runAutoDeploy(overrides = {}) {
     if (updated && oldCommit) {
       try {
         const rollbackHealth = await rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped, fsx });
+        if (rebuild) writeRebuildMarker(rebuildMarkerPath, newCommit);
         const where = swapped ? 'restored the previous build' : 'the live site was never touched';
         await alert(`rollback_error:${reason}`, `Frank auto-deploy rolled back after deployment error (${where}): ${reason}. Health: ${healthText(rollbackHealth)}.`);
         result = { status: 'rolled_back', oldCommit, newCommit, reason, rollbackHealth };
@@ -638,6 +705,8 @@ module.exports = {
   readAlertState,
   writeAlertState,
   clearAlertState,
+  readRebuildMarker,
+  requiredChecks,
   postSucceeded,
   parseMergedPrTitles,
   waitForHealth,

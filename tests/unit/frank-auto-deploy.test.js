@@ -185,6 +185,7 @@ describe('Frank auto-deploy', () => {
 
   it('rolls back after failed health by restoring the previous build — no rebuild — and restarts only online PM2 apps', async () => {
     let rolledBack = false;
+    let built = false; // heidi-mobile is healthy before the deploy; the build breaks it
     const calls = [];
     const ROOT = 'C:/HYDI-System-v2';
     const fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, `${ROOT}/.next/cache`]);
@@ -209,6 +210,7 @@ describe('Frank auto-deploy', () => {
         return ok();
       }
       if (key === 'npm.cmd run build') {
+        built = true;
         buildEnv = options.env;
         fsx.produceBuild(ROOT);
         return ok();
@@ -245,8 +247,8 @@ describe('Frank auto-deploy', () => {
       healthIntervalMs: 25,
       probe: async (check) => ({
         name: check.name,
-        ok: rolledBack || check.name !== 'heidi-mobile',
-        status: rolledBack || check.name !== 'heidi-mobile' ? 200 : 0,
+        ok: rolledBack || !built || check.name !== 'heidi-mobile',
+        status: rolledBack || !built || check.name !== 'heidi-mobile' ? 200 : 0,
       }),
     });
 
@@ -613,7 +615,7 @@ describe('Frank auto-deploy staged builds', () => {
     { name: 'heidi-core', pm2_env: { status: 'online' } },
   ]);
 
-  function harness({ build = 'ok', healthy = () => true, fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`]) } = {}) {
+  function harness({ build = 'ok', healthy = () => true, origin = NEW, fsx = memFs([`${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`]) } = {}) {
     const calls = [];
     const posts = [];
     let clock = 0;
@@ -626,7 +628,7 @@ describe('Frank auto-deploy staged builds', () => {
         'git checkout -- next-env.d.ts': ok(),
         'git status --porcelain --untracked-files=no': ok(),
         'git rev-parse HEAD': ok(`${OLD}\n`),
-        'git rev-parse origin/clean-main': ok(`${NEW}\n`),
+        'git rev-parse origin/clean-main': ok(`${origin}\n`),
         [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
         [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
         [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(),
@@ -672,6 +674,65 @@ describe('Frank auto-deploy staged builds', () => {
     expect(h.fsx.exists(`${ROOT}/.next-prev/BUILD_ID`)).toBe(true);
     expect(h.fsx.exists(`${ROOT}/.next-staging`)).toBe(false);
     expect(h.calls.filter((c) => c.startsWith('pm2.cmd restart'))).toHaveLength(1);
+  });
+
+  describe('stale build: clean-main has not moved but .next was built from an older commit', () => {
+    const STALE = '3333333333333333333333333333333333333333';
+    const stampOf = (sha) => () => ({ gitSha: sha, branch: 'clean-main', gitDirty: false });
+
+    it('rebuilds and swaps without merging when the live build stamp is behind HEAD', async () => {
+      const h = harness({ origin: OLD });
+      const result = await h.deploy({ readBuildStamp: stampOf(STALE), rebuildMarkerPath: path.join(tmpDir(), 'rebuild.json') });
+      expect(result).toMatchObject({ status: 'deployed', rebuild: true, oldCommit: STALE, newCommit: OLD });
+      expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+      expect(h.calls.filter((c) => c === 'npm.cmd run build')).toHaveLength(1);
+      expect(h.calls.filter((c) => c.startsWith('pm2.cmd restart'))).toHaveLength(1);
+      expect(h.fsx.exists(`${ROOT}/.next-prev/BUILD_ID`)).toBe(true);
+      expect(h.posts.find((p) => p.channel === 'ops').body).toContain('Frank rebuilt a stale build: 33333333→11111111');
+    });
+
+    it('stays a quiet noop when the live build already matches HEAD, or carries no stamp', async () => {
+      for (const readBuildStamp of [stampOf(OLD), () => null, stampOf(null)]) {
+        const h = harness({ origin: OLD });
+        await expect(h.deploy({ readBuildStamp, rebuildMarkerPath: path.join(tmpDir(), 'rebuild.json') }))
+          .resolves.toEqual({ status: 'noop' });
+        expect(h.calls.some((c) => c === 'npm.cmd run build')).toBe(false);
+      }
+    });
+
+    it('a failed rebuild of a commit is not retried every pass; a new commit clears the marker', async () => {
+      const marker = path.join(tmpDir(), 'rebuild.json');
+      const failing = harness({ origin: OLD, build: 'fail' });
+      const first = await failing.deploy({ readBuildStamp: stampOf(STALE), rebuildMarkerPath: marker });
+      expect(first).toMatchObject({ status: 'rolled_back' });
+      expect(JSON.parse(fs.readFileSync(marker, 'utf8')).commit).toBe(OLD);
+
+      const again = harness({ origin: OLD });
+      await expect(again.deploy({ readBuildStamp: stampOf(STALE), rebuildMarkerPath: marker })).resolves.toEqual({ status: 'noop' });
+      expect(again.calls.some((c) => c === 'npm.cmd run build')).toBe(false);
+
+      const moved = harness();
+      const result = await moved.deploy({ readBuildStamp: stampOf(STALE), rebuildMarkerPath: marker });
+      expect(result.status).toBe('deployed');
+      expect(fs.existsSync(marker)).toBe(false);
+    });
+  });
+
+  it('a service already down before the deploy is not required afterwards (heidi-web always is)', async () => {
+    const h = harness();
+    const result = await h.deploy({
+      probe: async (check) => ({ name: check.name, ok: check.name !== 'heidi-mobile', status: check.name !== 'heidi-mobile' ? 200 : 0 }),
+    });
+    expect(result.status).toBe('deployed');
+    expect(h.posts.find((p) => p.channel === 'ops').body).toContain('Not required (already down before the deploy): heidi-mobile');
+  });
+
+  it('requiredChecks keeps heidi-web even when it was down at baseline', () => {
+    const { requiredChecks } = require('../../scripts/frank-auto-deploy');
+    const names = requiredChecks({ results: [
+      { name: 'heidi-web', ok: false }, { name: 'heidi-mobile', ok: false }, { name: 'heidi-core', ok: true },
+    ] }).map((c) => c.name);
+    expect(names).toEqual(['heidi-web', 'heidi-core']);
   });
 
   it('a failed build never touches the live site: no swap, no restart, no rebuild', async () => {
