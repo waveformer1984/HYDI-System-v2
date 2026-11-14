@@ -2,6 +2,109 @@
 
 Commands are copy-paste ready. Paste **stdout only** back into chat or commit under `internal/inventory/` if large.
 
+Context for Frank host vitals on the phone: [MOBILE_OPERATIONS.md](./MOBILE_OPERATIONS.md) (deploy gates),
+[FRANK_OBSERVATION.md](./FRANK_OBSERVATION.md) (`.observatory/current.json`), PRs **#582** + **#583**
+(merged on `clean-main`).
+
+## Frank host vitals on `/heidi` — **Owner: Devin on Frank**
+
+**Cursor cloud agents:** do not run these steps (no Frank shell). **Jordan:** paste back only after
+Devin completes the ordered list unless a step explicitly names you.
+
+Run **in this order**. Skip deploy/build if storage is **LOW** or **CRITICAL** until C: is back
+above the deploy floor (see [STORAGE_PROGRAM.md](./STORAGE_PROGRAM.md)); running `npm run build` or
+full Jest on a tight disk has wedged Frank before.
+
+### 1) Pre-flight — storage + access (no reboot)
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+if (Test-Path .runtime\storage\status.json) {
+  Get-Content .runtime\storage\status.json | ConvertFrom-Json | Select-Object level, free_gb, updated_at
+} else { Write-Host 'storage status missing — start frank-storage-guard or run node scripts/frank-storage-guard.js --once' }
+tailscale status --json | ConvertFrom-Json | Select-Object -ExpandProperty Self | Select-Object Online, KeyExpiry
+```
+
+Do **not** reboot Frank for this work unless Jordan has confirmed Tailscale **Unattended** (or another
+verified return path). A live desktop session is not proof of post-reboot access.
+
+**Paste back:** `level` + `free_gb` from storage status; Tailscale `Online` + whether `KeyExpiry` is empty or a future date.
+
+### 2) Clean tree + pull merged vitals code
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+git checkout clean-main
+git pull origin clean-main
+git status --porcelain
+git log -1 --oneline
+```
+
+**Paste back:** empty `git status --porcelain` (or list what was stashed) + `git log -1` line containing
+`frank-host` or merge of **#583**.
+
+### 3) Observatory evidence fresh (frank-observer)
+
+The phone BFF reads **`.observatory/current.json`** on this machine (`frank-host-health.js`). Stale or
+missing observatory must **never** show as healthy on the phone.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+pm2 describe frank-observer | Select-String 'status|uptime|restarts'
+if (-not (Test-Path .observatory\current.json)) {
+  node scripts/frank-observer.js --once
+}
+node -e "const j=require('./.observatory/current.json'); const age=(Date.now()-Date.parse(j.ts))/1000; console.log(JSON.stringify({schema:j.schema,age_sec:Math.round(age),kong:j.probes?.kong_54321,db:j.probes?.db_tcp_54322}));"
+```
+
+**Paste back:** `frank-observer` PM2 status **online** + the one-line JSON (`age_sec` ideally &lt; 120).
+
+### 4) Build + promote **heidi-web** (restart alone does not ship UI/BFF)
+
+`next start` serves the **production** `.next` tree, not the working copy.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+npm run build
+if (-not (Test-Path .next\BUILD_ID)) { throw 'build incomplete — no BUILD_ID' }
+# Let frank-auto-deploy promote on its next pass, OR promote manually per CLAUDE.md if auto-deploy is paused.
+pm2 restart heidi-web-standalone --update-env
+pm2 save
+```
+
+**Paste back:** presence of `.next\BUILD_ID` + first line of `.next\hydi-build.json` if present (gitSha only,
+no env). `pm2 list` row for `heidi-web-standalone` = **online**.
+
+### 5) Server-side Frank host snapshot (same logic as phone BFF)
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+node -e "const {buildFrankHostHealth}=require('./lib/heidi-mobile/frank-host-health'); const h=buildFrankHostHealth({root:process.cwd()}); console.log(JSON.stringify({state:h.state,stale:h.stale,reasons:h.reasons,metrics:{disk_c_free_gb:h.metrics.disk_c_free_gb,mem_free_gb:h.metrics.mem_free_gb,kong:h.metrics.kong,db:h.metrics.db}},null,0));"
+```
+
+**Paste back:** full JSON line (no secrets). If `stale: true` or `state: degraded`, say so — that is expected
+when disk/RAM/kong/db probes fail; the phone must match it.
+
+### 6) Mobile chat BFF up (pairing path for Jordan)
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+pm2 describe heidi-mobile-chat | Select-String 'status|HEIDI_MOBILE'
+# Token must load from file when env unset — see P0 Unblock mobile below if exit 78.
+```
+
+**Paste back:** `heidi-mobile-chat` **online** + log confirmation `HEIDI_MOBILE_TOKEN loaded from file` (not the token).
+
+### 7) Jordan — phone verification (after Devin paste-back)
+
+On a paired phone, open **`/heidi` → Status → Refresh**. Expect a **Frank host** card when `frank_host` is
+present; vitals label must show **stale** or **degraded** when evidence is bad (never **healthy** on stale).
+
+**Jordan paste back:** connection banner state (`online` vs `degraded`) + Frank vitals label line, or
+“no Frank host card” if BFF returned null.
+
+---
+
 ## P0 — Heidi advisory token (Ursula ↔ heidi-agent)
 
 `HEIDI_ADMIN_TOKEN` must live in `.env.local` only (never in browser JS). Ursula proxies
