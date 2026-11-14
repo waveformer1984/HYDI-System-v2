@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ModeProvider } from "@/lib/mode-context";
 import HeidiChatPanel from "@/components/heidi/HeidiChatPanel";
+import { ensureOperatorSessionCookie } from "@/lib/ursula-operator-session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,11 +20,12 @@ export const metadata: Metadata = {
   description: "ProtoForge command center and module dashboard",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await ensureOperatorSessionCookie();
   return (
     <html lang="en">
       <body

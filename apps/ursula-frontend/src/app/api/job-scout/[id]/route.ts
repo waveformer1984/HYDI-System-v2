@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setDecision, isValidLeadId, DECISIONS, type Decision } from '@/lib/job-scout-store';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,21 +12,11 @@ export const dynamic = 'force-dynamic';
  * <img> can't set it) and, when the browser sends Origin, it must match Host.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = refuseUnlessUrsulaOperator(req);
+  if (denied) return denied;
   const { id: rawId } = await params;
   const id = decodeURIComponent(rawId);
 
-  if (req.headers.get('x-ursula-request') !== '1') {
-    return NextResponse.json({ ok: false, error: 'missing x-ursula-request header' }, { status: 403 });
-  }
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (origin && host) {
-    try {
-      if (new URL(origin).host !== host) return NextResponse.json({ ok: false, error: 'cross-origin request refused' }, { status: 403 });
-    } catch {
-      return NextResponse.json({ ok: false, error: 'bad origin' }, { status: 403 });
-    }
-  }
   if (!isValidLeadId(id)) return NextResponse.json({ ok: false, error: 'invalid lead id' }, { status: 400 });
 
   let body: { status?: unknown } = {};

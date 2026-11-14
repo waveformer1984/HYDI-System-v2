@@ -1,13 +1,14 @@
 /**
- * "Run scan now" — files an informational heidi-core mission through the
- * existing POST /missions surface (same pattern as /api/apps/[id]/start).
- * Ursula never spawns the scan process itself; a mission is the governed
- * request, and hydi-schedulers / an operator decides execution.
+ * "Run scan now" — proposes the allowlisted `job_scout_scan` action on
+ * heidi-core. The mission worker runs `scripts/job-scout.js --once` with
+ * standing approval (read-only toward job sites). Ursula never spawns it.
  */
 
 export interface MissionResult {
   ok: boolean;
   mission?: unknown;
+  missionId?: string | number;
+  summary?: string;
   error?: string;
 }
 
@@ -20,19 +21,20 @@ export async function fileScanNowMission(opts: {
   const fetcher = opts.fetchImpl || fetch;
   const timeoutMs = opts.timeoutMs ?? 4000;
   try {
-    const res = await fetcher(`${endpoint}/missions`, {
+    const res = await fetcher(`${endpoint}/allowlist/propose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        goal: 'Run the job-scout scan now (node scripts/job-scout.js --once)',
-        source: 'ursula-freelance',
-        priority: 1,
-      }),
+      body: JSON.stringify({ spec: 'job_scout_scan', args: {} }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) return { ok: false, error: (json.error as string) || `heidi-core ${res.status}` };
-    return { ok: true, mission: json.mission };
+    return {
+      ok: true,
+      missionId: json.missionId as string | number | undefined,
+      summary: json.summary as string | undefined,
+      mission: { id: json.missionId, summary: json.summary },
+    };
   } catch (e) {
     return { ok: false, error: `mission surface unreachable: ${(e as Error)?.message || e}` };
   }

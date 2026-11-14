@@ -147,19 +147,51 @@ export default function FreelanceModule() {
     if (!isLive) return;
     setRunning(true);
     setRunMsg(null);
+    const beforeRanAt = status?.ranAt ?? null;
     try {
       const res = await fetch('/api/job-scout/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-ursula-request': '1' },
       });
       const body = await res.json();
-      setRunMsg(body.ok ? 'Scan mission filed with heidi-core — it runs on the next scheduler tick.' : `Could not file scan mission: ${body.error || `HTTP ${res.status}`}`);
+      if (!body.ok) {
+        setRunMsg(`Could not start scan: ${body.error || `HTTP ${res.status}`}`);
+        return;
+      }
+      setRunMsg(body.summary ? `${body.summary} — running on Frank…` : 'Scan queued on heidi-core…');
+      const deadline = Date.now() + 270000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 4000));
+        const poll = await fetch('/api/job-scout');
+        const snap = await poll.json();
+        if (snap.ok && snap.status?.ranAt && snap.status.ranAt !== beforeRanAt) {
+          setStatus(snap.status);
+          setLeads(snap.leads ?? []);
+          const parts = snap.status.sources
+            ? Object.entries(snap.status.sources).map(([k, v]) => `${k}:${(v as { ok: boolean; count: number }).ok ? (v as { count: number }).count : 'err'}`).join(' ')
+            : '';
+          setRunMsg(`Scan finished · new=${snap.status.newLeads ?? '?'} · ${parts}`);
+          return;
+        }
+        if (body.missionId) {
+          const mRes = await fetch(`/api/job-scout/mission/${encodeURIComponent(String(body.missionId))}`);
+          const mBody = await mRes.json();
+          if (mBody.ok && ['completed', 'failed', 'blocked', 'cancelled'].includes(mBody.status)) {
+            if (mBody.status === 'completed') await load();
+            setRunMsg(mBody.status === 'completed'
+              ? 'Scan mission completed — leads refreshed.'
+              : `Scan mission ${mBody.status}: ${mBody.reason || mBody.summary || ''}`);
+            return;
+          }
+        }
+      }
+      setRunMsg('Scan still running — tap Refresh in a minute.');
     } catch (e: unknown) {
-      setRunMsg(`Could not file scan mission: ${e instanceof Error ? e.message : e}`);
+      setRunMsg(`Could not run scan: ${e instanceof Error ? e.message : e}`);
     } finally {
       setRunning(false);
     }
-  }, [isLive]);
+  }, [isLive, status?.ranAt, load]);
 
   const filtered = useMemo(() => leads.filter((l) => matchesFilter(l, filter)), [leads, filter]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, leads.filter((l) => matchesFilter(l, f.key)).length])), [leads]);

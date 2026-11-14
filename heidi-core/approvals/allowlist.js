@@ -12,6 +12,7 @@
  *   pm2_restart     { app }          -> scripts/pm2-restart.js <app>
  *   local_ci_rerun  { pr }           -> scripts/local-ci.js --pr <n>
  *   disk_report     {}               -> scripts/disk-report.js
+ *   job_scout_scan  {}               -> scripts/job-scout.js --once (read-only scan)
  */
 const path = require('path');
 
@@ -43,6 +44,16 @@ const SPECS = {
     summary: () => 'Disk report for C:',
     validate() { return null; },
     action: () => ({ type: 'run_script', target: path.join(SCRIPTS, 'disk-report.js'), args: [] }),
+  },
+  job_scout_scan: {
+    summary: () => 'Run job-scout scan now (read-only toward job sites)',
+    validate() { return null; },
+    action: () => ({
+      type: 'run_script',
+      target: path.join(SCRIPTS, 'job-scout.js'),
+      args: ['--once'],
+      timeout_ms: 240000,
+    }),
   },
 };
 

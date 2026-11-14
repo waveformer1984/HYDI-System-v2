@@ -1,4 +1,6 @@
-import { isLocalRequest, coreUrl, coreHeaders, forbidden, coreDown } from '@/lib/heidi-relay';
+import { coreUrl, coreHeaders, coreDown } from '@/lib/heidi-relay';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
+import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,8 +9,9 @@ export const dynamic = 'force-dynamic';
  * streamed back as-is (server-sent events: { t } chunks, then { done, ... }).
  * The same conversation, memory, task and trace commands as the phone chat.
  */
-export async function POST(req: Request): Promise<Response> {
-  if (!isLocalRequest(req.headers)) return forbidden();
+export async function POST(req: NextRequest): Promise<Response> {
+  const denied = refuseUnlessUrsulaOperator(req);
+  if (denied) return denied;
   let body: { message?: unknown; conversation_id?: unknown; request_id?: unknown };
   try { body = await req.json(); } catch { return Response.json({ error: 'invalid JSON' }, { status: 400 }); }
   const message = typeof body.message === 'string' ? body.message.trim() : '';
