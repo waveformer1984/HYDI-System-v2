@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
  * "Start" files a heidi-core restart-module mission through the existing
  * mission surface — Ursula never spawns processes itself.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = refuseUnlessUrsulaOperator(req);
+  if (denied) return denied;
   const { id } = await params;
   try {
     const body = JSON.stringify({ type: 'restart-module', moduleId: id, requestedBy: 'ursula-workspace' });

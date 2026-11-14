@@ -2,6 +2,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { NextRequest } from 'next/server';
 import { isLocalRequest } from './heidi-relay';
 import { parseSse, splitToolLines } from './heidi-sse';
 
@@ -30,6 +31,7 @@ describe('relay routes against a fake heidi-core', () => {
   let server: http.Server;
   const seen: Array<{ url: string; body: string; secret: string | undefined }> = [];
   beforeAll(async () => {
+    process.env.URSULA_ADMIN_TOKEN = 'relay-test-operator-token';
     server = http.createServer((req, res) => {
       let body = '';
       req.on('data', (c) => { body += c; });
@@ -52,13 +54,23 @@ describe('relay routes against a fake heidi-core', () => {
     process.env.HEIDI_CORE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     process.env.HEIDI_SECRET = 'shared-test-value';
   });
-  afterAll(() => { server.close(); delete process.env.HEIDI_CORE_URL; delete process.env.HEIDI_SECRET; });
+  afterAll(() => {
+    server.close();
+    delete process.env.HEIDI_CORE_URL;
+    delete process.env.HEIDI_SECRET;
+    delete process.env.URSULA_ADMIN_TOKEN;
+  });
 
-  const local = { host: '127.0.0.1:3100', 'content-type': 'application/json' };
+  const local = {
+    host: '127.0.0.1:3100',
+    'content-type': 'application/json',
+    authorization: 'Bearer relay-test-operator-token',
+    'x-ursula-request': '1',
+  };
 
   it('streams /chat-tools through, with the ids and the shared secret', async () => {
     const { POST } = await import('@/app/api/heidi/chat/route');
-    const res = await POST(new Request('http://127.0.0.1:3100/api/heidi/chat', { method: 'POST', headers: local, body: JSON.stringify({ message: ' tasks ', conversation_id: 'c-123', request_id: 'r-1' }) }));
+    const res = await POST(new NextRequest('http://127.0.0.1:3100/api/heidi/chat', { method: 'POST', headers: local, body: JSON.stringify({ message: ' tasks ', conversation_id: 'c-123', request_id: 'r-1' }) }));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/event-stream');
     const { events } = parseSse(await res.text() + '\n\n');
@@ -71,23 +83,23 @@ describe('relay routes against a fake heidi-core', () => {
   it('refuses non-local callers before touching heidi-core, and validates input', async () => {
     const { POST } = await import('@/app/api/heidi/chat/route');
     const before = seen.length;
-    const remote = await POST(new Request('http://x/api/heidi/chat', { method: 'POST', headers: { host: '192.168.86.178:3100' }, body: '{"message":"hi"}' }));
+    const remote = await POST(new NextRequest('http://x/api/heidi/chat', { method: 'POST', headers: { host: '192.168.86.178:3100' }, body: '{"message":"hi"}' }));
     expect(remote.status).toBe(403);
     expect((await remote.json()).error).toBe('local_only');
     expect(seen.length).toBe(before);
-    expect((await POST(new Request('http://x', { method: 'POST', headers: local, body: '{"message":"  "}' }))).status).toBe(400);
-    expect((await POST(new Request('http://x', { method: 'POST', headers: local, body: 'not json' }))).status).toBe(400);
-    expect((await POST(new Request('http://x', { method: 'POST', headers: local, body: JSON.stringify({ message: 'x'.repeat(8001) }) }))).status).toBe(413);
+    expect((await POST(new NextRequest('http://x', { method: 'POST', headers: local, body: '{"message":"  "}' }))).status).toBe(400);
+    expect((await POST(new NextRequest('http://x', { method: 'POST', headers: local, body: 'not json' }))).status).toBe(400);
+    expect((await POST(new NextRequest('http://x', { method: 'POST', headers: local, body: JSON.stringify({ message: 'x'.repeat(8001) }) }))).status).toBe(413);
   });
 
   it('relays history and health, and rejects odd conversation ids', async () => {
     const { GET } = await import('@/app/api/heidi/conversations/[id]/messages/route');
-    const ok = await GET(new Request('http://x', { headers: local }), { params: Promise.resolve({ id: 'c-123' }) });
+    const ok = await GET(new NextRequest('http://x', { headers: local }), { params: Promise.resolve({ id: 'c-123' }) });
     expect((await ok.json()).messages[0].content).toBe('hi');
-    const bad = await GET(new Request('http://x', { headers: local }), { params: Promise.resolve({ id: '../../system/status' }) });
+    const bad = await GET(new NextRequest('http://x', { headers: local }), { params: Promise.resolve({ id: '../../system/status' }) });
     expect(bad.status).toBe(400);
     const health = await import('@/app/api/heidi/health/route');
-    expect(await (await health.GET(new Request('http://x', { headers: local }))).json()).toEqual({ ok: true, status: 200 });
+    expect(await (await health.GET(new NextRequest('http://x', { headers: local }))).json()).toEqual({ ok: true, status: 200 });
   });
 
   it('reports heidi-core down as 503, not a crash', async () => {
@@ -95,7 +107,7 @@ describe('relay routes against a fake heidi-core', () => {
     process.env.HEIDI_CORE_URL = 'http://127.0.0.1:9';
     try {
       const { POST } = await import('@/app/api/heidi/chat/route');
-      const res = await POST(new Request('http://x', { method: 'POST', headers: local, body: '{"message":"hi"}' }));
+      const res = await POST(new NextRequest('http://x', { method: 'POST', headers: local, body: '{"message":"hi"}' }));
       expect(res.status).toBe(503);
       expect((await res.json()).error).toBe('heidi_core_unreachable');
     } finally {
