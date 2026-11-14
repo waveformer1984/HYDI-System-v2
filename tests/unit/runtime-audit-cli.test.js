@@ -86,7 +86,7 @@ describe('runtime:audit exit codes', () => {
         kill_timeout: 50000,
       }],
     })],
-    ['UNKNOWN', { pm2Readable: false }],
+    ['UNKNOWN', { pm2Readable: false, pm2UnreadableReason: 'pm2 jlist failed (ENOENT)' }],
     ['UNKNOWN_CODE', daemonInput({ provenance: {} })],
     ['MISSING', daemonInput({ running: [] })],
   ])('exits 1 on %s', (_label, input) => {

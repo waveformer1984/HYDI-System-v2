@@ -17,6 +17,7 @@ function formatAudit(audit) {
   const lines = [];
   lines.push(`overall\t${audit.overall}`);
   if (audit.repoHead) lines.push(`repoHead\t${audit.repoHead}`);
+  if (audit.pm2UnreadableReason) lines.push(`pm2UnreadableReason\t${audit.pm2UnreadableReason}`);
   if (audit.suggestion) lines.push(audit.suggestion);
   const counts = audit.counts || {};
   lines.push(`counts\t${Object.keys(counts).map((key) => `${key}=${counts[key]}`).join(' ')}`);
