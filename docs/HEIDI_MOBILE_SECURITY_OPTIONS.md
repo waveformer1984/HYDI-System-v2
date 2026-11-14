@@ -1,6 +1,12 @@
 # Heidi Mobile — security options (decision doc for Jordan)
 
-**Status:** Options only — no behavior changes until you pick. Context from `docs/HEIDI_MOBILE.md` (Known, pre-existing issue) and older mobile clients.
+**Status:** Partial decisions recorded 2026-11-14 — **no implementation** in the Frank host vitals PR. Implementation plan for chat auth: [HEIDI_MOBILE_CHAT_SERVICE_TOKEN_PLAN.md](./HEIDI_MOBILE_CHAT_SERVICE_TOKEN_PLAN.md).
+
+**Jordan (2026-11-14):** **(a) Option A** — require service token on every `/api/chat` request; mobile BFF attaches it server-side for approved devices. **(b)** **Hold** retirement of `docs/index.html` and `hydi-mobile-protoforge.html` until confirmed still in use.
+
+---
+
+## Options history (pre-decision)
 
 ---
 
@@ -64,17 +70,17 @@ Require `x-hydi-service-token` for **all** `/api/chat` traffic (fail closed with
 - **BFF repoint (3):** Medium–large (duplicate much of `/heidi` client in static shell).
 - **Pairing (4):** Large (two PWAs converging).
 
-### Recommendation: **Option 1 + timeline**
+### Recommendation (original doc): Option 1 + timeline
 
-Announce retirement of `docs/index.html` and `hydi-mobile-protoforge.html` after `/heidi` is the default on Tailscale (already preferred in ops docs). Keep GitHub Pages shell as **UI-only** redirect to `/heidi` on the operator's tailnet host with no secret fields. Do not invest in parallel auth for legacy storage.
+**Superseded for now:** Jordan asked to **hold** legacy client retirement until usage is confirmed. Do **not** remove `docs/index.html` or `hydi-mobile-protoforge.html` in unrelated merges.
 
 ---
 
 ## Pick checklist (for Jordan)
 
-- [ ] **(a)** A / B / C / D — default recommendation **A**
-- [ ] **(b)** 1 / 2 / 3 / 4 — default recommendation **1**
-- [ ] Deadline for legacy client shutdown (if 1 or 3)
+- [x] **(a)** **A** — require service token on all `/api/chat` (plan only; see linked plan doc)
+- [ ] **(b)** Legacy clients — **on hold** (confirm usage first)
+- [ ] Deadline for legacy client shutdown (when decided)
 - [ ] Whether GitHub Pages should redirect only (no HYDI API from Pages origin)
 
-No implementation until these are recorded (e.g. reply in chat or a short `docs/HEIDI_MOBILE.md` maintainer note after decision — out of scope for this doc-only PR).
+Implementation of **(a)** is a **separate PR** after Frank recovery deploy constraints allow testing.

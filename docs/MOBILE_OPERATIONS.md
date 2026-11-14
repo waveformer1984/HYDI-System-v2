@@ -24,6 +24,20 @@ access. Tailscale **Unattended** must be evidenced separately. Do not reboot Fra
 for “fixes” while C: is critically low (~1.7 GB reported 2026-11-14) without a
 verified way back in.
 
+**Deploying Frank host vitals (after merge #582):** **Deferred on Frank** until
+recovery and resource checks are complete. When Jordan approves deploy there:
+
+1. Pull merged `clean-main` on Frank and run **`npm run build`** — `heidi-web`
+   serves the **production** `.next` build; **restart alone does not ship** new
+   BFF/UI code.
+2. Promote the build using the existing Frank deploy path (e.g. `frank-auto-deploy`
+   or manual rename per `CLAUDE.md`) so `BUILD_ID` and `pages-manifest.json` are
+   present before traffic uses the new bundle.
+3. Restart **heidi-web** only after a successful build.
+4. Keep **frank-observer** running so `.observatory/current.json` stays fresh.
+
+Do not run full Jest, installs, or Docker image pulls on Frank while C: is critical.
+
 ---
 
 Status as of 2026-07-15. This document covers the mobile command-center
