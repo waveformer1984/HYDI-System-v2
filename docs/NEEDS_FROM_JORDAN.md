@@ -24,12 +24,17 @@ Set matching CORS on heidi-agent: `HEIDI_ADVISORY_ALLOWED_ORIGINS=http://127.0.0
 
 ```powershell
 cd C:\Users\Owner\HYDI-System-v2
-# If HEIDI_MOBILE_TOKEN is already in .env.local, propagate to PM2:
+(Get-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt").Length
+# If length is ~2× token char count, re-save the Desktop file as UTF-8 before copy.
+New-Item -ItemType Directory -Force $env:USERPROFILE\.hydi | Out-Null
+Copy-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" "$env:USERPROFILE\.hydi\heidi-mobile-token"
+# Shell must NOT set HEIDI_MOBILE_TOKEN (env wins over file):
 pm2 restart heidi-mobile-chat --update-env
 pm2 save
+Remove-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" -ErrorAction SilentlyContinue
 ```
 
-**Paste back:** last 20 lines of `pm2 logs heidi-mobile-chat --lines 20 --nostream` (redact token values).
+**Paste back:** log line `HEIDI_MOBILE_TOKEN loaded from file` (not the token) + `pm2 list` row for `heidi-mobile-chat` = online.
 
 ## P0 — Ground-truth inventory (Phase 0)
 

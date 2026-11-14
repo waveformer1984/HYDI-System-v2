@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const {
   loadHeidiMobileTokenFromFile,
   isInsideRepo,
+  isValidTokenContent,
   defaultTokenFilePath,
 } = require('../../lib/mobile-chat/token-file');
 
@@ -102,6 +103,57 @@ describe('lib/mobile-chat/token-file.js', () => {
     expect(isInsideRepo(ROOT, ROOT)).toBe(true);
     expect(isInsideRepo(path.join(ROOT, 'lib', 'x'), ROOT)).toBe(true);
     expect(isInsideRepo(tmpDir, ROOT)).toBe(false);
+  });
+
+  it('logs unreadable separately from missing', () => {
+    const blocked = path.join(tmpDir, 'blocked');
+    fs.mkdirSync(blocked);
+    const env = { HEIDI_MOBILE_TOKEN_FILE: blocked };
+    const logs = [];
+    const result = loadHeidiMobileTokenFromFile({
+      repoRoot: ROOT,
+      env,
+      logError: (m) => logs.push(m),
+    });
+    expect(result.reason).toBe('file_unreadable');
+    expect(logs.join('\n')).toMatch(/unreadable/);
+    expect(logs.join('\n')).not.toMatch(/file missing/);
+  });
+
+  it('rejects token with NUL or non-printable content (e.g. UTF-16 mis-read)', () => {
+    const tokenFile = path.join(tmpDir, 'utf16ish');
+    fs.writeFileSync(tokenFile, Buffer.from([0xff, 0xfe, 0x61, 0x00, 0x62, 0x00, 0x63, 0x00]));
+    const env = { HEIDI_MOBILE_TOKEN_FILE: tokenFile };
+    const logs = [];
+    const result = loadHeidiMobileTokenFromFile({
+      repoRoot: ROOT,
+      env,
+      logError: (m) => logs.push(m),
+      logInfo: (m) => logs.push(m),
+    });
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe('file_invalid');
+    expect(env.HEIDI_MOBILE_TOKEN).toBeUndefined();
+    const joined = logs.join('\n');
+    expect(joined).toMatch(/invalid/i);
+    expect(joined).not.toMatch(/loaded from file/);
+    expect(joined).not.toContain('\0');
+  });
+
+  it('isValidTokenContent accepts printable ASCII and rejects controls', () => {
+    expect(isValidTokenContent('good-token-12chars')).toBe(true);
+    expect(isValidTokenContent('a\u0000b')).toBe(false);
+    expect(isValidTokenContent('token\u200b')).toBe(false);
+  });
+
+  it('refuses repo path when only drive letter case differs on Windows', () => {
+    if (process.platform !== 'win32') return;
+    const drive = ROOT.slice(0, 2);
+    if (drive[1] !== ':') return;
+    const swapped = `${drive[0] === drive[0].toLowerCase() ? drive[0].toUpperCase() : drive[0].toLowerCase()}${drive.slice(1)}`;
+    const altRoot = `${swapped}${ROOT.slice(2)}`;
+    const inside = path.join(altRoot, 'lib', 'x');
+    expect(isInsideRepo(inside, ROOT)).toBe(true);
   });
 });
 
