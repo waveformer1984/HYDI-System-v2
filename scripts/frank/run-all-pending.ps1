@@ -1,7 +1,8 @@
 # Aggregate Frank-side pending checks (read-only by default).
 param(
   [switch]$ApplyArchive,
-  [switch]$JobScout   # state-changing: pulls, migrates local Supabase, restarts PM2, runs one scan
+  [switch]$JobScout,   # state-changing: pulls, migrates local Supabase, restarts PM2, runs one scan
+  [switch]$UrsulaOps   # restarts ursula + heidi-web so HYDI_SERVICE_SECRET is live for Devices panel
 )
 
 $ErrorActionPreference = 'Continue'
@@ -79,6 +80,21 @@ if ($ApplyArchive) {
 Write-Host "`n=== port registry (node) ===" -ForegroundColor Cyan
 node scripts/check-port-registry.js
 node scripts/sync-ports-registry.js --check
+
+Write-Host "`n=== phone front door (read-only) ===" -ForegroundColor Cyan
+try { & tailscale serve status 2>&1 } catch { Write-Host "tailscale not available: $($_.Exception.Message)" -ForegroundColor DarkGray }
+try {
+  $hr = Invoke-WebRequest -Uri 'http://127.0.0.1:3000/api/health' -UseBasicParsing -TimeoutSec 8
+  Write-Host "heidi-web /api/health HTTP $($hr.StatusCode)" -ForegroundColor Green
+} catch {
+  Write-Host "heidi-web /api/health FAILED: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+if ($UrsulaOps) {
+  Write-Host "`n=== Ursula Devices panel env (STATE-CHANGING — restarts) ===" -ForegroundColor Yellow
+  pm2 restart ursula-local heidi-web-standalone --update-env
+  pm2 save
+}
 
 if ($JobScout) {
   Write-Host "`n=== job-scout go-live (STATE-CHANGING — see docs/NEEDS_FROM_JORDAN.md) ===" -ForegroundColor Yellow
