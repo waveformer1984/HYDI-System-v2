@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseUnlessUrsulaLocal } from '@/lib/ursula-csrf';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
 import { postDeviceAction } from '@/lib/hydi-devices-proxy';
 
 export const dynamic = 'force-dynamic';
 
 /** Approve (operator role) or reject (revoke) a pending heidi-mobile device. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ deviceId: string }> }) {
-  const denied = refuseUnlessUrsulaLocal(req);
+  const denied = refuseUnlessUrsulaOperator(req);
   if (denied) return denied;
   const { deviceId: raw } = await params;
   const deviceId = decodeURIComponent(raw);

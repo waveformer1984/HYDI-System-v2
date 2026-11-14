@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fileScanNowMission } from '@/lib/job-scout-mission';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,18 +10,8 @@ export const dynamic = 'force-dynamic';
  * Ursula never spawns the scan itself.
  */
 export async function POST(req: NextRequest) {
-  if (req.headers.get('x-ursula-request') !== '1') {
-    return NextResponse.json({ ok: false, error: 'missing x-ursula-request header' }, { status: 403 });
-  }
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (origin && host) {
-    try {
-      if (new URL(origin).host !== host) return NextResponse.json({ ok: false, error: 'cross-origin request refused' }, { status: 403 });
-    } catch {
-      return NextResponse.json({ ok: false, error: 'bad origin' }, { status: 403 });
-    }
-  }
+  const denied = refuseUnlessUrsulaOperator(req);
+  if (denied) return denied;
 
   const result = await fileScanNowMission();
   if (!result.ok) return NextResponse.json(result, { status: 503 });

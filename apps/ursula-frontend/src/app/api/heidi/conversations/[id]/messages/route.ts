@@ -1,10 +1,13 @@
-import { isLocalRequest, coreUrl, coreHeaders, forbidden, coreDown } from '@/lib/heidi-relay';
+import { coreUrl, coreHeaders, coreDown } from '@/lib/heidi-relay';
+import { refuseUnlessUrsulaOperator } from '@/lib/ursula-operator-guard';
+import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 /** Reload a conversation's history (heidi-core GET /conversations/:id/messages). */
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
-  if (!isLocalRequest(req.headers)) return forbidden();
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  const denied = refuseUnlessUrsulaOperator(req, { requireCsrf: false });
+  if (denied) return denied;
   const { id } = await ctx.params;
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) return Response.json({ error: 'bad conversation id' }, { status: 400 });
   try {
