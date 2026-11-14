@@ -34,6 +34,32 @@ export interface StatusDiagnostics {
   device_pending_at_pairing: boolean;
 }
 
+export type FrankProbeState = 'healthy' | 'unhealthy' | 'stale' | 'unknown';
+
+export interface FrankHostMetrics {
+  disk_c_free_gb: number | null;
+  disk_c_total_gb: number | null;
+  mem_free_gb: number | null;
+  mem_total_gb: number | null;
+  pagefile_alloc_mb: number | null;
+  pagefile_used_mb: number | null;
+  pagefile_peak_mb: number | null;
+  kong: FrankProbeState;
+  kong_detail: string | null;
+  db: FrankProbeState;
+  db_detail: string | null;
+}
+
+export interface FrankHostSnapshot {
+  state: 'healthy' | 'degraded' | 'stale' | 'unknown';
+  reasons: string[];
+  observed_at: string | null;
+  age_sec: number | null;
+  stale: boolean;
+  frank_level: string | null;
+  metrics: FrankHostMetrics;
+}
+
 export interface StatusSnapshot {
   state: ConnectionState;
   checked_at: string;
@@ -60,6 +86,7 @@ export interface StatusSnapshot {
     recent_events: Array<{ subsystem: string | null; from_status: string | null; to_status: string | null; at: string | null }>;
     reported_at: string | null;
   } | null;
+  frank_host: FrankHostSnapshot | null;
   errors: UpstreamError[];
 }
 
