@@ -101,7 +101,14 @@ starts it again. If the rename is still refused with the server stopped (it
 was on 2026-11-01, with no visible handle on `.next`), it copies the build
 into `.next` instead, backing up the old one to `.next-prev` first and
 restoring it if the copy fails or leaves `BUILD_ID`/the pages manifest
-missing. Alerts go to `#alerts` once per distinct reason.
+missing. Alerts go to `#alerts` once per distinct reason. When `clean-main`
+has not moved but the live build's stamp (`.next/hydi-build.json`) is from
+an older commit (someone ran `git pull` by hand), it rebuilds HEAD through
+the same staged path; a failed rebuild of a commit is not retried until a
+new commit lands (`.runtime/frank-auto-deploy-rebuild.json`). The post-deploy
+health check requires only the services that were healthy before the deploy
+started (heidi-web always), so a service already down — e.g. heidi-mobile-chat
+waiting for its token — no longer rolls every deploy back.
 
 #### Heidi persistent memory (`heidi-core/memory/`)
 
