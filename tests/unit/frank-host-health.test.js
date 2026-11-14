@@ -8,6 +8,7 @@ const {
   applyFrankHostToConnectionState,
   DISK_C_MIN_GB,
   MEM_FREE_MIN_GB,
+  MEM_FREE_MIN_MB,
 } = require('../../lib/heidi-mobile/frank-host-health');
 
 const NOW = Date.parse('2026-11-14T12:00:00Z');
@@ -91,7 +92,7 @@ describe('buildFrankHostHealth', () => {
     const root = repo({
       '.observatory/current.json': freshObs({
         host: {
-          mem_avail_mb: Math.floor(MEM_FREE_MIN_GB * 1024) - 100,
+          mem_avail_mb: MEM_FREE_MIN_MB - 1,
           pagefile_alloc_mb: 8192,
           disks: [{ drive: 'C', total_gb: 476, free_gb: 40 }],
         },
@@ -99,7 +100,57 @@ describe('buildFrankHostHealth', () => {
     });
     const h = buildFrankHostHealth({ root, now: NOW });
     expect(h.state).toBe('degraded');
-    expect(h.reasons.some((r) => r.includes('RAM'))).toBe(true);
+    expect(h.reasons.some((r) => r.includes(`${MEM_FREE_MIN_MB - 1} MB`))).toBe(true);
+  });
+
+  it('degrades at 1023 MB (below 1 GiB floor) even when display GB rounds to 1.0', () => {
+    const root = repo({
+      '.observatory/current.json': freshObs({
+        host: {
+          mem_avail_mb: 1023,
+          mem_total_mb: 16384,
+          pagefile_alloc_mb: 8192,
+          disks: [{ drive: 'C', total_gb: 476, free_gb: 40 }],
+        },
+      }),
+    });
+    const h = buildFrankHostHealth({ root, now: NOW });
+    expect(h.state).toBe('degraded');
+    expect(h.metrics.mem_free_gb).toBe(1);
+    expect(h.reasons.some((r) => r.includes('1023 MB'))).toBe(true);
+  });
+
+  it('stays healthy at exactly 1024 MB free RAM', () => {
+    const root = repo({
+      '.observatory/current.json': freshObs({
+        host: {
+          mem_avail_mb: MEM_FREE_MIN_MB,
+          mem_total_mb: 16384,
+          pagefile_alloc_mb: 8192,
+          disks: [{ drive: 'C', total_gb: 476, free_gb: 40 }],
+        },
+      }),
+    });
+    const h = buildFrankHostHealth({ root, now: NOW });
+    expect(h.state).toBe('healthy');
+    expect(h.metrics.mem_free_gb).toBe(1);
+    expect(h.reasons).toEqual([]);
+  });
+
+  it('stays healthy above 1024 MB free RAM', () => {
+    const root = repo({
+      '.observatory/current.json': freshObs({
+        host: {
+          mem_avail_mb: MEM_FREE_MIN_MB + 512,
+          mem_total_mb: 16384,
+          pagefile_alloc_mb: 8192,
+          disks: [{ drive: 'C', total_gb: 476, free_gb: 40 }],
+        },
+      }),
+    });
+    const h = buildFrankHostHealth({ root, now: NOW });
+    expect(h.state).toBe('healthy');
+    expect(h.metrics.mem_free_gb).toBe(1.5);
   });
 
   it('degrades when kong probe failed', () => {
