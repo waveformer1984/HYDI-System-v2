@@ -103,6 +103,71 @@ describe('lib/mobile-chat/token-file.js', () => {
     expect(isInsideRepo(path.join(ROOT, 'lib', 'x'), ROOT)).toBe(true);
     expect(isInsideRepo(tmpDir, ROOT)).toBe(false);
   });
+
+  it('isInsideRepo is case-insensitive on win32', () => {
+    if (process.platform !== 'win32') return;
+    const upper = path.join(ROOT, 'LIB', 'Mobile-Chat', 'token-file.js');
+    expect(isInsideRepo(upper, ROOT)).toBe(true);
+    expect(isInsideRepo(ROOT.toUpperCase(), ROOT)).toBe(true);
+  });
+
+  it('isInsideRepo resolves symlinks/junctions to real paths', () => {
+    // A link outside the repo that points inside must still be refused.
+    const link = path.join(tmpDir, 'repo-link');
+    try {
+      fs.symlinkSync(ROOT, link, 'junction');
+    } catch {
+      return; // symlink privilege unavailable — nothing to assert
+    }
+    expect(isInsideRepo(path.join(link, 'lib', 'x'), ROOT)).toBe(true);
+  });
+
+  it('rejects a UTF-16 encoded token file with a wrong-encoding log', () => {
+    const tokenFile = path.join(tmpDir, 'token-utf16');
+    fs.writeFileSync(tokenFile, SECRET, 'utf16le');
+    const env = { HEIDI_MOBILE_TOKEN_FILE: tokenFile };
+    const logs = [];
+    const result = loadHeidiMobileTokenFromFile({
+      repoRoot: ROOT,
+      env,
+      logError: (m) => logs.push(m),
+      logInfo: (m) => logs.push(m),
+    });
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe('file_bad_encoding');
+    expect(env.HEIDI_MOBILE_TOKEN).toBeUndefined();
+    expect(logs.join('\n')).toMatch(/wrong encoding/);
+    expect(logs.join('\n')).not.toContain(SECRET);
+  });
+
+  it('rejects a token containing NUL bytes', () => {
+    const tokenFile = path.join(tmpDir, 'token-nul');
+    fs.writeFileSync(tokenFile, Buffer.from([0x41, 0x00, 0x42, 0x00, 0x0a]));
+    const env = { HEIDI_MOBILE_TOKEN_FILE: tokenFile };
+    const result = loadHeidiMobileTokenFromFile({ repoRoot: ROOT, env });
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe('file_bad_encoding');
+    expect(env.HEIDI_MOBILE_TOKEN).toBeUndefined();
+  });
+
+  it('logs unreadable separately from missing', () => {
+    // A directory at the token path exists but cannot be read as a file.
+    const dirAsFile = path.join(tmpDir, 'not-a-file');
+    fs.mkdirSync(dirAsFile);
+    const env = { HEIDI_MOBILE_TOKEN_FILE: dirAsFile };
+    const logs = [];
+    const result = loadHeidiMobileTokenFromFile({
+      repoRoot: ROOT,
+      env,
+      logError: (m) => logs.push(m),
+      logInfo: (m) => logs.push(m),
+    });
+    expect(result.loaded).toBe(false);
+    expect(result.reason).toBe('file_unreadable');
+    const joined = logs.join('\n');
+    expect(joined).toMatch(/unreadable/);
+    expect(joined).not.toMatch(/token file missing/);
+  });
 });
 
 describe('launch-heidi-mobile.js token file + REQUIRE_TOKEN', () => {
