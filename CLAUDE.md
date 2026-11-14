@@ -160,8 +160,20 @@ paired-device cookie from `/api/pair` or a bearer token
 (`lib/mobile-chat/local-auth.js`). See `docs/HEIDI_SYSTEM_STATUS.md`.
 The chat on :3006 runs under PM2 as `heidi-mobile-chat` (boot-agent leaves
 it to PM2). Its PM2 env sets `HEIDI_MOBILE_REQUIRE_TOKEN=1`, so without
-`HEIDI_MOBILE_TOKEN` it exits 78 instead of serving the tailnet unlocked;
-start it from a shell that has the token, with `--update-env`.
+`HEIDI_MOBILE_TOKEN` it exits 78 instead of serving the tailnet unlocked.
+At startup, if the env var is unset, `launch-heidi-mobile.js` loads the token
+from `HEIDI_MOBILE_TOKEN_FILE` (PM2 sets this to
+`%USERPROFILE%\.hydi\heidi-mobile-token`, i.e. `os.homedir()/.hydi/heidi-mobile-token`).
+An explicit `HEIDI_MOBILE_TOKEN` in the environment always wins over the file.
+One-time setup on Frank (do not print the token):
+
+```powershell
+New-Item -ItemType Directory -Force $env:USERPROFILE\.hydi | Out-Null
+Copy-Item "$env:USERPROFILE\Desktop\heidi-mobile-token.txt" "$env:USERPROFILE\.hydi\heidi-mobile-token"
+pm2 restart heidi-mobile-chat --update-env; pm2 save
+```
+
+The Desktop file may be cloud-synced; the copy under `~\.hydi` is local only.
 
 #### No console windows from background processes
 
