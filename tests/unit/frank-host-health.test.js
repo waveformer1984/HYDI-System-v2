@@ -176,7 +176,13 @@ describe('applyFrankHostToConnectionState', () => {
   it('degrades online when Frank host is degraded', () => {
     expect(applyFrankHostToConnectionState('online', { state: 'degraded' })).toBe('degraded');
   });
+  it('degrades online when Frank host evidence is stale', () => {
+    expect(applyFrankHostToConnectionState('online', { state: 'stale', stale: true })).toBe('degraded');
+  });
   it('does not change offline', () => {
     expect(applyFrankHostToConnectionState('offline', { state: 'degraded' })).toBe('offline');
+  });
+  it('does not change state when frank_host is null (legacy BFF)', () => {
+    expect(applyFrankHostToConnectionState('online', null)).toBe('online');
   });
 });
