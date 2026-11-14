@@ -143,6 +143,42 @@ npm run runtime:audit
 
 Optional afterwards: set `JOB_SCOUT_LLM_DRAFTS=true` in `.env.local` + `pm2 restart hydi-schedulers --update-env` for local-model drafts (falls back to templates on any error). Leave `HEIDI_ALLOW_EXEC=false`.
 
+## P0 — Ursula operator token (after PR #569)
+
+Ursula state-changing APIs need `URSULA_ADMIN_TOKEN` in `.env.local` (server only). Loopback bind is `127.0.0.1:3100` — do not expose `0.0.0.0`.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+# run-all-pending.ps1 can mint this without printing it
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\frank\run-all-pending.ps1
+pm2 restart ursula-local --update-env
+pm2 save
+```
+
+**Paste back:** `curl -s -o NUL -w "%{http_code}" http://127.0.0.1:3100/api/heidi/health` → `200` from loopback; without Bearer on `/api/devices` → `401`.
+
+## P0 — Clean tree for auto-deploy
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+git checkout clean-main
+git pull origin clean-main
+git stash push -u -m "pre-deploy tracked-tree cleanup"
+git status --porcelain
+```
+
+See `docs/DEPLOY_GIT_CLEAN.md`. **Paste back:** empty porcelain + `npm run runtime:audit` first line (`overall`).
+
+## P1 — Job scout from Ursula (after #570)
+
+Needs `HEIDI_ALLOW_EXEC=true` (and mission worker armed) so allowlisted `job_scout_scan` executes.
+
+```powershell
+pm2 restart heidi-core hydi-daemon --update-env
+```
+
+**Paste back:** Ursula Freelance → Run scan now message + refreshed lead count.
+
 ## Batch (Frank)
 
 ```powershell

@@ -33,6 +33,31 @@ if (Test-Path -LiteralPath $envLocal) {
   }
 }
 
+Write-Host "`n=== URSULA_ADMIN_TOKEN (generate if missing, never echo value) ===" -ForegroundColor Cyan
+if (Test-Path -LiteralPath $envLocal) {
+  $lines = Get-Content -LiteralPath $envLocal
+  $hasUrsula = $false
+  foreach ($line in $lines) {
+    if ($line -match '^\s*URSULA_ADMIN_TOKEN\s*=\s*\S+') { $hasUrsula = $true; break }
+  }
+  if (-not $hasUrsula) {
+    $token = node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))"
+    Add-Content -LiteralPath $envLocal -Value "URSULA_ADMIN_TOKEN=$token"
+    Write-Host "URSULA_ADMIN_TOKEN added to .env.local (value not printed)." -ForegroundColor Green
+  } else {
+    Write-Host "URSULA_ADMIN_TOKEN already set in .env.local (not printed)." -ForegroundColor DarkGray
+  }
+}
+
+Write-Host "`n=== git clean check (auto-deploy) ===" -ForegroundColor Cyan
+$porcelain = git status --porcelain 2>&1
+if ($porcelain) {
+  Write-Host "Working tree is NOT clean — run: git stash push -u -m pre-deploy-cleanup" -ForegroundColor Yellow
+  $porcelain | Select-Object -First 20
+} else {
+  Write-Host "Working tree clean." -ForegroundColor Green
+}
+
 Write-Host "`n=== hydi-verify (offline then quick) ===" -ForegroundColor Cyan
 node scripts/hydi-verify.js --offline
 if ($LASTEXITCODE -ne 0) { Write-Host "hydi-verify --offline FAILED" -ForegroundColor Red }
