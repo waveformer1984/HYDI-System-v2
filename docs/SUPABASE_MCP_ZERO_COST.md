@@ -97,6 +97,20 @@ Append results to this section (date, host, CLI version, outcome table).
 
 ---
 
+## Cloud agent testing vs Frank (pre-push / Tier 1)
+
+The git **pre-push** hook runs `npm test`, which is **Tier 1 hermetic** only (`tests/TEST_TIERS.json`). Suites that need live Postgres/Supabase on `:54322` / `:54321` are in **Tier 2** (`npm run test:local`) and are **not** run on push. A green pre-push on a cloud VM does **not** prove local Supabase was up — it often is not (`DbSetupError` on small VMs).
+
+| Gate | Command | Live Supabase? |
+|------|---------|----------------|
+| Pre-push / default `npm test` | Tier 1 (~606 suites) | No (socket guard blocks service ports) |
+| Full DB confidence | `npm run test:local` or CI with `supabase start` | Yes |
+| Frank production DB | Manual approval for MCP `execute_sql` only | N/A — see [Frank vs cloud agent VMs](#frank-heidi-pc-vs-cloud-agent-vms) |
+
+**Handoff (2026-11-14):** `#581` merged (this doc + `.mcp.json`). Reboot/recovery on Frank stays **on hold** until an independently verified path exists; see [MOBILE_OPERATIONS.md](./MOBILE_OPERATIONS.md).
+
+---
+
 ## Quick reference
 
 - Cloud agents: load env then tests — [CURSOR_CLOUD_AGENT.md](./CURSOR_CLOUD_AGENT.md).

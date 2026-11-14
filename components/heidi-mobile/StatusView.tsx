@@ -25,6 +25,13 @@ interface Props {
   now: number;
 }
 
+function toneForFrankProbe(state: string | undefined): 'ok' | 'warn' | 'bad' | 'muted' {
+  if (state === 'healthy') return 'ok';
+  if (state === 'stale' || state === 'unknown') return 'warn';
+  if (state === 'unhealthy') return 'bad';
+  return 'muted';
+}
+
 function describeLiveEvent(e: RealtimeEvent): string {
   if (e.type === 'subsystem_status') return `${SUBSYSTEM_LABELS[String(e.subsystem)] || String(e.subsystem)} → ${String(e.status)}`;
   if (e.type === 'notification') return `Notification: ${String(e.category || e.title || 'new')}`;
@@ -83,6 +90,67 @@ export default function StatusView({ status, activity, online, realtime, liveEve
           )}
         </div>
       </section>
+
+      {snap?.frank_host && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Frank host</h3>
+          <div className={styles.card}>
+            <div className={styles.cardRow}>
+              <span>Vitals</span>
+              <span className={styles.statusLabel}>
+                <Dot tone={snap.frank_host.stale ? 'warn' : snap.frank_host.state === 'healthy' ? 'ok' : snap.frank_host.state === 'degraded' ? 'bad' : 'warn'} />
+                {snap.frank_host.stale ? 'stale' : snap.frank_host.state}
+              </span>
+            </div>
+            <div className={styles.metrics} style={{ marginTop: 8 }}>
+              <div className={styles.metric}>
+                <div className={styles.muted}>C: free</div>
+                <div className={styles.metricValue}>
+                  {snap.frank_host.metrics.disk_c_free_gb != null
+                    ? `${snap.frank_host.metrics.disk_c_free_gb} GB`
+                    : 'not reported'}
+                </div>
+              </div>
+              <div className={styles.metric}>
+                <div className={styles.muted}>RAM free</div>
+                <div className={styles.metricValue}>
+                  {snap.frank_host.metrics.mem_free_gb != null
+                    ? `${snap.frank_host.metrics.mem_free_gb} GB`
+                    : 'not reported'}
+                </div>
+              </div>
+              <div className={styles.metric}>
+                <div className={styles.muted}>Pagefile (MB)</div>
+                <div className={styles.metricValue} style={{ fontSize: 14 }}>
+                  {snap.frank_host.metrics.pagefile_alloc_mb != null
+                    ? `${snap.frank_host.metrics.pagefile_used_mb ?? '?'}/${snap.frank_host.metrics.pagefile_alloc_mb} alloc`
+                    : 'not reported'}
+                </div>
+              </div>
+              <div className={styles.metric}>
+                <div className={styles.muted}>Kong / DB</div>
+                <div className={styles.metricValue} style={{ fontSize: 14 }}>
+                  <Dot tone={toneForFrankProbe(snap.frank_host.metrics.kong)} />{snap.frank_host.metrics.kong}
+                  {' · '}
+                  <Dot tone={toneForFrankProbe(snap.frank_host.metrics.db)} />{snap.frank_host.metrics.db}
+                </div>
+              </div>
+            </div>
+            {snap.frank_host.reasons.length > 0 && (
+              <ul className={`${styles.muted} ${styles.small}`} style={{ marginTop: 8, marginBottom: 0, paddingLeft: 18 }}>
+                {snap.frank_host.reasons.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            )}
+            <div className={`${styles.muted} ${styles.small}`} style={{ marginTop: 6 }}>
+              Evidence from frank-observer · sample{' '}
+              {snap.frank_host.observed_at ? relativeTime(snap.frank_host.observed_at, now) : 'never'}
+              {snap.frank_host.frank_level ? ` · Frank ${snap.frank_host.frank_level}` : ''}
+            </div>
+          </div>
+        </section>
+      )}
 
       {snap?.health && (
         <section className={styles.section}>

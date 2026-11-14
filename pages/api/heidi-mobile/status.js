@@ -10,7 +10,10 @@
 
 import { guard } from '../../../lib/heidi-mobile/guard.js';
 import { resolveBaseUrl } from '../../../lib/heidi-mobile/hydiClient.js';
-import { normalizeHealth, normalizeSystemStatus, deriveConnectionState } from '../../../lib/heidi-mobile/normalize.js';
+import { normalizeHealth, normalizeSystemStatus, normalizeFrankHost, deriveConnectionState } from '../../../lib/heidi-mobile/normalize.js';
+
+// CommonJS bridge for frank-observer evidence reader (same pattern as job-scout.js).
+const { buildFrankHostHealth, applyFrankHostToConnectionState } = require('../../../lib/heidi-mobile/frank-host-health.js');
 
 function describeError(source, result) {
   const row = { source, kind: result.kind, message: result.message, reason: result.reason };
@@ -63,7 +66,10 @@ export default async function handler(req, res) {
   const reachable = healthResult.ok || systemResult.ok
     || !['network', 'timeout', 'unconfigured'].includes(systemResult.kind);
 
-  const state = deriveConnectionState(healthResult, systemResult, system);
+  const frankRaw = buildFrankHostHealth({ root: process.cwd() });
+  const frank_host = normalizeFrankHost(frankRaw);
+  const baseState = deriveConnectionState(healthResult, systemResult, system);
+  const state = applyFrankHostToConnectionState(baseState, frank_host);
 
   return res.status(200).json({
     state,
@@ -73,6 +79,7 @@ export default async function handler(req, res) {
     device_id: g.session.deviceId,
     health,
     system,
+    frank_host,
     errors,
     diagnostics: buildDiagnostics(g.session),
   });
