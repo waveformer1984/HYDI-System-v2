@@ -40,6 +40,11 @@ That applies repo migrations and `supabase/seed.sql`, matching
 `.github/workflows/unit-tests.yml`. Without it, ~25 DB-backed unit suites and
 the pre-push hook’s full Jest run will fail.
 
+After Supabase is healthy, agents may use **local** Supabase MCP at
+`http://127.0.0.1:54321/mcp` (see `supabase-local` in `.mcp.json` and
+[docs/SUPABASE_MCP_ZERO_COST.md](./SUPABASE_MCP_ZERO_COST.md)); Frank’s local DB
+is live — cloud VMs are not.
+
 ## Live HYDI on heidi-pc (read-only MCP)
 
 Cloud agents **do not** reach heidi-web or Supabase on your PC unless you
