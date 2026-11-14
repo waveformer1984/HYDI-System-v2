@@ -101,7 +101,7 @@ async function withFrankRepo(files, fn) {
       writeFrankObs(root, files || {});
     }
     process.chdir(root);
-  return await fn();
+    return await fn();
   } finally {
     process.chdir(prev);
     fs.rmSync(root, { recursive: true, force: true });
