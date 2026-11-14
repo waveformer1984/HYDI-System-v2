@@ -7,7 +7,6 @@ const {
   buildFrankHostHealth,
   applyFrankHostToConnectionState,
   DISK_C_MIN_GB,
-  MEM_FREE_MIN_GB,
   MEM_FREE_MIN_MB,
 } = require('../../lib/heidi-mobile/frank-host-health');
 
