@@ -63,6 +63,7 @@ const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
 const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
+const { morningBrief, briefDue, msUntilNextBrief } = require('./status/morning-brief');
 const allowlist = require('./approvals/allowlist');
 
 class HeidiCore {
@@ -614,6 +615,20 @@ class HeidiCore {
       try {
         const b = await brief(this.memory, this.root || process.cwd());
         res.json(b);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Morning brief — plain-text digest for the top of /heidi. Cached per CT
+    // day and pre-generated at 07:30 CT (see _scheduleMorningBrief).
+    this._briefCache = null;
+    this.app.get('/morning-brief', async (req, res) => {
+      try {
+        if (briefDue(this._briefCache)) {
+          this._briefCache = await morningBrief({ root: this.root || process.cwd(), memory: this.memory });
+        }
+        res.json(this._briefCache);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1859,6 +1874,7 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     this.stats.startTime = Date.now();
     this.isRunning = true;
     this.startBrainWatchdog();
+    this.startMorningBriefTimer();
     this.missionWorker.start();
     this.healthObserver.start();
     this.opsAgent.store.ready
@@ -1888,6 +1904,24 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     } catch (e) {
       console.warn(`[HEIDI] boot event failed: ${e.message}`);
     }
+  }
+
+  /** Pre-generate the morning brief daily at 07:30 CT so the phone gets it instantly. */
+  startMorningBriefTimer() {
+    const tick = async () => {
+      try {
+        if (briefDue(this._briefCache)) {
+          this._briefCache = await morningBrief({ root: this.root || process.cwd(), memory: this.memory });
+          console.log(`[HEIDI] Morning brief generated for ${this._briefCache.ctDate}`);
+        }
+      } catch (e) {
+        console.warn(`[HEIDI] Morning brief failed: ${e.message}`);
+      }
+      this._briefTimer = setTimeout(tick, msUntilNextBrief());
+      if (this._briefTimer.unref) this._briefTimer.unref();
+    };
+    this._briefTimer = setTimeout(tick, Math.min(msUntilNextBrief(), 60_000));
+    if (this._briefTimer.unref) this._briefTimer.unref();
   }
 }
 
