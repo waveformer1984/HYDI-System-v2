@@ -1,8 +1,12 @@
 {
   "mcpServers": {
-    "supabase": {
+    "supabase-local": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=akbnfovjdcobifeupvbn&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching%2Cstorage"
+      "url": "http://127.0.0.1:54321/mcp?features=docs%2Cdatabase%2Cdebugging%2Cdevelopment"
+    },
+    "supabase-cloud-readonly": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=akbnfovjdcobifeupvbn&read_only=true&features=docs%2Cdatabase%2Cdebugging"
     },
     "protoforge": {
       "type": "stdio",
