@@ -60,6 +60,7 @@ describe('buildFrankHostHealth', () => {
     const root = repo();
     const h = buildFrankHostHealth({ root, now: NOW });
     expect(h.state).toBe('stale');
+    expect(h.state).not.toBe('healthy');
     expect(h.stale).toBe(true);
     expect(h.metrics.kong).toBe('stale');
     expect(h.reasons[0]).toMatch(/no sample/i);
@@ -176,7 +177,13 @@ describe('applyFrankHostToConnectionState', () => {
   it('degrades online when Frank host is degraded', () => {
     expect(applyFrankHostToConnectionState('online', { state: 'degraded' })).toBe('degraded');
   });
+  it('degrades online when Frank host evidence is stale', () => {
+    expect(applyFrankHostToConnectionState('online', { state: 'stale', stale: true })).toBe('degraded');
+  });
   it('does not change offline', () => {
     expect(applyFrankHostToConnectionState('offline', { state: 'degraded' })).toBe('offline');
+  });
+  it('does not change state when frank_host is null (legacy BFF)', () => {
+    expect(applyFrankHostToConnectionState('online', null)).toBe('online');
   });
 });

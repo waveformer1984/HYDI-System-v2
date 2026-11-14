@@ -7,6 +7,9 @@
  * no service secret or signing key ever reaches the phone.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { EventEmitter } = require('events');
 const { verifyDeviceTokenSignature, deriveSigningKey } = require('../../lib/auth/deviceAuth');
 const { sealSession, COOKIE_NAME } = require('../../lib/heidi-mobile/session');
@@ -63,6 +66,46 @@ const HEALTHY_SYSTEM = {
 
 function requireDevice(handler) {
   return (ctx) => (ctx.auth.valid ? handler(ctx) : json(401, { error: 'Unauthorized', reason: 'signature mismatch' }));
+}
+
+function writeFrankObs(root, overrides = {}) {
+  const host = {
+    mem_total_mb: 16384,
+    mem_avail_mb: 4096,
+    pagefile_alloc_mb: 8192,
+    pagefile_used_mb: 2000,
+    pagefile_peak_mb: 4000,
+    disks: [{ drive: 'C', total_gb: 476, free_gb: 40, health: 'Healthy' }],
+    ...(overrides.host || {}),
+  };
+  const body = {
+    schema: 'observatory-sample/1',
+    ts: new Date(Date.now() - 45_000).toISOString(),
+    host,
+    probes: { kong_54321: true, db_tcp_54322: true, ...(overrides.probes || {}) },
+    pm2: { available: true, processes: [] },
+    docker: { available: true, containers: [] },
+    findings_active: [],
+    ...Object.fromEntries(Object.entries(overrides).filter(([k]) => !['host', 'probes'].includes(k))),
+  };
+  const dir = path.join(root, '.observatory');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'current.json'), JSON.stringify(body));
+}
+
+async function withFrankRepo(files, fn) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'heidi-mobile-status-'));
+  const prev = process.cwd();
+  try {
+    if (files !== 'empty') {
+      writeFrankObs(root, files || {});
+    }
+    process.chdir(root);
+  return await fn();
+  } finally {
+    process.chdir(prev);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function defaultRoutes() {
@@ -278,6 +321,35 @@ describe('POST /api/heidi-mobile/session', () => {
 
 // ── Status ─────────────────────────────────────────────────────────────
 describe('GET /api/heidi-mobile/status', () => {
+  it('downgrades connection state when Frank observatory is missing (stale, not healthy)', async () => {
+    await withFrankRepo('empty', async () => {
+      const res = await call('status');
+      expect(res.body.frank_host).toMatchObject({ state: 'stale', stale: true });
+      expect(res.body.frank_host.state).not.toBe('healthy');
+      expect(res.body.state).toBe('degraded');
+    });
+  });
+
+  it('passes through degraded frank_host reasons for disk, RAM, and kong', async () => {
+    await withFrankRepo({
+      host: {
+        mem_total_mb: 16384,
+        mem_avail_mb: 512,
+        pagefile_alloc_mb: 8192,
+        disks: [{ drive: 'C', total_gb: 476, free_gb: 3, health: 'Healthy' }],
+      },
+      probes: { kong_54321: false, db_tcp_54322: true },
+    }, async () => {
+      const res = await call('status');
+      expect(res.body.frank_host.state).toBe('degraded');
+      expect(res.body.frank_host.stale).toBe(false);
+      expect(res.body.frank_host.reasons.join(' ')).toMatch(/C: 3 GB/);
+      expect(res.body.frank_host.reasons.join(' ')).toMatch(/512 MB/);
+      expect(res.body.frank_host.reasons.join(' ')).toMatch(/kong/i);
+      expect(res.body.state).toBe('degraded');
+    });
+  });
+
   it('reports online only for an authenticated, healthy snapshot', async () => {
     const res = await call('status');
     expect(res.statusCode).toBe(200);
