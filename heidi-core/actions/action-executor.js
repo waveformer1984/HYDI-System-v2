@@ -139,7 +139,7 @@ class ActionExecutor {
     try {
       switch (action.type) {
         case 'run_script':
-          result = await this.runScript(action.target, action.args);
+          result = await this.runScript(action.target, action.args, { timeout_ms: action.timeout_ms });
           break;
         case 'run_command':
           result = await this.runCommand(action.command, action.args, { timeout_ms: action.timeout_ms });
@@ -193,7 +193,7 @@ class ActionExecutor {
   /**
    * Run a script file
    */
-  async runScript(scriptPath, args = []) {
+  async runScript(scriptPath, args = [], opts = {}) {
     // Resolve to absolute path
     const absolutePath = path.resolve(scriptPath);
     
@@ -228,7 +228,10 @@ class ActionExecutor {
       throw new Error(`Unsupported script type: ${ext}`);
     }
 
-    return this.spawnProcess(command, commandArgs, { cwd: path.dirname(absolutePath) });
+    return this.spawnProcess(command, commandArgs, {
+      cwd: path.dirname(absolutePath),
+      timeout_ms: opts.timeout_ms,
+    });
   }
 
   // Argument patterns that turn a whitelisted binary into an arbitrary-code
@@ -310,6 +313,7 @@ class ActionExecutor {
       const timeout = Math.min(Math.max(Number(options.timeout_ms) || 30000, 1000), 600000);
       const spawnOpts = {
         shell: false,   // never route through a shell — args stay literal
+        windowsHide: true,
         env: { ...process.env, NODE_ENV: 'production' },
       };
       if (process.platform !== 'win32') {

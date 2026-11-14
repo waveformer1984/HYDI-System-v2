@@ -148,6 +148,7 @@ async function decide(memory, id, decision, { actor, reason = null, now = Date.n
 // ── Approval policy ──────────────────────────────────────────────────────
 
 const RESTART_MODULE_SCRIPT = path.join(__dirname, '../../scripts/restart-module.js');
+const JOB_SCOUT_SCRIPT = path.join(__dirname, '../../scripts/job-scout.js');
 
 function bootModuleIds(configPath = path.join(__dirname, '../../boot.config.json')) {
   try {
@@ -175,6 +176,11 @@ function approvalPolicy(action, { env = process.env, moduleIds = bootModuleIds()
       && action.target && path.resolve(action.target) === RESTART_MODULE_SCRIPT
       && Array.isArray(action.args) && action.args.length === 1 && moduleIds.has(String(action.args[0]))) {
     return { required: false, reason: `standing approval: restart of HYDI module '${action.args[0]}'` };
+  }
+  if (action.type === 'run_script'
+      && action.target && path.resolve(action.target) === JOB_SCOUT_SCRIPT
+      && Array.isArray(action.args) && action.args.length === 1 && action.args[0] === '--once') {
+    return { required: false, reason: 'standing approval: read-only job-scout scan (scripts/job-scout.js --once)' };
   }
   return { required: true, reason: `${action.type} changes or runs something on Frank` };
 }

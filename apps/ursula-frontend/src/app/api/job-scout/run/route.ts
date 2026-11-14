@@ -15,5 +15,10 @@ export async function POST(req: NextRequest) {
 
   const result = await fileScanNowMission();
   if (!result.ok) return NextResponse.json(result, { status: 503 });
-  return NextResponse.json(result);
+  return NextResponse.json({
+    ok: true,
+    missionId: result.missionId,
+    summary: result.summary,
+    mission: result.mission,
+  });
 }

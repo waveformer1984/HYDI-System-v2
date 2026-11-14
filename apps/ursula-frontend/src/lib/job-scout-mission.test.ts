@@ -3,21 +3,20 @@ import { describe, it, expect, vi } from 'vitest';
 import { fileScanNowMission } from './job-scout-mission';
 
 describe('fileScanNowMission', () => {
-  it('POSTs an informational mission to heidi-core /missions', async () => {
+  it('proposes job_scout_scan on heidi-core /allowlist/propose', async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       status: 201,
-      json: async () => ({ ok: true, mission: { id: 'm1' } }),
+      json: async () => ({ ok: true, missionId: 'm1', summary: 'Run job-scout scan now' }),
     })) as unknown as typeof fetch;
     const out = await fileScanNowMission({ endpoint: 'http://heidi:3459/', fetchImpl });
-    expect(out).toEqual({ ok: true, mission: { id: 'm1' } });
+    expect(out.ok).toBe(true);
+    expect(out.missionId).toBe('m1');
     const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('http://heidi:3459/missions');
+    expect(url).toBe('http://heidi:3459/allowlist/propose');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
-    expect(body.goal).toMatch(/job-scout/);
-    expect(body.source).toBe('ursula-freelance');
-    expect(body.action).toBeUndefined(); // informational only — no action payload
+    expect(body).toEqual({ spec: 'job_scout_scan', args: {} });
   });
 
   it('reports heidi-core errors without throwing', async () => {
