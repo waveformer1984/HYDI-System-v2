@@ -228,6 +228,9 @@ class HeidiMemory {
 
   async run(sql, params = []) {
     await this.ensureReady();
+  // In-memory mode has no SQL engine: resolve empty rather than crash on
+  // this.db === null. Callers that need rows already branch on inMemoryData.
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve({ id: 0, changes: 0 });
     if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, function(err) {
@@ -239,6 +242,7 @@ class HeidiMemory {
 
   async get(sql, params = []) {
     await this.ensureReady();
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve(null);
     if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
@@ -250,6 +254,7 @@ class HeidiMemory {
 
   async all(sql, params = []) {
     await this.ensureReady();
+    if (!sqlite3 && this.inMemoryData) return Promise.resolve([]);
     if (!this.db) throw new Error('[HEIDI Memory] database unavailable (memory-only mode has no SQL store)');
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {

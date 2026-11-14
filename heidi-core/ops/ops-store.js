@@ -68,6 +68,12 @@ class OpsStore {
   }
 
   async ensure() {
+    // OpsAgent is constructed before HeidiCore.initialize() opens the DB, so
+    // this.db is still null here. initialize() is idempotent — await it so
+    // the DDL below runs against a real connection (or in-memory no-ops).
+    if (typeof this.memory.initialize === 'function' && !this.memory.initialized) {
+      await this.memory.initialize().catch(() => {});
+    }
     for (const ddl of TABLES) await this.memory.run(ddl);
     return true;
   }
