@@ -3,6 +3,7 @@ import { relativeTime } from '../../lib/heidi-mobile/client/format';
 import type { RealtimeEvent, RealtimeState } from '../../lib/heidi-mobile/client/realtime';
 import type { Loadable } from './hooks';
 import type { ActivitySnapshot, StatusSnapshot } from './types';
+import { isFrankHostCardVisible, frankHostVitalsDotTone, frankHostVitalsLabel } from '../../lib/heidi-mobile/client/frank-host-ui';
 import { Dot, Freshness, SectionError, describeState, toneForStatus } from './ui';
 
 const SUBSYSTEM_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ function describeLiveEvent(e: RealtimeEvent): string {
 
 export default function StatusView({ status, activity, online, realtime, liveEvents, now }: Props) {
   const snap = status.data;
+  const frankHost = snap?.frank_host;
   const stateKey = !online ? 'phone_offline' : snap ? snap.state : status.error ? 'offline' : 'checking';
   const meta = describeState(stateKey);
   const realtimeLabel = realtime === 'live' ? 'Live' : realtime === 'reconnecting' ? 'Reconnecting…' : realtime === 'connecting' ? 'Connecting…' : 'Off — using periodic refresh';
@@ -91,66 +93,66 @@ export default function StatusView({ status, activity, online, realtime, liveEve
         </div>
       </section>
 
-      {snap?.frank_host && (
+      {frankHost && isFrankHostCardVisible(frankHost) ? (
         <section className={styles.section}>
           <h3 className={styles.sectionTitle}>Frank host</h3>
           <div className={styles.card}>
             <div className={styles.cardRow}>
               <span>Vitals</span>
               <span className={styles.statusLabel}>
-                <Dot tone={snap.frank_host.stale ? 'warn' : snap.frank_host.state === 'healthy' ? 'ok' : snap.frank_host.state === 'degraded' ? 'bad' : 'warn'} />
-                {snap.frank_host.stale ? 'stale' : snap.frank_host.state}
+                <Dot tone={frankHostVitalsDotTone(frankHost)} />
+                {frankHostVitalsLabel(frankHost)}
               </span>
             </div>
             <div className={styles.metrics} style={{ marginTop: 8 }}>
               <div className={styles.metric}>
                 <div className={styles.muted}>C: free</div>
                 <div className={styles.metricValue}>
-                  {snap.frank_host.metrics.disk_c_free_gb != null
-                    ? `${snap.frank_host.metrics.disk_c_free_gb} GB`
+                  {frankHost.metrics.disk_c_free_gb != null
+                    ? `${frankHost.metrics.disk_c_free_gb} GB`
                     : 'not reported'}
                 </div>
               </div>
               <div className={styles.metric}>
                 <div className={styles.muted}>RAM free</div>
                 <div className={styles.metricValue}>
-                  {snap.frank_host.metrics.mem_free_gb != null
-                    ? `${snap.frank_host.metrics.mem_free_gb} GB`
+                  {frankHost.metrics.mem_free_gb != null
+                    ? `${frankHost.metrics.mem_free_gb} GB`
                     : 'not reported'}
                 </div>
               </div>
               <div className={styles.metric}>
                 <div className={styles.muted}>Pagefile (MB)</div>
                 <div className={styles.metricValue} style={{ fontSize: 14 }}>
-                  {snap.frank_host.metrics.pagefile_alloc_mb != null
-                    ? `${snap.frank_host.metrics.pagefile_used_mb ?? '?'}/${snap.frank_host.metrics.pagefile_alloc_mb} alloc`
+                  {frankHost.metrics.pagefile_alloc_mb != null
+                    ? `${frankHost.metrics.pagefile_used_mb ?? '?'}/${frankHost.metrics.pagefile_alloc_mb} alloc`
                     : 'not reported'}
                 </div>
               </div>
               <div className={styles.metric}>
                 <div className={styles.muted}>Kong / DB</div>
                 <div className={styles.metricValue} style={{ fontSize: 14 }}>
-                  <Dot tone={toneForFrankProbe(snap.frank_host.metrics.kong)} />{snap.frank_host.metrics.kong}
+                  <Dot tone={toneForFrankProbe(frankHost.metrics.kong)} />{frankHost.metrics.kong}
                   {' · '}
-                  <Dot tone={toneForFrankProbe(snap.frank_host.metrics.db)} />{snap.frank_host.metrics.db}
+                  <Dot tone={toneForFrankProbe(frankHost.metrics.db)} />{frankHost.metrics.db}
                 </div>
               </div>
             </div>
-            {snap.frank_host.reasons.length > 0 && (
+            {frankHost.reasons.length > 0 && (
               <ul className={`${styles.muted} ${styles.small}`} style={{ marginTop: 8, marginBottom: 0, paddingLeft: 18 }}>
-                {snap.frank_host.reasons.map((r) => (
+                {frankHost.reasons.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
             )}
             <div className={`${styles.muted} ${styles.small}`} style={{ marginTop: 6 }}>
               Evidence from frank-observer · sample{' '}
-              {snap.frank_host.observed_at ? relativeTime(snap.frank_host.observed_at, now) : 'never'}
-              {snap.frank_host.frank_level ? ` · Frank ${snap.frank_host.frank_level}` : ''}
+              {frankHost.observed_at ? relativeTime(frankHost.observed_at, now) : 'never'}
+              {frankHost.frank_level ? ` · Frank ${frankHost.frank_level}` : ''}
             </div>
           </div>
         </section>
-      )}
+      ) : null}
 
       {snap?.health && (
         <section className={styles.section}>
