@@ -19,6 +19,7 @@ const { ConversationStore } = require('./conversation-store');
 const { assembleContext } = require('./context-assembler');
 const { extractMemories } = require('./memory-extractor');
 const { parseMemoryCommand, runMemoryCommand } = require('./memory-commands');
+const { enrichBeginTurn, enrichEndTurn } = require('../intelligence/layer');
 
 const OWNER_RE = /^[A-Za-z0-9_.@-]{1,64}$/;
 const DATA_ACK = 'Understood. I will use that only as background data and keep following my instructions.';
@@ -110,7 +111,13 @@ class MemoryRuntime {
       persistence.error = `your message was not saved: ${error instanceof Error ? error.message : 'error'}`;
       context.degraded.push(persistence.error);
     }
-    return { ok: true, conversationId: convo.id, persistence, context, userMessageId };
+    const intelligence = enrichBeginTurn({
+      input,
+      context,
+      persistence,
+      conversationId: convo.id,
+    });
+    return { ok: true, conversationId: convo.id, persistence, context, userMessageId, intelligence };
   }
 
   /** Saves the answer and any durable memories. Never throws. */
@@ -139,6 +146,12 @@ class MemoryRuntime {
     }
     this.lastTurns.set(turn.conversationId, { ...turn.context.sources, degraded: turn.context.degraded });
     if (this.lastTurns.size > 100) this.lastTurns.delete(this.lastTurns.keys().next().value);
+    enrichEndTurn({
+      input,
+      answer,
+      intelligence: turn.intelligence,
+      metrics: { completion: !failed, reliability: out.saved },
+    });
     return out;
   }
 

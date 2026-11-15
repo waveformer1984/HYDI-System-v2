@@ -1,0 +1,36 @@
+{
+  "skills": {
+    "coding": {
+      "description": "Repository changes, debugging, tests",
+      "routeBias": "local",
+      "complexityThreshold": 0.6,
+      "toolsAllowlist": ["git.inspect", "tests.run"]
+    },
+    "research": {
+      "description": "Read-only investigation and documentation",
+      "routeBias": "local",
+      "complexityThreshold": 0.4,
+      "toolsAllowlist": ["health.check", "service.status", "git.inspect"]
+    },
+    "freelance_discovery": {
+      "description": "Job scout and revenue ops (read-only toward boards)",
+      "routeBias": "local",
+      "toolsAllowlist": ["job_scout_scan"]
+    },
+    "proposal_prep": {
+      "description": "Draft proposals — human approval before external submit",
+      "routeBias": "cloud_optional",
+      "requiresApproval": true
+    },
+    "business_ops": {
+      "description": "Billing preflight, fabric task status",
+      "routeBias": "local",
+      "toolsAllowlist": ["billing.preflight", "ops.task_status"]
+    },
+    "system_admin": {
+      "description": "Health, recovery preview, Frank vitals",
+      "routeBias": "local",
+      "toolsAllowlist": ["health.check", "ops.recovery_preview", "ops.execution_readiness"]
+    }
+  }
+}
