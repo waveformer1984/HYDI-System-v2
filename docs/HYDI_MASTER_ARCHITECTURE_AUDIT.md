@@ -62,3 +62,45 @@ HYDI is a **multi-surface** system: six-layer pipeline (protoforge-core), Next.j
 3. Consolidate agent registry documentation (PAO vs dev-workforce vs distributed workers)
 
 **Classification:** VERIFIED SIMULATED (static audit + unit tests)
+
+---
+
+## Appendix — detailed findings ([Architecture audit for docs](bc-3510de1d-4286-556f-b786-e5ffcb833601))
+
+**Canonical authority:** `lib/execution-fabric/gateway.js` (`getExecutionGateway()`). **Not** `src/hydi-v3/ExecutionGateway.js` (business console / operator CLI).
+
+### Execution path matrix
+
+| # | Path | Entry | Durable store | Canonical for host ops? |
+|---|------|-------|---------------|-------------------------|
+| A | Execution fabric | `/api/mobile-ops/fabric` | `execution_fabric_tasks` / memory | **Yes** |
+| B | heidi-core missions | `/chat-tools`, mission-worker | SQLite missions | Domain (local autonomy) |
+| C | Chat `ActionExecutor` | `/api/chat` tools | Supabase `actions` | Governed chokepoint |
+| D | HumanActionEngine | `/api/goals` | `human-actions.json` + mirror | Governed multi-step |
+| E | V3 ExecutionGateway | `scripts/operator-cli.js` | V3 data dir | Simulation / business OS |
+| F | Worker queues | `WorkerOrchestrator` | Supabase or local JSON | Async domain |
+| G | Edge `action-worker` | Cron | `operator_actions` | Legacy operator queue |
+| H | distributed-cloud | (PR #590) | File store | **Schedule only** → A |
+
+### Top integration gaps
+
+- `/api/goals` and missions do not always call `gateway.submit()` — mobile fabric is canonical for **typed host ops**.
+- ProtoForge escalated actions (`pages/api/actions/*`) vs fabric approve — separate surfaces.
+- `lib/distributed-cloud/` only on PR #590; fabric adapter map is intentionally tiny until capabilities registered.
+- Paid-LLM: some paths still read keys directly (`lib/claude.ts`, `pages/api/funding/chat.ts`) — audit as security debt vs `paid-llm-gate.js`.
+
+### Top bottlenecks
+
+- Fabric singleton per Node process — split brain without Postgres persist.
+- `job-manager.js`: `MAX_RUNNING = 2`, in-memory logs, lost on restart.
+- `system_dashboard` / Supabase health — 503 when DB unhealthy.
+- Dual Ollama clients: `lib/ModelManager.ts` vs `heidi-core/brain/ollama-client.js`.
+
+### Partnerships & workforce (post-audit wiring)
+
+- **Partnerships pipeline** (`lib/partnerships-funding/`, PR #593) — research/drafts; no execution engine.
+- **Dev workforce** (`lib/dev-workforce/coordinator.js`) — `submit()` only; privileged caps gated until `HYDI_WORKFORCE_DISTRIBUTED_READY`.
+
+### Test map (quick)
+
+`tests/unit/execution-fabric-*.test.js` · `tests/unit/heidi-mobile-api.test.js` · `tests/unit/pipeline-replay.test.js` · `tests/unit/distributed-cloud*.test.js` (PR #590) · `tests/unit/partnerships-funding.test.js` (PR #593)
