@@ -10,7 +10,7 @@ import { Dot, describeState } from './ui';
 import ChatView from './ChatView';
 import StatusView from './StatusView';
 import TasksView from './TasksView';
-import JobsView from './JobsView';
+import RevenueOpsView from './RevenueOpsView';
 import ControlView from './ControlView';
 import PairingView from './PairingView';
 
@@ -20,7 +20,7 @@ const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'chat', label: 'Chat', icon: '💬' },
   { id: 'status', label: 'Status', icon: '📡' },
   { id: 'tasks', label: 'Tasks', icon: '✅' },
-  { id: 'jobs', label: 'Jobs', icon: '💼' },
+  { id: 'jobs', label: 'Revenue', icon: '💼' },
   { id: 'control', label: 'Control', icon: '🎛' },
 ];
 
@@ -255,7 +255,7 @@ export default function HeidiMobileApp() {
           <StatusView status={status} activity={activity} online={online} realtime={realtime} liveEvents={liveEvents} now={now} />
         )}
         {tab === 'tasks' && <TasksView tasks={tasks} online={online} now={now} onAuthError={onAuthError} />}
-        {tab === 'jobs' && <JobsView online={online} now={now} onAuthError={onAuthError} />}
+        {tab === 'jobs' && <RevenueOpsView online={online} now={now} onAuthError={onAuthError} />}
         {tab === 'control' && (
           <ControlView
             status={status}

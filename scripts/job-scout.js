@@ -32,6 +32,19 @@ function buildNotifyFn() {
 
 async function main() {
   const summary = await runScout({ notifyFn: buildNotifyFn() });
+  if (summary.ok) {
+    try {
+      const { scoutDir } = require('../lib/job-scout/scout');
+      const fs = require('fs');
+      const path = require('path');
+      const dir = scoutDir();
+      const { leads = [] } = JSON.parse(fs.readFileSync(path.join(dir, 'leads.json'), 'utf8'));
+      const sync = require('../lib/revenue-ops/store').syncFromScoutLeads(leads);
+      console.log(`[revenue-ops] synced=${sync.updated} opportunities=${sync.count}`);
+    } catch (e) {
+      console.warn(`[revenue-ops] sync skipped: ${(e && e.message) || e}`);
+    }
+  }
   const parts = Object.entries(summary.sources).map(([k, v]) => `${k}=${v.ok ? v.count : `ERR(${v.error})`}`);
   console.log(`[job-scout] fetched=${summary.fetched} kept=${summary.kept} new=${summary.newLeads} strong=${summary.newStrong} ${parts.join(' ')}`);
   process.exit(summary.ok ? 0 : 1);

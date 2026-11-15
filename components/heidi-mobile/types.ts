@@ -205,3 +205,39 @@ export interface JobScoutSnapshot {
   decisions: Record<string, { status: JobDecision; at: string }>;
   leads: JobLead[];
 }
+
+export interface RevenueConnector {
+  id: string;
+  name: string;
+  access: 'active' | 'blocked' | 'unconfigured';
+  lastOk?: boolean;
+  lastCount?: number;
+  lastError?: string | null;
+  blockReason?: string;
+}
+
+export interface RevenueOpportunity {
+  id: string;
+  leadId: string;
+  state: string;
+  title: string;
+  marketplace: string;
+  sourceUrl: string;
+  assessment?: {
+    opportunityScore: number;
+    recommendedService: string | null;
+    economics?: { netRevenueUsd: number | null; riskScore: number; grossRevenueUsd: number | null };
+  };
+  proposal?: { version: string; body: string };
+}
+
+export interface RevenueOpsSnapshot {
+  ok: boolean;
+  connectors: RevenueConnector[];
+  scout: JobScoutStatus | null;
+  opportunities: RevenueOpportunity[];
+  buckets: {
+    awaitingApproval: RevenueOpportunity[];
+    top: RevenueOpportunity[];
+  };
+}
