@@ -62,4 +62,8 @@ Integration step may suggest `health.check` after credentials exist — optional
 npx jest tests/unit/partnerships-funding.test.js tests/unit/resource-acquisition-engine.test.js --runInBand
 ```
 
-**Classification:** VERIFIED SIMULATED
+**Classification:** FIXTURE-BACKED SIMULATION — not live discovery. Bundled files under `tests/fixtures/partnerships/` are `example_fixture` leads until an operator records source verification.
+
+**Cost language:** This module adds no new paid infrastructure; it does not eliminate existing compute, CI, or any paid API usage elsewhere in HYDI.
+
+See also: `docs/partnerships/PR593_SECURITY_REVIEW.md`, `docs/partnerships/OWNER_PROFILE_QUESTIONNAIRE.md`.

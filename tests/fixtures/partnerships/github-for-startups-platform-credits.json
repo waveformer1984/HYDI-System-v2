@@ -1,4 +1,7 @@
 {
+  "_fixture_notice": "EXAMPLE ONLY — not live-verified.",
+  "intake_kind": "example_fixture",
+  "source_verification_status": "example_unverified",
   "provider": "GitHub",
   "program_name": "GitHub for Startups — platform credits",
   "benefit_category": "platform_credits",
@@ -9,7 +12,7 @@
   "application_status": "open",
   "deadline": null,
   "official_source_url": "https://github.com/enterprise/startups",
-  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_verified_at": null,
   "source_excerpt": "Build your startup on GitHub — startup program credits are platform credits for GitHub products, distinct from cash grants.",
   "is_commercial_partnership": false,
   "eligibility_requirements": [
@@ -28,5 +31,5 @@
       "fail_reason": "Funding status unknown"
     }
   ],
-  "research_classification": "VERIFIED_SIMULATED"
+  "research_classification": "EXAMPLE_LEAD"
 }

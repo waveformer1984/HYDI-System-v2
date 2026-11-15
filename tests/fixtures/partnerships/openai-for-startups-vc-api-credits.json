@@ -1,4 +1,7 @@
 {
+  "_fixture_notice": "EXAMPLE ONLY — not live-verified. Operator must confirm terms on the official OpenAI startups page before treating benefits or eligibility as current.",
+  "intake_kind": "example_fixture",
+  "source_verification_status": "example_unverified",
   "provider": "OpenAI",
   "program_name": "OpenAI for Startups — API credits via eligible VC partners",
   "benefit_category": "credits",
@@ -10,7 +13,7 @@
   "deadline": null,
   "deadline_timezone": null,
   "official_source_url": "https://openai.com/business/why-openai/startups/",
-  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_verified_at": null,
   "source_excerpt": "If your startup is backed by a VC in our partner network... your startup may be eligible for benefits like free API credits... ask your VC for a referral code.",
   "is_commercial_partnership": false,
   "eligibility_requirements": [
@@ -36,5 +39,5 @@
       "fail_reason": "Business email not provided"
     }
   ],
-  "research_classification": "VERIFIED_SIMULATED"
+  "research_classification": "EXAMPLE_LEAD"
 }

@@ -7,21 +7,13 @@ const { PartnershipsFundingCoordinator } = require('../../lib/partnerships-fundi
 const { transition, PIPELINE_STATES } = require('../../lib/partnerships-funding/pipeline');
 const { redactSecrets } = require('../../lib/partnerships-funding/roles/writer');
 const openaiFixture = require('../fixtures/partnerships/openai-for-startups-vc-api-credits.json');
+const { approvedTestProfile, verifyOpportunitySource } = require('./partnerships-test-helpers');
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pf-'));
 }
 
-const approvedProfile = {
-  approved_by_owner: true,
-  approved_at: '2026-11-15T00:00:00.000Z',
-  legal: { entity_name: 'UNKNOWN', business_email: 'UNKNOWN' },
-  classification: { structure: 'open_source' },
-  funding: { vc_backed: 'UNKNOWN', vc_partner_name: 'UNKNOWN' },
-  product: { one_line_description: 'HYDI orchestration platform', api_use_case: 'UNKNOWN' },
-  goals: { requested_support: ['api_credits'] },
-  sharing: { may_share_metrics_externally: false },
-};
+const approvedProfile = approvedTestProfile({ goals: { requested_support: ['api_credits'] } });
 
 describe('Partnerships & Funding workflow', () => {
   test('deduplicates same provider+program', () => {
@@ -49,9 +41,10 @@ describe('Partnerships & Funding workflow', () => {
 
   test('milestone: draft for review with unresolved questions (not submitted)', () => {
     const dir = tempDir();
-    const coord = new PartnershipsFundingCoordinator({ dir });
+    const coord = new PartnershipsFundingCoordinator({ dir, _allowTestHarness: true });
     coord.setOrgProfile(approvedProfile);
     const d = coord.discoverFromSource(openaiFixture);
+    verifyOpportunitySource(coord, d.opportunity.id);
     coord.evaluateOpportunity(d.opportunity.id);
     const prep = coord.prepareDraft(d.opportunity.id);
     expect(prep.ok).toBe(true);
@@ -96,6 +89,6 @@ describe('Partnerships & Funding workflow', () => {
   test('mobile snapshot distinguishes empty research', () => {
     const coord = new PartnershipsFundingCoordinator({ dir: tempDir() });
     const snap = coord.mobileSnapshot();
-    expect(snap.research_status).toBe('no_verified_opportunities_loaded');
+    expect(snap.research_status).toBe('no_opportunities_loaded');
   });
 });

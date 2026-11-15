@@ -1,4 +1,7 @@
 {
+  "_fixture_notice": "EXAMPLE ONLY — not live-verified.",
+  "intake_kind": "example_fixture",
+  "source_verification_status": "example_unverified",
   "provider": "Anthropic",
   "program_name": "Claude for Startups",
   "benefit_category": "credits",
@@ -9,7 +12,7 @@
   "application_status": "rolling",
   "deadline": null,
   "official_source_url": "https://claude.com/programs/startups",
-  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_verified_at": null,
   "source_excerpt": "Claude for Startups — verify Startup Program Official Terms before drafting.",
   "terms_url": "https://www.anthropic.com/startup-program-official-terms",
   "is_commercial_partnership": false,
@@ -29,5 +32,5 @@
       "fail_reason": "Business email unknown"
     }
   ],
-  "research_classification": "VERIFIED_SIMULATED"
+  "research_classification": "EXAMPLE_LEAD"
 }

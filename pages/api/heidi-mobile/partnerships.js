@@ -5,26 +5,16 @@
  * No external submission. Drafts require owner approval out of band.
  */
 
-const fs = require('fs');
-const path = require('path');
 const { guard } = require('../../../lib/heidi-mobile/guard.js');
 const { ResourceAcquisitionEngine } = require('../../../lib/partnerships-funding/resource-engine');
-
-function loadOrgProfile() {
-  const file = path.join(process.cwd(), 'docs/partnerships/organization-profile.template.json');
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
-}
+const { loadApprovedOrgProfileFromEnv } = require('../../../lib/partnerships-funding/profile-loader');
 
 let _engine;
 function engine() {
   if (!_engine) {
     _engine = new ResourceAcquisitionEngine();
-    const profile = loadOrgProfile();
-    if (profile?.approved_by_owner) _engine.setOrgProfile(profile);
+    const loaded = loadApprovedOrgProfileFromEnv();
+    if (loaded.ok) _engine.setOrgProfile(loaded.profile);
   }
   return _engine;
 }
@@ -35,9 +25,10 @@ export default async function handler(req, res) {
 
   try {
     const snap = engine().acquisitionSnapshot();
-  if (!snap.org_profile_approved) {
-    snap.notice = 'Organization profile not owner-approved — eligibility and drafts may be incomplete.';
-  }
+    if (!snap.org_profile_approved) {
+      snap.notice =
+        'Organization profile not owner-approved — set HYDI_ORG_PROFILE_PATH to a private file with owner_approval_record before drafting.';
+    }
     res.status(200).json(snap);
   } catch (e) {
     res.status(500).json({

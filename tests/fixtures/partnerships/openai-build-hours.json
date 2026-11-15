@@ -1,13 +1,16 @@
 {
+  "_fixture_notice": "EXAMPLE ONLY — not live-verified. Build Hours is OpenAI's recurring developer webinar/education series (API demos, repos, Q&A), not a standing API-credits grant. Official listing: https://webinar.openai.com/buildhours/",
+  "intake_kind": "example_fixture",
+  "source_verification_status": "example_unverified",
   "provider": "OpenAI",
   "program_name": "Build Hours — developer education series",
   "benefit_category": "technical_support",
-  "benefit_summary": "Free virtual Build Hours: API demos, repos, Q&A — education not API credits (org ID if event offers credits).",
+  "benefit_summary": "Education webinars — not guaranteed API credits; verify each event on the official page.",
   "benefit_amount_published": null,
   "is_guaranteed_amount": false,
   "application_status": "rolling",
   "official_source_url": "https://webinar.openai.com/buildhours/",
-  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_verified_at": null,
   "eligibility_requirements": [],
-  "research_classification": "VERIFIED_SIMULATED"
+  "research_classification": "EXAMPLE_LEAD"
 }
