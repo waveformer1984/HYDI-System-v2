@@ -1,8 +1,18 @@
 {
-  "generated_at": "2026-11-15T21:57:34.063Z",
+  "generated_at": "2026-11-15T22:10:51.871Z",
   "mode": "LIVE",
   "discovery_generated_at": "2026-11-15T21:50:14.230Z",
-  "qualified_imported": 24,
+  "qualified_in_discovery": 24,
+  "qualified_after_store_reassessment": 18,
+  "reassessment_rejected_count": 6,
+  "reassessment_rejected_ids": [
+    "76cd65130b025cdc",
+    "2a0b7eee54468d47",
+    "2da1bc6cc53e7956",
+    "8698fb3487b33ad8",
+    "735f1f3020e44e66",
+    "7d570da5c0b8a32c"
+  ],
   "pipeline_states": [
     {
       "id": "c42fdafa52473930",

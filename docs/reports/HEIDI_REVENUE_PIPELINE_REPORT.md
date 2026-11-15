@@ -1,6 +1,6 @@
 # Heidi revenue pipeline report
 
-**Generated:** 2026-11-15T21:57:34.063Z
+**Generated:** 2026-11-15T22:10:51.871Z
 **Discovery source:** `/agent/repos/HYDI-System-v2/docs/reports/HEIDI_LIVE_OPPORTUNITY_DISCOVERY.json` (LIVE)
 **Qualified imported:** 24
 

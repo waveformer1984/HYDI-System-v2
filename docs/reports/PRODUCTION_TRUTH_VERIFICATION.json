@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-11-15T22:06:00.000Z",
+  "executor": "cloud_agent_audit",
+  "frank_collector_executed": false,
+  "authentic_bundle_path": null,
+  "availability": "UNAVAILABLE",
+  "validation_checklist": {
+    "timestamp_present": { "status": "NOT_RUN", "note": "No Frank JSON" },
+    "source_identity": { "status": "NOT_RUN" },
+    "freshness_within_sla": { "status": "NOT_RUN" },
+    "required_fields": { "status": "NOT_RUN" },
+    "redaction_no_secrets": { "status": "PASS_UNIT", "evidence": "tests/unit/frank-truth-loader.test.js redactFrankTruthPayload" },
+    "live_vs_cached_classification": { "status": "PASS_UNIT", "evidence": "frank-truth-loader LIVE/CACHED" },
+    "stale_data_warning": { "status": "PASS_UNIT" }
+  },
+  "operator_command": "powershell -NoProfile -File scripts/frank-production-truth-collect.ps1",
+  "expected_output_dir": ".runtime/production-truth/",
+  "ingest_rule": "Only files produced on Frank; never commit secrets"
+}

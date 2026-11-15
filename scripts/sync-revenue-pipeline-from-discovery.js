@@ -67,11 +67,16 @@ function main() {
   }
   saveStore(opsDir(env), store);
 
+  const reassessmentRejected = store.opportunities.filter((o) => !o.assessment?.qualified);
+
   const acceptance = {
     generated_at: new Date().toISOString(),
     mode: report.mode || 'UNKNOWN',
     discovery_generated_at: report.generated_at,
-    qualified_imported: qualified.length,
+    qualified_in_discovery: qualified.length,
+    qualified_after_store_reassessment: ranked.length,
+    reassessment_rejected_count: reassessmentRejected.length,
+    reassessment_rejected_ids: reassessmentRejected.map((o) => o.id),
     pipeline_states: ranked.map((o) => ({
       id: o.id,
       title: o.title,
