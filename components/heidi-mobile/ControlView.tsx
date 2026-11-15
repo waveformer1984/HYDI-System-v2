@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import styles from '../../styles/heidi-mobile.module.css';
 import { heidiRequest, type ApiError } from '../../lib/heidi-mobile/client/api';
-import { summarizeFabricResult } from '../../lib/heidi-mobile/client/fabricSummary';
+import { summarizeFabricResult, toneForFabricDisposition, type FabricPhoneSummary } from '../../lib/heidi-mobile/client/fabricSummary';
 import { relativeTime } from '../../lib/heidi-mobile/client/format';
 import { isSpeechInputSupported, isSpeechOutputSupported } from '../../lib/heidi-mobile/client/voice';
 import type { RealtimeState } from '../../lib/heidi-mobile/client/realtime';
@@ -31,11 +31,13 @@ interface Props {
 function FabricHealth({ online, onAuthError }: { online: boolean; onAuthError: (_error: ApiError) => void }) {
   const [busy, setBusy] = useState(false);
   const [idempotencyKey] = useState(() => `heidi-health-${Date.now().toString(36)}`);
-  const [report, setReport] = useState<string | null>(null);
+  const [summary, setSummary] = useState<FabricPhoneSummary | null>(null);
+  const [transportError, setTransportError] = useState<string | null>(null);
 
   const run = async () => {
     setBusy(true);
-    setReport(null);
+    setSummary(null);
+    setTransportError(null);
     const result = await heidiRequest<Record<string, unknown>>('/fabric', {
       method: 'POST',
       timeoutMs: 35_000,
@@ -43,28 +45,40 @@ function FabricHealth({ online, onAuthError }: { online: boolean; onAuthError: (
     });
     setBusy(false);
     if (!result.ok) {
-      setReport(`Health check did not return a task: ${result.error.message}`);
+      setTransportError(result.error.message);
       if (['not_paired', 'unauthorized'].includes(result.error.kind)) onAuthError(result.error);
       return;
     }
-    const summary = summarizeFabricResult(result.data);
-    const id = summary.task_id ? ` task ${summary.task_id}` : '';
-    const corr = summary.correlation_id ? ` correlation ${summary.correlation_id}` : '';
-    setReport(`${summary.headline}.${id}${corr}`.trim());
+    setSummary(summarizeFabricResult(result.data));
   };
 
   return (
     <div className={styles.card}>
       <p className={`${styles.muted} ${styles.small}`}>
-        Runs health.check through the execution fabric. A response is verified only after independent checks pass. Repeating uses the same idempotency key.
+        Runs health.check through the execution fabric. Verified means independent checks passed — not merely HTTP 200. Repeating uses the same idempotency key.
       </p>
       <div className={styles.btnRow}>
         <button type="button" className={styles.btn} disabled={!online || busy} onClick={() => void run()}>
           {busy ? 'Checking…' : 'Verified health check'}
         </button>
       </div>
-      {report && (
-        <pre className={styles.code} style={{ marginTop: 8, whiteSpace: 'pre-wrap', fontSize: 11 }}>{report}</pre>
+      {transportError && (
+        <p className={styles.errorText} role="alert" style={{ marginTop: 8, marginBottom: 0 }}>{transportError}</p>
+      )}
+      {summary && (
+        <div style={{ marginTop: 8 }}>
+          <div className={styles.cardRow}>
+            <span className={styles.statusLabel}>
+              <Dot tone={toneForFabricDisposition(summary.disposition)} />
+              {summary.headline}
+            </span>
+          </div>
+          <div className={`${styles.muted} ${styles.small}`} style={{ marginTop: 4 }}>
+            disposition: {summary.disposition}
+            {summary.public_state || summary.state ? ` · state ${summary.public_state || summary.state}` : ''}
+            {summary.task_id ? ` · task ${summary.task_id.slice(0, 8)}…` : ''}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -94,12 +108,9 @@ function OpsDiagnostics({ online, onAuthError }: { online: boolean; onAuthError:
   return (
     <div className={styles.card}>
       <p className={`${styles.muted} ${styles.small}`}>
-        Typed ops run on the HYDI host through an allowlisted gateway — not arbitrary shell. Read-only checks need no extra confirm.
+        Typed ops on an allowlisted gateway — not arbitrary shell. Use <strong>Verified health check</strong> above for fabric verification; git inspect stays on the typed-ops path below.
       </p>
       <div className={styles.btnRow}>
-        <button type="button" className={styles.btn} disabled={!online || !!busy} onClick={() => void runAction('health.check')}>
-          Health check
-        </button>
         <button type="button" className={styles.btn} disabled={!online || !!busy} onClick={() => void runAction('git.inspect')}>
           Git inspect
         </button>

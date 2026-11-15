@@ -75,3 +75,21 @@ function headlineFor(disposition: FabricDisposition, stateLabel: string | null):
     default: return 'No task result';
   }
 }
+
+/** UI dot tone for fabric disposition — HTTP 200 alone is never "ok". */
+export function toneForFabricDisposition(disposition: FabricDisposition): 'ok' | 'warn' | 'bad' | 'info' | 'muted' {
+  switch (disposition) {
+    case 'verified':
+      return 'ok';
+    case 'duplicate':
+      return 'info';
+    case 'accepted_unverified':
+    case 'pending_approval':
+      return 'warn';
+    case 'failed':
+    case 'rejected':
+      return 'bad';
+    default:
+      return 'muted';
+  }
+}
