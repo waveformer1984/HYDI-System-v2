@@ -36,6 +36,8 @@ const JOBS = [
   { name: 'hydi-revenue-reconciliation', script: 'scripts/revenue-reconciliation-scheduler.js', intervalMs: envMs('RECONCILIATION_INTERVAL_MS', 86400000), timeoutMs: envMs('RECONCILIATION_TIMEOUT_MS', 180000) },
   { name: 'heidi-job-scout',             script: 'scripts/job-scout.js',                        intervalMs: envMs('JOB_SCOUT_INTERVAL_MS', 10800000), timeoutMs: envMs('JOB_SCOUT_TIMEOUT_MS', 240000) },
   { name: 'hydi-failed-webhook-retry',   script: 'scripts/failed-webhook-scheduler.js',         intervalMs: envMs('WEBHOOK_RETRY_INTERVAL_MS', 1800000), timeoutMs: envMs('WEBHOOK_RETRY_TIMEOUT_MS', 120000) },
+  // Resource discovery: no-ops unless HYDI_ENABLE_WEEKLY_RESOURCE_DISCOVERY=1
+  { name: 'hydi-resource-discovery',     script: 'scripts/resource-discovery-scheduler.js',     intervalMs: envMs('HYDI_RESOURCE_DISCOVERY_INTERVAL_MS', 604800000), timeoutMs: envMs('HYDI_RESOURCE_DISCOVERY_TIMEOUT_MS', 300000) },
   // revenue-autopilot-tick is a loop too (isDirectRun → run loop, no --once
   // CLI) — it stays its own PM2 app like stripe-webhook-listener.
 ];
