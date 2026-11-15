@@ -3,7 +3,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { loadLatestFrankProductionTruth, DEFAULT_STALE_MS } = require('../../lib/observation/frank-truth-loader');
+const {
+  loadLatestFrankProductionTruth,
+  validateTimestamps,
+  redactFrankTruthPayload,
+  DEFAULT_STALE_MS,
+} = require('../../lib/observation/frank-truth-loader');
 
 describe('frank-truth-loader', () => {
   let root;
@@ -25,27 +30,27 @@ describe('frank-truth-loader', () => {
 
   it('picks newest file and marks LIVE when fresh', () => {
     const dir = path.join(root, '.runtime', 'production-truth');
-    const older = path.join(dir, 'frank-production-truth-20260101T000000Z.json');
     const newer = path.join(dir, 'frank-production-truth-20260102T000000Z.json');
     const now = Date.now();
-    fs.writeFileSync(older, JSON.stringify({ schema_version: 2, collected_at: new Date(now - 60000).toISOString(), host: 'old' }));
-    fs.writeFileSync(newer, JSON.stringify({
-      schema_version: 2,
-      collected_at: new Date(now).toISOString(),
-      host: 'DESKTOP-TEST',
-      probes: [{ name: 'heidi-web', ok: true, status: 200 }],
-      local_ci_hint: { eslint_use_flat_config_process: true },
-    }));
-    fs.utimesSync(older, (now - 120000) / 1000, (now - 120000) / 1000);
+    fs.writeFileSync(
+      newer,
+      JSON.stringify({
+        schema_version: 2,
+        collected_at: new Date(now).toISOString(),
+        host: 'DESKTOP-TEST',
+        probes: [{ name: 'heidi-web', ok: true, status: 200 }],
+        pm2: { ok: true, env_keys_sample: ['SECRET_SHOULD_DROP'] },
+      }),
+    );
     fs.utimesSync(newer, now / 1000, now / 1000);
 
     const r = loadLatestFrankProductionTruth({ root, now, staleMs: DEFAULT_STALE_MS });
     expect(r.availability).toBe('LIVE');
-    expect(r.host).toBe('DESKTOP-TEST');
-    expect(r.local_ci_hint.eslint_use_flat_config_process).toBe(true);
+    expect(r.probe_summary[0].mode).toBe('LIVE');
+    expect(r.data.pm2.env_keys_sample).toBeUndefined();
   });
 
-  it('marks CACHED when file is stale', () => {
+  it('marks CACHED when file is stale and warns probes', () => {
     const dir = path.join(root, '.runtime', 'production-truth');
     const file = path.join(dir, 'frank-production-truth-20260102T000000Z.json');
     const now = Date.now();
@@ -54,6 +59,22 @@ describe('frank-truth-loader', () => {
 
     const r = loadLatestFrankProductionTruth({ root, now, staleMs: 60000 });
     expect(r.availability).toBe('CACHED');
-    expect(r.evidence_state).toBe('stale');
+    expect(r.stale_data_warning).toBe(true);
+    expect(r.probe_summary).toEqual([]);
+  });
+
+  it('validateTimestamps flags skew', () => {
+    const now = Date.now();
+    const v = validateTimestamps({
+      collected_at: new Date(now - 600000).toISOString(),
+      fileMtimeMs: now,
+      now,
+    });
+    expect(v.issues).toContain('collected_at_file_mtime_skew');
+  });
+
+  it('redactFrankTruthPayload strips env key samples', () => {
+    const out = redactFrankTruthPayload({ pm2: { ok: true, env_keys_sample: ['X'] } });
+    expect(out.pm2.env_keys_sample).toBeUndefined();
   });
 });
