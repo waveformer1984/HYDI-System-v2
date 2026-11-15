@@ -4,7 +4,17 @@
  * logic is exercised here -- above all, that fork PRs are never selected.
  */
 
-const { CHECKS, REPO, parseArgs, summarizeJest, describe: describeStatus, selectPullsToTest, needsRun, supabaseCheckEnv } = require('../../scripts/local-ci');
+const {
+  CHECKS,
+  REPO,
+  parseArgs,
+  summarizeJest,
+  describe: describeStatus,
+  selectPullsToTest,
+  needsRun,
+  supabaseCheckEnv,
+  ciChildEnv,
+} = require('../../scripts/local-ci');
 
 function pr(number, sha, fullName = REPO) {
   return { number, head: { sha, ref: `branch-${number}`, repo: fullName ? { full_name: fullName } : null } };
@@ -133,5 +143,31 @@ describe('supabaseCheckEnv', () => {
 
   it('marks only the unit-tests check as needing Supabase', () => {
     expect(CHECKS.filter((c) => c.needsSupabase).map((c) => c.context)).toEqual(['local-ci/unit-tests']);
+  });
+});
+
+describe('ciChildEnv', () => {
+  const key = 'ESLINT_USE_FLAT_CONFIG';
+  let previous;
+
+  beforeEach(() => {
+    previous = process.env[key];
+  });
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  });
+
+  it('drops ESLINT_USE_FLAT_CONFIG so legacy eslint --ext scripts work', () => {
+    process.env[key] = 'true';
+    expect(ciChildEnv({ FOO: 'bar' })).toMatchObject({ CI: 'true', FOO: 'bar' });
+    expect(ciChildEnv({ FOO: 'bar' })[key]).toBeUndefined();
+  });
+
+  it('does not set ESLINT_USE_FLAT_CONFIG when the parent had none', () => {
+    delete process.env[key];
+    expect(ciChildEnv({})).toMatchObject({ CI: 'true' });
+    expect(ciChildEnv({})[key]).toBeUndefined();
   });
 });

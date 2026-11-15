@@ -19,6 +19,13 @@ Each commit is tested in a throwaway `git worktree` with a clean `npm ci`,
 so uncommitted local changes can't affect the result. Logs are written to
 `<tmp>/hydi-local-ci/<short-sha>/`.
 
+Child processes **do not inherit `ESLINT_USE_FLAT_CONFIG`** from PM2 or the
+parent shell. This repo's lint scripts use `.eslintrc.json` and `--ext`; if
+that variable is `true`, `npm run lint` and `npm run lint:hydi-v3` exit 2
+while `npm run typecheck` still passes — the same pattern as a bogus red
+`local-ci/unit-tests` / `local-ci/integration-tests` with green typecheck.
+Do not set `ESLINT_USE_FLAT_CONFIG` in PM2 or machine-wide env for heidi-pc.
+
 ## Running it
 
 On heidi-pc (or any machine with the repo cloned):
