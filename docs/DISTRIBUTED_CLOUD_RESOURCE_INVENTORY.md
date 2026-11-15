@@ -1,7 +1,9 @@
 # Resource inventory — verified vs unverified
 
-**Audit date:** 2026-11-15 (Cursor cloud agent VM)  
+**Audit date:** 2026-11-15 (Cursor cloud agent VM, Mission 2)  
 **Mode:** No accounts provisioned; no secrets reproduced.
+
+**Legend:** VERIFIED LIVE | VERIFIED SIMULATED | CONFIGURED BUT UNTESTED | BLOCKED | REQUIRES OPERATOR APPROVAL
 
 | Resource | Ownership | Service status (this run) | Quota / cost | Integration |
 |----------|-----------|---------------------------|--------------|-------------|
@@ -17,7 +19,9 @@
 | **Frank / Windows home** | Operator machine | **UNREACHABLE** from cloud agent | Local electricity only | PM2, Ollama, hydi-schedulers |
 | **Android / Termux** | Operator device | **Not attached** to this run | N/A | GitHub Pages + pairing BFF |
 | **Ollama** | Self-hosted | **Not running** on agent VM | $0 | `ENABLE_LOCAL_MODEL`, local-first router |
-| **Cursor cloud agent** | This VM | **Running** | Included in Cursor product | File-backed control plane demo |
+| **Cursor cloud agent** | This VM | **VERIFIED LIVE** | Included in Cursor product | Smoke + remotive GET 200 |
+| **Frank (heidi-pc)** | Operator | **BLOCKED** (no tailnet from agent) | Local electricity | PM2 / Ollama on LAN |
+| **GHA worker workflow** | Repo file | **CONFIGURED BUT UNTESTED** | Free ubuntu-latest minutes | `distributed-cloud-worker-dispatch.yml` |
 
 ## Zero-cost enforcement (implemented)
 
