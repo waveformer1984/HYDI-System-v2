@@ -1,4 +1,4 @@
-import { summarizeFabricResult } from '../../lib/heidi-mobile/client/fabricSummary';
+import { summarizeFabricResult, toneForFabricDisposition } from '../../lib/heidi-mobile/client/fabricSummary';
 
 const taskId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 
@@ -46,5 +46,12 @@ describe('heidi mobile fabric summary', () => {
     expect(summarizeFabricResult({ awaiting_approval: true, task: { id: taskId, state: 'AWAITING_APPROVAL', public_state: 'awaiting_approval' } }).disposition).toBe('pending_approval');
     expect(summarizeFabricResult({ error: 'unknown_capability' }).disposition).toBe('rejected');
     expect(summarizeFabricResult(null).disposition).toBe('unavailable');
+  });
+
+  it('maps disposition to honest UI tones (verified only when ok)', () => {
+    expect(toneForFabricDisposition('verified')).toBe('ok');
+    expect(toneForFabricDisposition('accepted_unverified')).toBe('warn');
+    expect(toneForFabricDisposition('failed')).toBe('bad');
+    expect(toneForFabricDisposition('duplicate')).toBe('info');
   });
 });
