@@ -1,0 +1,36 @@
+{
+  "_fixture_notice": "EXAMPLE ONLY — not live-verified.",
+  "intake_kind": "example_fixture",
+  "source_verification_status": "example_unverified",
+  "provider": "Anthropic",
+  "program_name": "Claude for Startups",
+  "benefit_category": "credits",
+  "benefit_summary": "Startup program may include API credits and team product access — verify current eligibility, terms, and credit restrictions on official pages before applying.",
+  "benefit_amount_published": null,
+  "benefit_restrictions": "See official terms; benefits and caps change — not interchangeable with OpenAI credits",
+  "is_guaranteed_amount": false,
+  "application_status": "rolling",
+  "deadline": null,
+  "official_source_url": "https://claude.com/programs/startups",
+  "source_verified_at": null,
+  "source_excerpt": "Claude for Startups — verify Startup Program Official Terms before drafting.",
+  "terms_url": "https://www.anthropic.com/startup-program-official-terms",
+  "is_commercial_partnership": false,
+  "eligibility_requirements": [
+    {
+      "id": "startup_status",
+      "label": "Meets Anthropic startup program criteria",
+      "profile_field": "classification.structure",
+      "expect": "not_unknown_string",
+      "fail_reason": "Organization classification unknown"
+    },
+    {
+      "id": "business_email",
+      "label": "Valid business contact",
+      "profile_field": "legal.business_email",
+      "expect": "not_unknown_string",
+      "fail_reason": "Business email unknown"
+    }
+  ],
+  "research_classification": "EXAMPLE_LEAD"
+}
