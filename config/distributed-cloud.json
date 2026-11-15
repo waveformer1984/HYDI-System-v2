@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "zeroCostMode": true,
+  "controlPlane": {
+    "persistenceDir": ".runtime/distributed-cloud",
+    "leaseTtlMs": 60000,
+    "maxRetries": 3,
+    "heartbeatStaleMs": 120000
+  },
+  "providers": {
+    "github_actions": { "paidUpgradeAutomatic": false, "quotaUnitsPerMonth": 2000, "note": "Repository minutes — verify in GitHub billing UI" },
+    "supabase_local": { "paidUpgradeAutomatic": false, "note": "Local Docker only on agent/dev; cloud project billing not assumed" },
+    "github_pages": { "paidUpgradeAutomatic": false, "note": "Static docs shell only" },
+    "cloudflare_workers": { "paidUpgradeAutomatic": false, "requiresSecrets": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"], "note": "Manual workflow_dispatch only" },
+    "ollama": { "paidUpgradeAutomatic": false, "note": "Self-hosted; never expose publicly" }
+  },
+  "budgets": {
+    "maxPaidUsdPerDay": 0,
+    "maxCloudTasksPerHour": 120,
+    "alertAtUtilizationPct": 80
+  }
+}
