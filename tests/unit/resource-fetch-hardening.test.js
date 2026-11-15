@@ -2,8 +2,6 @@
 
 const http = require('http');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
 const {
   assertUrlSafeForProbe,
   isPrivateOrReservedIp,
@@ -35,13 +33,8 @@ function withHttpServer(handler, fn) {
   });
 }
 
-const TLS_FIXTURE = path.join(__dirname, '..', 'fixtures', 'resource-tls');
-
 function selfSignedTlsMaterials() {
-  return {
-    key: fs.readFileSync(path.join(TLS_FIXTURE, 'key.pem'), 'utf8'),
-    cert: fs.readFileSync(path.join(TLS_FIXTURE, 'cert.pem'), 'utf8'),
-  };
+  return require('../fixtures/resource-tls/materials');
 }
 
 function withHttpsServer(handler, fn) {
