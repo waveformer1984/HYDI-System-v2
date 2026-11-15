@@ -66,7 +66,7 @@ flowchart TB
 | Commit (branch) | Scope |
 |-----------------|--------|
 | `6cff0bb5` | PR #590 — distributed concurrency + HMAC replay |
-| *(pending push)* | Master mission — docs + `lib/providers/openai-adapter.js` + `lib/dev-workforce/*` |
+| `9ceaf3ee` | Master mission — docs + `lib/providers/openai-adapter.js` + `lib/dev-workforce/*` |
 
 ## Integration checklist
 
