@@ -28,12 +28,17 @@ describe('distributed cloud audit hardening', () => {
   });
 
   test('HMAC rejects stale and replayed tokens', () => {
+    const crypto = require('crypto');
     const oldTs = Math.floor(Date.now() / 1000) - 700;
-    const sig = require('crypto').createHmac('sha256', ENV.HYDI_DISTRIBUTED_WORKER_SECRET).update(`w1:${oldTs}`).digest('hex');
-    expect(verifyWorkerToken(`w1:${oldTs}:${sig}`, ENV).ok).toBe(false);
+    const jti = 'audit-stale';
+    const payload = `w1:${oldTs}:${jti}`;
+    const sig = crypto.createHmac('sha256', ENV.HYDI_DISTRIBUTED_WORKER_SECRET).update(payload).digest('hex');
+    expect(verifyWorkerToken(`v2:${payload}:${sig}`, ENV).ok).toBe(false);
     const fresh = signWorkerToken('w1', ENV);
-    expect(verifyWorkerToken(fresh, ENV).ok).toBe(true);
-    expect(verifyWorkerToken(fresh, ENV).ok).toBe(true);
+    const state = { auth_replay_used: {} };
+    const { consumeWorkerToken } = require('../../lib/distributed-cloud/auth');
+    expect(consumeWorkerToken(state, fresh, ENV).ok).toBe(true);
+    expect(verifyWorkerToken(fresh, ENV, state).ok).toBe(false);
   });
 
   test('idempotency survives store reload', () => {
@@ -47,18 +52,20 @@ describe('distributed cloud audit hardening', () => {
     expect(b.task.id).toBe(a.task.id);
   });
 
-  test('concurrent mutates are last-write-wins (documented unsafe)', () => {
+  test('serialized mutates preserve both writers (file lock)', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-race-'));
     const s1 = new DistributedCloudStore({ dir });
     const s2 = new DistributedCloudStore({ dir });
-    const st1 = s1.load();
-    const st2 = s2.load();
-    st1.tasks.push({ id: 't1', state: 'queued' });
-    st2.tasks.push({ id: 't2', state: 'queued' });
-    s1.save(st1);
-    s2.save(st2);
+    s1.mutate((st) => {
+      st.tasks.push({ id: 't1', state: 'queued' });
+      return { ok: true };
+    });
+    s2.mutate((st) => {
+      st.tasks.push({ id: 't2', state: 'queued' });
+      return { ok: true };
+    });
     const final = s1.load();
-    expect(final.tasks.some((t) => t.id === 't1')).toBe(false);
+    expect(final.tasks.some((t) => t.id === 't1')).toBe(true);
     expect(final.tasks.some((t) => t.id === 't2')).toBe(true);
   });
 });
