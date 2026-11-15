@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-11-15T22:00:00.000Z",
+  "frank_host_reachable_from_cloud": false,
+  "collector_file_present": false,
+  "availability": "UNAVAILABLE",
+  "acceptance_checks": {
+    "live_ingestion": "BLOCKED",
+    "cached_not_labeled_live": "PASS_UNIT",
+    "redaction": "PASS_UNIT",
+    "schema_v2_local_ci_hint": "PASS_CODE"
+  }
+}

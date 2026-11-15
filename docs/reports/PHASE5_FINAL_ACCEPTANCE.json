@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-11-15T22:06:00.000Z",
+  "mission_complete": false,
+  "pr": 601,
+  "branch": "Cusor_agent01heidi-ops-truth-revenue-7718",
+  "pr_head_sha": "065421b91514e50fb9cd3140ab1301b2afae8a96",
+  "clean_main_sha": "1b4076cd83acd3dbe821099da32d80c215faa3be",
+  "pr_merged": false,
+  "completion_criteria": {
+    "1_pr601_merged_human_auth": { "met": false, "evidence": "PR #601 open" },
+    "2_required_ci_green": { "met": false, "evidence": "No check runs on PR head at audit time; cloud local-ci PASS on b307cde4" },
+    "3_frank_local_ci_pass": { "met": false, "evidence": "Cloud agent cannot reach Frank" },
+    "4_frank_production_truth_collector": { "met": false, "evidence": "No authentic collector artifact ingested" },
+    "5_live_evidence_validated": { "met": false, "evidence": "Discovery JSON 2026-11-15 LIVE; listings not re-fetched at acceptance" },
+    "6_execution_fabric_acceptance": { "met": "partial", "evidence": "Unit tests PASS; no live distributed execution" },
+    "7_revenue_pipeline_integrity": { "met": "partial", "evidence": "24 discovery qualified; 18 remain after store reassessment; all AWAITING_APPROVAL" },
+    "8_operational_supervisor_acceptance": { "met": true, "evidence": "tests/unit/operational-supervisor.test.js; mode read_only in module" }
+  },
+  "cloud_verification": [
+    { "command": "npx jest tests/unit/{local-ci,frank-truth-loader,capability-health,operational-supervisor,execution-fabric-mission-bridge}.test.js", "result": "PASS", "when": "2026-11-15" },
+    { "command": "ESLINT_USE_FLAT_CONFIG=true node scripts/local-ci.js --no-post HEAD", "result": "PASS", "when": "2026-11-15", "host": "cursor_cloud_vm" }
+  ],
+  "frank_verification": [],
+  "artifacts": {
+    "PHASE5_FINAL_ACCEPTANCE_REPORT.md": true,
+    "FRANK_OPERATIONAL_VERIFICATION.md": true,
+    "PRODUCTION_TRUTH_VERIFICATION.json": true,
+    "REVENUE_PIPELINE_FINAL_AUDIT.md": true,
+    "EXECUTION_FABRIC_ACCEPTANCE.md": true,
+    "REMAINING_BLOCKERS.md": true
+  }
+}

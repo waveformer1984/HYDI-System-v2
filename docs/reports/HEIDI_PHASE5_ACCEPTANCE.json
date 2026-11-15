@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-11-15T22:00:00.000Z",
+  "baseline_sha": "1b4076cd",
+  "pr_head_sha": "b307cde4",
+  "pr": 601,
+  "pr600_merged_to_clean_main": true,
+  "results": [
+    { "id": "A1", "name": "ciChildEnv regression tests", "tier": "unit", "result": "PASS" },
+    { "id": "A2", "name": "Frank local-ci orchestrator", "tier": "frank", "result": "BLOCKED" },
+    { "id": "B1", "name": "Frank truth loader LIVE/CACHED", "tier": "unit", "result": "PASS" },
+    { "id": "B2", "name": "Frank collector on DESKTOP-I719OIN", "tier": "frank", "result": "BLOCKED" },
+    { "id": "C1", "name": "Distributed capability matrix", "tier": "unit", "result": "PASS" },
+    { "id": "D1", "name": "Live discovery 2026-11-15", "tier": "live_cloud", "result": "PASS", "qualified": 24 },
+    { "id": "D2", "name": "Revenue pipeline import", "tier": "integration", "result": "PASS", "awaiting_approval": true },
+    { "id": "E1", "name": "Operational supervisor", "tier": "unit", "result": "PASS" },
+    { "id": "F1", "name": "revenue-ops-acceptance", "tier": "simulated", "result": "PASS" }
+  ],
+  "mission_complete": false,
+  "blockers": ["Frank local-ci re-run", "Frank production-truth JSON", "Human approval before any client submit"]
+}
