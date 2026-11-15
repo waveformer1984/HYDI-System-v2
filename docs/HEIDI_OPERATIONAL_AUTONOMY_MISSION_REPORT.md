@@ -50,11 +50,11 @@ See mission canvas / prior analysis. Summary:
 
 | Phase | Goal | Code / tests present | Production verified |
 |-------|------|----------------------|---------------------|
-| 2 Routing | Single authoritative model router | `lib/ModelManager.ts`, `heidi-core/brain/ollama-client.js`, `lib/heidi/Planner.ts` `selectModel`, `paid-llm-gate.js` | **NO** — multiple paths (`/chat-tools`, `api/chat`, PAO, Ursula) |
+| 2 Routing | Single authoritative model router | `lib/heidi/inference-route.js` + `lib/ModelManager.ts`, `paid-llm-gate.js` | **PARTIAL** — route registry + conflict detect; dispatch not centralized |
 | 3 Maintenance | Detect → propose → approve → verify | Health observer, mission lifecycle, ops agent, `restart-module.js` | **PARTIAL** — hermetic; Frank E2E **NO** |
 | 4 Contracts | 77 capabilities + verification/undo | `CapabilityRegistry`, `capability-contract-audit.ts` | **FAIL audit** — 77× VERIFICATION_ABSENT, 19× NO_UNDO_PATH |
 | 5 Distributed | Frank + cloud + mobile nodes | Control plane tests `[SIMULATED]`; GHA worker dispatch | **NO live Frank worker** |
-| 6 Dashboard | Unified ops view | `system/status`, mobile fabric, resource dashboard snapshot | **FRAGMENTED** — no single Phase 6 dashboard |
+| 6 Dashboard | Unified ops view | `GET /operations/snapshot` (heidi-core), `GET /api/heidi-operations/snapshot` | **PARTIAL** — JSON evidence hub; no full UI yet |
 | 7 Acceptance | Degrade → repair → evidence | Distributed acceptance + mission tests (simulated) | **NOT E2E on Frank** |
 
 ---
@@ -132,6 +132,6 @@ See mission canvas / prior analysis. Summary:
 2. **Set cloud tailnet** — `TS_AUTHKEY` + `PROTOFORGE_MCP_TOKEN` in Cursor environment for read-only MCP audits.
 3. **Choose Phase 2 RFC** — consolidate routing behind one service vs document matrix (audit-first).
 4. **Phase 4** — prioritize contracts that mutate state above R2 (undo + verification).
-5. **Phase 6** — spec unified dashboard consuming `system/status`, daemon status, distributed snapshot, resource dashboard, capability audit — **no UI work started** (audit only).
+5. **Phase 6 UI** — consume `GET /operations/snapshot` on Frank (service token); add canvas/dashboard page when Phase 1 JSON confirms live shape.
 
 Do not merge operational claims into runbooks until (1) is attached.
