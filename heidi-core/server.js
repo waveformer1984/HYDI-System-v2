@@ -601,6 +601,21 @@ class HeidiCore {
       }
     });
 
+  this.app.get('/operations/snapshot', async (req, res) => {
+    try {
+      const { buildOperationsEvidenceSnapshot } = require('../lib/heidi/operations-evidence-snapshot');
+      const snap = await buildOperationsEvidenceSnapshot({
+        root: this.root || path.resolve(__dirname, '..'),
+        memory: this.memory,
+        memoryRuntime: this.memoryRuntime,
+        uptimeMs: this.stats.startTime ? Date.now() - this.stats.startTime : undefined,
+      });
+      res.status(snap.overall === 'UNAVAILABLE' ? 503 : 200).json(snap);
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'error' });
+    }
+  });
+
     // DECISION INBOX + BRIEF — read-only composition of missions + fix-list
     // into the cards the owner decides on (status/decision-inbox.js).
     this.app.get('/decision-inbox', async (req, res) => {
