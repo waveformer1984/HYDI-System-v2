@@ -1,0 +1,57 @@
+name: Distributed cloud worker smoke
+
+# Manual smoke only — zero-cost ubuntu-latest worker.
+# Does NOT deploy, merge, or touch production.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live_network:
+        description: 'Probe remotive.com (read-only GET)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: distributed-cloud-worker-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install deps (minimal)
+        run: npm ci
+
+      - name: Run distributed smoke
+        env:
+          HYDI_DISTRIBUTED_WORKER_SECRET: ${{ secrets.HYDI_DISTRIBUTED_WORKER_SECRET }}
+          LIVE_NETWORK: ${{ inputs.live_network && '1' || '0' }}
+          HYDI_SMOKE_EVIDENCE_DIR: ${{ github.workspace }}/.runtime/distributed-cloud/evidence
+        run: |
+          if [ -z "$HYDI_DISTRIBUTED_WORKER_SECRET" ]; then
+            echo "::notice::HYDI_DISTRIBUTED_WORKER_SECRET not set — smoke skipped"
+            echo '{"classification":"BLOCKED","reason":"missing_secret"}' > smoke-skip.json
+            exit 0
+          fi
+          node scripts/distributed-live-smoke.js
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributed-smoke-evidence
+          path: |
+            .runtime/distributed-cloud/evidence/*.json
+            smoke-skip.json
+          if-no-files-found: ignore
