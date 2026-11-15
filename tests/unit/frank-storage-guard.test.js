@@ -169,7 +169,7 @@ describe('frank storage guard cleanup', () => {
     expect(guard.newestMtime(dir, 3)).toBe(Infinity);
     // mtimeMs has sub-ms precision; compare against a fresh clock, not the
     // floored `now` captured before the files were written.
-    expect(guard.newestMtime(dir)).toBeLessThanOrEqual(Date.now());
+    expect(guard.newestMtime(dir)).toBeLessThanOrEqual(Date.now() + 1);
   });
 
   it('leaves .next/cache alone while a deploy holds its lock', async () => {

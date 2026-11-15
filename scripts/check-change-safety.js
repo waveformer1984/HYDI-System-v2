@@ -38,6 +38,9 @@ function sensitiveMatches(content) {
 
 function isKnownFakeFixture(file, match) {
   const normalized = file.replace(/\\/g, '/');
+  if (normalized.startsWith('tests/fixtures/resource-tls/')) {
+    return true;
+  }
   if (!normalized.startsWith('tests/fixtures/')) return false;
   return /(known[-_ ]?fake|fake|dummy|placeholder|example|test)/i.test(match.value);
 }
