@@ -32,7 +32,7 @@ const nextConfig = {
   async rewrites() {
     return [{ source: '/health', destination: '/api/health' }]
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack: wp }) => {
     // Allow require() of .ts files from .js files in the pages/ directory.
     // next dev resolves .ts extensions automatically, but next build's
     // webpack production config doesn't include .ts in resolve.extensions
@@ -40,6 +40,17 @@ const nextConfig = {
     // both dev and production builds.
     if (!config.resolve.extensions.includes('.ts')) {
       config.resolve.extensions.push('.ts');
+    }
+    // instrumentation.ts is server-start only; replace with a no-op in the
+    // browser graph so next dev never tries to bundle fs/child_process.
+    if (!isServer) {
+      const stub = path.join(__dirname, 'lib/runtime/instrumentation-stub.ts');
+      config.plugins.push(
+        new wp.NormalModuleReplacementPlugin(/[/\\]instrumentation\.ts$/, stub),
+        new wp.IgnorePlugin({
+          resourceRegExp: /[/\\]lib[/\\]runtime[/\\]provenance\.js$/,
+        })
+      );
     }
     return config;
   },
