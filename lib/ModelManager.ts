@@ -28,30 +28,6 @@ import { getSessionState as getSharedSessionState, updateSessionState as updateS
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 import { paidApiKey } from './cost/paid-llm-gate';
 
-// Experimental multi-architecture router (NCM). Off unless HYDI_INTELLIGENCE_ROUTER=1.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const intelligenceRouter = require('./inference/intelligence-router') as {
-  completeWithRouter: (
-    input: { prompt: string; task?: string; max_tokens?: number },
-    llmFallback: () => Promise<{
-      content: string;
-      success: boolean;
-      model?: string;
-      latency?: number;
-      error?: string;
-    }>,
-    env?: NodeJS.ProcessEnv
-  ) => Promise<{
-    content: string;
-    success: boolean;
-    model?: string;
-    latency?: number;
-    error?: string;
-    engine?: string;
-    metadata?: InferenceMetadata;
-  }>;
-};
-
 export interface InferenceMetadata {
   provider: string;
   selectedModel: string;
@@ -439,7 +415,8 @@ export class ModelManager {
 
     const routerTask = process.env.HYDI_ROUTER_TASK;
     if (process.env.HYDI_INTELLIGENCE_ROUTER === '1' && routerTask) {
-      const routed = await intelligenceRouter.completeWithRouter(
+      const { completeWithRouter } = await import('./inference/intelligence-router.js');
+      const routed = await completeWithRouter(
         { prompt, task: routerTask },
         async () => {
           if (this.isCircuitBreakerActive() || !(await this.isLocalModelEnabled())) {
@@ -472,7 +449,7 @@ export class ModelManager {
           model: modelLabel,
           latency,
           success: true,
-          metadata: routed.metadata,
+          metadata: routed.metadata as InferenceMetadata | undefined,
         };
       }
     }
