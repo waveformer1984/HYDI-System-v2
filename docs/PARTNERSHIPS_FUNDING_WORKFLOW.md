@@ -1,5 +1,7 @@
 # Partnerships & Funding workflow
 
+> **v1 operational engine:** see `docs/HYDI_RESOURCE_ACQUISITION_ENGINE.md` (`ResourceAcquisitionEngine`).
+
 **Objective:** Discover programs from **official sources**, evaluate fit against an **owner-approved profile**, prepare **evidence-backed drafts**, and queue **explicit owner approval** before any external action. This is not an autonomous application bot.
 
 ## Reused HYDI components

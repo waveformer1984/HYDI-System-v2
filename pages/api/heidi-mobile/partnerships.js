@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { guard } = require('../../../lib/heidi-mobile/guard.js');
-const { PartnershipsFundingCoordinator } = require('../../../lib/partnerships-funding/coordinator');
+const { ResourceAcquisitionEngine } = require('../../../lib/partnerships-funding/resource-engine');
 
 function loadOrgProfile() {
   const file = path.join(process.cwd(), 'docs/partnerships/organization-profile.template.json');
@@ -19,14 +19,14 @@ function loadOrgProfile() {
   }
 }
 
-let _coord;
-function coordinator() {
-  if (!_coord) {
-    _coord = new PartnershipsFundingCoordinator();
+let _engine;
+function engine() {
+  if (!_engine) {
+    _engine = new ResourceAcquisitionEngine();
     const profile = loadOrgProfile();
-    if (profile?.approved_by_owner) _coord.setOrgProfile(profile);
+    if (profile?.approved_by_owner) _engine.setOrgProfile(profile);
   }
-  return _coord;
+  return _engine;
 }
 
 export default async function handler(req, res) {
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   if (!g.ok) return;
 
   try {
-    const snap = coordinator().mobileSnapshot();
+    const snap = engine().acquisitionSnapshot();
   if (!snap.org_profile_approved) {
     snap.notice = 'Organization profile not owner-approved — eligibility and drafts may be incomplete.';
   }
