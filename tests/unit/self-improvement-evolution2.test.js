@@ -66,7 +66,7 @@ describe('Self-improvement Evolution 2.0', () => {
   });
 
   test('redacts secrets in records', () => {
-    const row = redactRecord({ token: 'sk_live_abc123' });
+    const row = redactRecord({ token: 'sk_test_fixture_redact_example' });
     expect(row.token).toBe('[REDACTED]');
   });
 
