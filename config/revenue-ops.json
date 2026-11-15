@@ -1,0 +1,11 @@
+{
+  "scanIntervalMs": 21600000,
+  "defaultPlatformFeeRate": 0.1,
+  "paymentProcessingRate": 0.029,
+  "estimatedInfraCostUsd": 5,
+  "defaultHourlyLaborCostUsd": 45,
+  "minNetProfitUsd": 50,
+  "minOpportunityScore": 40,
+  "proposalReadyScore": 60,
+  "maxRiskScore": 75
+}
