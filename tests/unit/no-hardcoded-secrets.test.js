@@ -63,6 +63,7 @@ const ALLOWLIST = new Set([
   'tests/unit/human-action-resolvers.test.js', // fake rk_live_ fixture testing resolver authorization gating, not a real key
   'tests/unit/public-url-staleness.test.js', // fake webhook-secret fixtures testing `stripe listen` output parsing, not a real secret
   'apps/walkie/server/test/ptt.test.ts', // PEM block with body "abc" testing APNs config loading, not a real key
+  'tests/fixtures/resource-tls/materials.js', // public self-signed TLS material for hermetic resource-fetch HTTPS tests only
 ]);
 
 function listTrackedFiles() {
