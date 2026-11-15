@@ -1,7 +1,7 @@
 'use strict';
 
 const { createResourceActionRunner } = require('../../lib/resource-acquisition/actions');
-const { approvedTestProfile, operatorCtx } = require('./partnerships-test-helpers');
+const { approvedTestProfile } = require('./partnerships-test-helpers');
 
 describe('Resource typed actions', () => {
   test('action catalog exposes required resource.* names', () => {

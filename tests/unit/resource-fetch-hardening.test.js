@@ -215,11 +215,12 @@ describe('resource fetch + url-guard hardening', () => {
         res.end('tiny');
       },
       async (port) => {
+        const tls = selfSignedTlsMaterials();
         setDnsLookupForTests(async () => [{ address: PUBLIC_STUB_B, family: 4 }]);
         setPinnedConnectOverrideForTests('127.0.0.1');
         const page = await fetchPageText(`https://live-huge.localhost:${port}/`, 5000, 4096, {
           allowHttp: false,
-          rejectUnauthorized: false,
+          extraCaPem: tls.cert,
         });
         expect(page.ok).toBe(true);
         expect(page.body).toBe('tiny');
@@ -235,9 +236,10 @@ describe('resource fetch + url-guard hardening', () => {
         res.end(payload);
       },
       async (port) => {
+        const tls = selfSignedTlsMaterials();
         setDnsLookupForTests(async () => [{ address: PUBLIC_STUB_B, family: 4 }]);
         setPinnedConnectOverrideForTests('127.0.0.1');
-        const r = await fetchUrlMeta(`https://live-huge.localhost:${port}/big`, { rejectUnauthorized: false });
+        const r = await fetchUrlMeta(`https://live-huge.localhost:${port}/big`, { extraCaPem: tls.cert });
         expect(r.ok).toBe(true);
         expect(r.truncated).toBe(true);
         expect(r.content_length_seen).toBeLessThanOrEqual(256000);
