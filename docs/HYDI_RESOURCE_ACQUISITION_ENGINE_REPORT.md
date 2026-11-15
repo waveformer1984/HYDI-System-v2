@@ -110,7 +110,7 @@ npx jest tests/integration/resource-acquisition-fabric.test.js --testMatch="**/*
 ```powershell
 # Private approved profile (never commit)
 $env:HYDI_ORG_PROFILE_PATH = "C:\path\outside\repo\hydi-org-profile.json"
-$env:HYDI_PARTNERSHIPS_OPERATOR_SECRET = "<matches HYDI_SERVICE_SECRET or dedicated secret>"
+$env:HYDI_PARTNERSHIPS_OPERATOR_SECRET = "<dedicated partnerships operator secret>"
 
 # On-demand weekly discovery (no PM2 loop unless operator adds scheduled task)
 cd C:\Users\Owner\HYDI-System-v2

@@ -44,7 +44,7 @@ async function main() {
   }
   const token = process.env.OPERATOR_TOKEN || process.env.HYDI_OPERATOR_TOKEN;
   if (!token) {
-    console.error('Set OPERATOR_TOKEN (must match HYDI_PARTNERSHIPS_OPERATOR_SECRET or HYDI_SERVICE_SECRET)');
+    console.error('Set OPERATOR_TOKEN (must match HYDI_PARTNERSHIPS_OPERATOR_SECRET)');
     process.exit(2);
   }
   const engine = new ResourceAcquisitionEngine({ allowTestHarness: false });

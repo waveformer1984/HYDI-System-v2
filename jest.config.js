@@ -70,6 +70,13 @@ module.exports = {
   // else's untested lines.
   coveragePathIgnorePatterns: ['/node_modules/', '/lib/third_party/'],
 
+  // Plain CommonJS fetch/guard code uses Node dns lookup `options.all` semantics;
+  // babel transforms can break custom lookup callbacks.
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '[/\\\\]lib[/\\\\]resource-acquisition[/\\\\]',
+  ],
+
   forceExit: true,
   detectOpenHandles: true,
   testTimeout: 15000,
