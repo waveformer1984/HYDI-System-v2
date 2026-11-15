@@ -32,6 +32,22 @@ describe('Partnerships acquisition guards (PR #593 review)', () => {
     expect(prep.error).toBe('invalid_profile');
   });
 
+  test('operator source without published terms blocks prepare', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p-'));
+    const coord = new PartnershipsFundingCoordinator({ dir, _allowTestHarness: true });
+    coord.setOrgProfile(approvedTestProfile());
+    const d = coord.discoverFromSource({ ...openaiFixture, intake_kind: 'example_fixture' });
+    coord.recordOperatorSourceVerification(
+      d.opportunity.id,
+      { source_checked_at: '2026-11-15T12:00:00.000Z', published_benefits_verified: false },
+      operatorCtx,
+    );
+    coord.evaluateOpportunity(d.opportunity.id);
+    const blocked = coord.prepareDraft(d.opportunity.id);
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error).toBe('published_benefits_not_verified');
+  });
+
   test('approved profile still blocked until operator verifies source', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p-'));
     const coord = new PartnershipsFundingCoordinator({ dir, _allowTestHarness: true });

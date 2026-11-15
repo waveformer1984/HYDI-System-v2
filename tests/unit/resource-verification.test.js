@@ -23,7 +23,8 @@ describe('resource verification adapters', () => {
     });
     expect(v.flags.source_reachable).toBe(true);
     expect(v.flags.benefits_confirmed).toBe(false);
-    expect(v.flags.program_confirmed).toBe(true);
+    expect(v.flags.weak_page_signal).toBe(true);
+    expect(v.classification).toBe('WEAK_PAGE_SIGNAL');
   });
 
   test('403 reachability does not confirm program', async () => {

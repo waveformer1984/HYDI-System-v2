@@ -23,7 +23,14 @@ function approvedTestProfile(overrides = {}) {
 function verifyOpportunitySource(coord, opportunityId) {
   return coord.recordOperatorSourceVerification(
     opportunityId,
-    { source_checked_at: '2026-11-15T12:00:00.000Z', benefits_verified: true, note: 'test harness' },
+    {
+      source_checked_at: '2026-11-15T12:00:00.000Z',
+      published_benefits_verified: true,
+      official_source_url: 'https://openai.com/business/why-openai/startups/',
+      benefit_terms_excerpt: 'Harness: VC referral required for API credits (not live-verified).',
+      application_open_verified: null,
+      note: 'test harness',
+    },
     operatorCtx,
   );
 }
