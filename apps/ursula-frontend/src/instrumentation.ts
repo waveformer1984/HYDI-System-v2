@@ -4,12 +4,15 @@
  * instrumentation.ts. ursula-local runs `next start` directly, so without
  * this the audit can only report UNKNOWN_CODE for it.
  */
+
+declare const __non_webpack_require__: NodeRequire;
+
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== 'nodejs') return;
-  const path = await import('path');
-  const { recordProcessProvenance } = await import('../../../lib/runtime/provenance.js');
-  // PM2 runs `next start` with cwd=apps/ursula-frontend; provenance belongs
-  // to the repo root so the drift audit finds it under .runtime/provenance.
-  const repoRoot = path.resolve(process.cwd(), '..', '..');
-  await recordProcessProvenance('ursula-local', { cwd: repoRoot });
+  const path = __non_webpack_require__('path') as typeof import('path');
+  const bridgePath = path.join(process.cwd(), '..', '..', 'lib', 'runtime', 'next-provenance-register.cjs');
+  const bridge = __non_webpack_require__(bridgePath) as {
+    registerUrsulaLocalProvenance: () => Promise<void>;
+  };
+  await bridge.registerUrsulaLocalProvenance();
 }
