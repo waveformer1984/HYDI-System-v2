@@ -1,0 +1,5148 @@
+{
+  "generated_at": "2026-11-15T21:50:14.230Z",
+  "mode": "LIVE",
+  "ok": true,
+  "scout": {
+    "newLeads": 130,
+    "newStrong": 75,
+    "sources": {
+      "freelancer": {
+        "ok": true,
+        "count": 362,
+        "ms": 2474
+      },
+      "remotive": {
+        "ok": true,
+        "count": 35,
+        "ms": 164
+      },
+      "remoteok": {
+        "ok": true,
+        "count": 27,
+        "ms": 438
+      },
+      "hn": {
+        "ok": true,
+        "count": 0,
+        "ms": 771
+      }
+    }
+  },
+  "connectors": [
+    {
+      "id": "freelancer",
+      "name": "Freelancer.com",
+      "access": "active",
+      "adapter": true,
+      "lastScan": "2026-11-15T21:50:09.304Z",
+      "lastOk": true,
+      "lastCount": 362,
+      "lastError": null
+    },
+    {
+      "id": "remotive",
+      "name": "Remotive",
+      "access": "active",
+      "adapter": true,
+      "lastScan": "2026-11-15T21:50:09.304Z",
+      "lastOk": true,
+      "lastCount": 35,
+      "lastError": null
+    },
+    {
+      "id": "remoteok",
+      "name": "RemoteOK",
+      "access": "active",
+      "adapter": true,
+      "lastScan": "2026-11-15T21:50:09.304Z",
+      "lastOk": true,
+      "lastCount": 27,
+      "lastError": null
+    },
+    {
+      "id": "hn",
+      "name": "HN Seeking Freelancer",
+      "access": "active",
+      "adapter": true,
+      "lastScan": "2026-11-15T21:50:09.304Z",
+      "lastOk": true,
+      "lastCount": 0,
+      "lastError": null
+    },
+    {
+      "id": "upwork",
+      "name": "Upwork",
+      "access": "blocked",
+      "blockReason": "No permitted read-only API in repo; RSS retired Aug 2024; requires approved partner API.",
+      "lastScan": null
+    },
+    {
+      "id": "fiverr",
+      "name": "Fiverr",
+      "access": "blocked",
+      "blockReason": "No official public listing API; automated access not implemented.",
+      "lastScan": null
+    },
+    {
+      "id": "peopleperhour",
+      "name": "PeoplePerHour",
+      "access": "blocked",
+      "blockReason": "No authorized feed integration.",
+      "lastScan": null
+    },
+    {
+      "id": "contra",
+      "name": "Contra",
+      "access": "blocked",
+      "blockReason": "No authorized feed integration.",
+      "lastScan": null
+    },
+    {
+      "id": "guru",
+      "name": "Guru",
+      "access": "blocked",
+      "blockReason": "No authorized feed integration.",
+      "lastScan": null
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn Jobs",
+      "access": "blocked",
+      "blockReason": "Requires LinkedIn API partnership; not configured.",
+      "lastScan": null
+    },
+    {
+      "id": "indeed",
+      "name": "Indeed",
+      "access": "blocked",
+      "blockReason": "Publisher API credentials not configured.",
+      "lastScan": null
+    }
+  ],
+  "blocked_marketplaces": [
+    {
+      "id": "upwork",
+      "reason": "No permitted read-only API in repo; RSS retired Aug 2024; requires approved partner API."
+    },
+    {
+      "id": "fiverr",
+      "reason": "No official public listing API; automated access not implemented."
+    },
+    {
+      "id": "peopleperhour",
+      "reason": "No authorized feed integration."
+    },
+    {
+      "id": "contra",
+      "reason": "No authorized feed integration."
+    },
+    {
+      "id": "guru",
+      "reason": "No authorized feed integration."
+    },
+    {
+      "id": "linkedin",
+      "reason": "Requires LinkedIn API partnership; not configured."
+    },
+    {
+      "id": "indeed",
+      "reason": "Publisher API credentials not configured."
+    }
+  ],
+  "opportunities_found": 50,
+  "qualified_count": 24,
+  "opportunities": [
+    {
+      "id": "freelancer:40819576",
+      "title": "Claude Internal Task Automation",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-chatbot-development/Claude-Internal-Task-Automation",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Python",
+        "Cloud Computing",
+        "Flask",
+        "Automation",
+        "Zapier",
+        "Chatbot",
+        "FastAPI",
+        "Make.com",
+        "Natural Language Processing",
+        "AI Chatbot Development"
+      ],
+      "posted_at": "2026-11-15T19:54:02.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "API integrations",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 79,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Claude Internal Task Automation\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, claude, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819474",
+      "title": "AI-Driven Real Estate CMA Automation",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/api/Driven-Real-Estate-CMA-Automation",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Python",
+        "Software Architecture",
+        "Statistics",
+        "Machine Learning (ML)",
+        "Node.js",
+        "Web Development",
+        "API"
+      ],
+      "posted_at": "2026-11-15T18:06:31.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture",
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Automation workflows",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 60,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"AI-Driven Real Estate CMA Automation\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, openai, machine learning, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819469",
+      "title": "n8n Workflow Automation & Multi-Model AI Agents (Claude & Gemini)",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-workflow-automation/Workflow-Automation-Multi-Model-Agents",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "JavaScript",
+        "C# Programming",
+        "Software Architecture",
+        "CRM",
+        "API Integration",
+        "AI Agents",
+        "n8n",
+        "Workflow Automation",
+        "AI Workflow Automation"
+      ],
+      "posted_at": "2026-11-15T18:03:13.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "chatbot",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 48
+        },
+        "opportunityScore": 69,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"n8n Workflow Automation & Multi-Model AI Agents (Claude & Gemini)\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, claude, automation, n8n.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819452",
+      "title": "24/7 AI Crypto Co-Founder Agent",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-chatbot/Crypto-Founder-Agent",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Cryptocurrency",
+        "AI Chatbot",
+        "AI Research",
+        "AI Development",
+        "AI Agents",
+        "AI Voice Agents",
+        "AI Integration",
+        "AI Automation"
+      ],
+      "posted_at": "2026-11-15T17:46:43.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 56,
+          "clientRiskScore": 40,
+          "riskScore": 48,
+          "economicallyViable": true,
+          "opportunityScore": 71
+        },
+        "opportunityScore": 83,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"24/7 AI Crypto Co-Founder Agent\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, claude, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819333",
+      "title": "Full-Stack Developer Required to Build Multi-Tenant SaaS CRM & ERP Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/project-management/Comprehensive-CRM-for-Charger-Projects",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Mobile App Development",
+        "Software Architecture",
+        "CRM",
+        "ERP",
+        "Node.js",
+        "PostgreSQL",
+        "React.js",
+        "Full Stack Development",
+        "API Integration",
+        "SaaS Development"
+      ],
+      "posted_at": "2026-11-15T17:13:06.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "report",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture",
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Data processing and reporting",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 79,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Full-Stack Developer Required to Build Multi-Tenant SaaS CRM & ERP Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, node.js, full stack, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819033",
+      "title": "3D Printable Prototype CAD Design",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/3d-cad/Printable-Prototype-CAD-Design",
+      "budget": {
+        "min": 1500,
+        "max": 12500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "CAD/CAM",
+        "3D Rendering",
+        "Solidworks",
+        "AutoCAD",
+        "3D Modelling",
+        "3D Design",
+        "3D Printing",
+        "3D CAD",
+        "3D Visualization",
+        "3D Print Design"
+      ],
+      "posted_at": "2026-11-15T10:11:28.000Z",
+      "scout_score": 100,
+      "division": "ProtoForge Manufacturing",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 12500,
+          "platformFeeUsd": 1250,
+          "processingFeeUsd": 362.5,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 2337.5,
+          "netRevenueUsd": 10162.5,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 50
+        },
+        "opportunityScore": 70,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"3D Printable Prototype CAD Design\".\n\nThis is squarely what we do: prototyping: CAD, 3D printing and small-batch fabrication. Relevant here: 3d printing, 3d print, cad, solidworks.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818973",
+      "title": "Senior Engineer for RAG Support Assistant",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/machine-learning/Senior-Engineer-for-RAG-Support",
+      "budget": {
+        "min": 50,
+        "max": null,
+        "currency": "USD",
+        "type": "hourly"
+      },
+      "skills": [
+        "JavaScript",
+        "Python",
+        "Django",
+        "Machine Learning (ML)",
+        "MySQL",
+        "React.js",
+        "FastAPI",
+        "Natural Language Processing"
+      ],
+      "posted_at": "2026-11-15T09:07:41.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 500,
+          "platformFeeUsd": 50,
+          "processingFeeUsd": 14.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 429.5,
+          "netRevenueUsd": 70.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 84,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Senior Engineer for RAG Support Assistant\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, llm, openai, rag.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40815577",
+      "title": "AI Workflow Automation Specialist",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-workflow-automation/Workflow-Automation-Specialist",
+      "budget": {
+        "min": 3000,
+        "max": 5000,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Construction",
+        "Construction Management",
+        "Gemini",
+        "LLM Integration",
+        "n8n",
+        "AI Workflow Automation"
+      ],
+      "posted_at": "2026-11-12T20:20:21.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "chatbot",
+              "agent",
+              "orchestration"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation",
+              "architecture",
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 5000,
+          "platformFeeUsd": 500,
+          "processingFeeUsd": 145,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 1010,
+          "netRevenueUsd": 3990,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 80
+        },
+        "opportunityScore": 88,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"AI Workflow Automation Specialist\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, llm, chatbot, rag.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40815290",
+      "title": "SmartTask – Enterprise Project Management Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/saas-development/SmartTask-Enterprise-Project-Management",
+      "budget": {
+        "min": 25,
+        "max": 50,
+        "currency": "CAD",
+        "type": "hourly"
+      },
+      "skills": [
+        "JavaScript",
+        "NoSQL Couch & Mongo",
+        "Node.js",
+        "Redis",
+        "AngularJS",
+        "React.js",
+        "Typescript",
+        "Full Stack Development",
+        "Next.js",
+        "SaaS Development"
+      ],
+      "posted_at": "2026-11-12T16:21:01.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "stripe",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "stripe",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 55
+        },
+        "opportunityScore": 73,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"SmartTask – Enterprise Project Management Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, node.js.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40814984",
+      "title": "Custom MFS Gateway and Android App",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Custom-MFS-Gateway-Android-App",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "JavaScript",
+        "Mobile App Development",
+        "Android",
+        "Node.js",
+        "Laravel",
+        "Full Stack Development",
+        "RESTful API",
+        "Android App Development",
+        "API Development"
+      ],
+      "posted_at": "2026-11-12T12:01:11.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 40
+        },
+        "opportunityScore": 64,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Custom MFS Gateway and Android App\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, node.js, full stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40814942",
+      "title": "Build a B2B Corporate Gifting & Apparel E-Commerce Website (Amrod API Integration)",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Build-Corporate-Gifting-Apparel-Commerce",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "HTML",
+        "Node.js",
+        "PostgreSQL",
+        "Typescript",
+        "Full Stack Development",
+        "RESTful API",
+        "API Integration",
+        "Next.js",
+        "Claude (Anthropic)"
+      ],
+      "posted_at": "2026-11-12T11:35:17.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 84,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Build a B2B Corporate Gifting & Apparel E-Commerce Website (Amrod API Integration)\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, node.js.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812737",
+      "title": "Automasi Attribution dan Lead Engine",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/n8n/Automasi-Attribution-dan-Lead-Engine",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Docker",
+        "Data Visualization",
+        "Data Integration",
+        "Automation",
+        "Database Management",
+        "API Development",
+        "OpenAI",
+        "n8n",
+        "Looker Studio",
+        "Workflow Automation"
+      ],
+      "posted_at": "2026-11-11T04:52:30.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "agent",
+              "orchestration"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "supabase",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "supabase",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 48
+        },
+        "opportunityScore": 69,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Automasi Attribution dan Lead Engine\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, llm, gpt, openai.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812681",
+      "title": "Full-Stack AI Developer Needed",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Full-Stack-Developer-Needed-40812681",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "EUR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Java",
+        "Python",
+        "NoSQL Couch & Mongo",
+        "Node.js",
+        "Typescript",
+        "Docker",
+        "Full Stack Development",
+        "Next.js",
+        "Large Language Model",
+        "AI Agents"
+      ],
+      "posted_at": "2026-11-11T04:16:01.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "sql"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 84,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Full-Stack AI Developer Needed\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, node.js.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812467",
+      "title": "Hip-Hop / R&B Mix Engineer (No AI Tools)",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-editing/Hip-Hop-Mix-Engineer-for",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Editing",
+        "Mixing Engineering",
+        "Audio Mastering",
+        "Audio Engineering",
+        "Music Production"
+      ],
+      "posted_at": "2026-11-11T00:42:14.000Z",
+      "scout_score": 100,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 25
+        },
+        "opportunityScore": 55,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Hip-Hop / R&B Mix Engineer (No AI Tools)\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, mixing, mastering, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40811393",
+      "title": "React & Supabase CRM Enhancements",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/react-js/React-Supabase-CRM-Enhancements",
+      "budget": {
+        "min": 1500,
+        "max": 12500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "PostgreSQL",
+        "React.js",
+        "Typescript",
+        "Full Stack Development",
+        "GitHub",
+        "API Development",
+        "Netlify",
+        "Supabase"
+      ],
+      "posted_at": "2026-11-10T10:14:06.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "supabase",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "report",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "lighthouse"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 12500,
+          "platformFeeUsd": 1250,
+          "processingFeeUsd": 362.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 1977.5,
+          "netRevenueUsd": 10522.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 84,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"React & Supabase CRM Enhancements\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, typescript, full stack, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40810551",
+      "title": "Build AI Accounting SaaS Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-app-development/Build-Accounting-SaaS-Platform",
+      "budget": {
+        "min": 10,
+        "max": 15,
+        "currency": "EUR",
+        "type": "hourly"
+      },
+      "skills": [
+        "PHP",
+        "Website Design",
+        "Graphic Design",
+        "Software Architecture",
+        "Node.js",
+        "Full Stack Development",
+        "AI Integration",
+        "AI App Development"
+      ],
+      "posted_at": "2026-11-09T21:34:19.000Z",
+      "scout_score": 100,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "supabase",
+              "stripe",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "stripe",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation",
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "debug",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 100,
+          "platformFeeUsd": 10,
+          "processingFeeUsd": 2.9000000000000004,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 377.9,
+          "netRevenueUsd": -277.9,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 55
+        },
+        "opportunityScore": 73,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Build AI Accounting SaaS Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, node.js, full stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40810420",
+      "title": "Mary J. Blige Mix for Hip-Hop",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-mixing-mastering/Mary-Blige-Mix-for-Hip",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "FL Studio",
+        "Audio Editing",
+        "Ableton Live",
+        "Audio Engineering",
+        "Music Production",
+        "Audio Mixing & Mastering"
+      ],
+      "posted_at": "2026-11-09T19:39:48.000Z",
+      "scout_score": 100,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 25
+        },
+        "opportunityScore": 55,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Mary J. Blige Mix for Hip-Hop\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, mixing, mastering, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40809455",
+      "title": "Build AI Operations Intelligence SaaS",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/python/Build-Operations-Intelligence-SaaS",
+      "budget": {
+        "min": 5000000,
+        "max": null,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Python",
+        "PostgreSQL",
+        "Anomaly Detection",
+        "API Development",
+        "FastAPI",
+        "AI Chatbot Development",
+        "AI Model Development",
+        "AI Content Creation",
+        "AI Integration",
+        "AI Automation"
+      ],
+      "posted_at": "2026-11-09T05:49:44.000Z",
+      "scout_score": 100,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit",
+              "architecture",
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "audit",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 5000000,
+          "platformFeeUsd": 500000,
+          "processingFeeUsd": 145000,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 645365,
+          "netRevenueUsd": 4354635,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 84,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Build AI Operations Intelligence SaaS\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, llm, chatbot, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40816891",
+      "title": "Full-Stack Website Platform Overhaul",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Full-Stack-Website-Platform-Overhaul",
+      "budget": {
+        "min": 8,
+        "max": 120,
+        "currency": "EUR",
+        "type": "fixed"
+      },
+      "skills": [
+        "JavaScript",
+        "Python",
+        "SEO",
+        "Node.js",
+        "Web Development",
+        "Full Stack Development",
+        "GitHub",
+        "Automation",
+        "Database Management",
+        "API Integration"
+      ],
+      "posted_at": "2026-11-13T16:33:27.000Z",
+      "scout_score": 98,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit",
+              "architecture",
+              "analysis"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "audit"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "API integrations",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 120,
+          "platformFeeUsd": 12,
+          "processingFeeUsd": 3.48,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 380.48,
+          "netRevenueUsd": -260.48,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 40
+        },
+        "opportunityScore": 63,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Full-Stack Website Platform Overhaul\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: node.js, full stack, full-stack, dashboard.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40811415",
+      "title": "AI Smile Design Platform Build",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/machine-learning/Smile-Design-Platform-Build",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Machine Learning (ML)",
+        "Web Development",
+        "Computer Vision",
+        "AI Chatbot Development",
+        "AI Model Development",
+        "AI Content Creation",
+        "AI Integration",
+        "AI Automation"
+      ],
+      "posted_at": "2026-11-10T10:38:25.000Z",
+      "scout_score": 98,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 821.75,
+          "netRevenueUsd": -71.75,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 59,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"AI Smile Design Platform Build\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, machine learning, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818878",
+      "title": "3D Printed Cigar Tuck Cutter",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/3d-cad/Printed-Cigar-Tuck-Cutter",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "CAD/CAM",
+        "Solidworks",
+        "AutoCAD",
+        "Product Design",
+        "3D Modelling",
+        "3D Design",
+        "3D Printing",
+        "3D CAD"
+      ],
+      "posted_at": "2026-11-15T07:27:36.000Z",
+      "scout_score": 96,
+      "division": "ProtoForge Manufacturing",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Automation workflows",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 25
+        },
+        "opportunityScore": 53,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"3D Printed Cigar Tuck Cutter\".\n\nThis is squarely what we do: prototyping: CAD, 3D printing and small-batch fabrication. Relevant here: 3d printing, cad, fusion 360, solidworks.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812263",
+      "title": "Travel CRM and Flight Ops Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/mongodb/Travel-CRM-Flight-Ops-Platform",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Website Design",
+        "Software Architecture",
+        "HTML",
+        "Stripe",
+        "Web Development",
+        "MongoDB",
+        "React Native",
+        "REST API"
+      ],
+      "posted_at": "2026-11-10T21:08:01.000Z",
+      "scout_score": 96,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "stripe",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "stripe",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation",
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 77,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Travel CRM and Flight Ops Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, web app, dashboard, api.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40817166",
+      "title": "Founding Engineer for AI Community agent builder Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Founding-Engineer-for-Community-agent",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Website Design",
+        "Graphic Design",
+        "iPhone",
+        "Cloud Computing",
+        "Full Stack Development",
+        "Backend Development",
+        "AI Model Development",
+        "AI Agents",
+        "AI App Development"
+      ],
+      "posted_at": "2026-11-13T21:32:25.000Z",
+      "scout_score": 92,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "supabase",
+              "stripe",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "agent",
+              "orchestration"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "audit",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "stripe",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit",
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 80
+        },
+        "opportunityScore": 85,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Founding Engineer for AI Community agent builder Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, node.js.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812784",
+      "title": "U.S.-Based AI Chatbot MVP Developer",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-chatbot-development/Based-Chatbot-MVP-Developer",
+      "budget": {
+        "min": 15,
+        "max": 25,
+        "currency": "USD",
+        "type": "hourly"
+      },
+      "skills": [
+        "PHP",
+        "Java",
+        "JavaScript",
+        "Python",
+        "Natural Language Processing",
+        "AI Chatbot Development",
+        "AI Development",
+        "AI Integration"
+      ],
+      "posted_at": "2026-11-11T05:38:43.000Z",
+      "scout_score": 88,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "API integrations",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 150,
+          "platformFeeUsd": 15,
+          "processingFeeUsd": 4.3500000000000005,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 744.35,
+          "netRevenueUsd": -594.35,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 55,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"U.S.-Based AI Chatbot MVP Developer\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, openai, python.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819498",
+      "title": "Sistema AI Lead Traslochi",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-chatbot/Sistema-Lead-Traslochi",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "EUR",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Website Design",
+        "Graphic Design",
+        "HTML",
+        "Digital Marketing",
+        "AI Chatbot",
+        "AI Development",
+        "AI Automation"
+      ],
+      "posted_at": "2026-11-15T18:27:40.000Z",
+      "scout_score": 86,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 40
+        },
+        "opportunityScore": 58,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Sistema AI Lead Traslochi\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, gpt, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40816741",
+      "title": "Full-Stack Deployment: PMC Website, Admin CMS, Frappe LMS & OpenConstructionERP (Oracle Cloud ARM64)",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/docker/Full-Stack-Deployment-PMC-Website",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Cold Fusion",
+        "Website Design",
+        "CMS",
+        "Nginx",
+        "HTML",
+        "Docker",
+        "Full Stack Development",
+        "Next.js",
+        "Strapi"
+      ],
+      "posted_at": "2026-11-13T14:40:31.000Z",
+      "scout_score": 86,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "audit",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 73,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Full-Stack Deployment: PMC Website, Admin CMS, Frappe LMS & OpenConstructionERP (Oracle Cloud ARM64)\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, full stack, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "remotive:2091165",
+      "title": "Full-Stack Developer",
+      "company": "Fluence International, Inc.",
+      "source": "remotive",
+      "source_url": "https://remotive.com/remote-jobs/software-development/full-stack-developer-2091165",
+      "budget": {
+        "min": null,
+        "max": null,
+        "currency": "USD",
+        "type": "unknown",
+        "text": "$3.5k–$5k/month"
+      },
+      "skills": [
+        "admin",
+        "api",
+        "AWS",
+        "backend",
+        "cloud",
+        "docker",
+        "frontend",
+        "fullstack",
+        "javascript",
+        "react",
+        "security",
+        "UI/UX",
+        "AI/ML",
+        "automation",
+        "documentation",
+        "healthcare",
+        "Typescript ",
+        "web applications",
+        "SOLID",
+        "JSON",
+        "serverless",
+        "next.js",
+        "github",
+        "REST",
+        "mental health",
+        "BaaS",
+        "datadog"
+      ],
+      "posted_at": "2026-10-29T18:22:41.000Z",
+      "scout_score": 85,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation",
+              "audit",
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "audit",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": null,
+          "platformFeeUsd": null,
+          "processingFeeUsd": null,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 365,
+          "netRevenueUsd": null,
+          "estimatedHours": 8,
+          "competitionScore": 50,
+          "clientRiskScore": 30,
+          "riskScore": 40,
+          "economicallyViable": false,
+          "opportunityScore": 55
+        },
+        "opportunityScore": 67,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Full-Stack Developer\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818736",
+      "title": "Investment Pool Platform Build",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/web-development/Investment-Pool-Platform-Build",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Website Design",
+        "MySQL",
+        "HTML",
+        "Node.js",
+        "Web Development",
+        "Full Stack Development",
+        "Database Design",
+        "API Development"
+      ],
+      "posted_at": "2026-11-15T05:16:47.000Z",
+      "scout_score": 84,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "audit"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 821.75,
+          "netRevenueUsd": -71.75,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 53,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Investment Pool Platform Build\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, node.js, full stack, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40815999",
+      "title": "AI-Powered Web and Mobile Platform Development",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/react-native/Powered-Web-Mobile-Platform-Development",
+      "budget": {
+        "min": 25,
+        "max": 50,
+        "currency": "CAD",
+        "type": "hourly"
+      },
+      "skills": [
+        "Java",
+        "NoSQL Couch & Mongo",
+        "Node.js",
+        "PostgreSQL",
+        "AngularJS",
+        "React Native",
+        "AI Integration",
+        "AI App Development"
+      ],
+      "posted_at": "2026-11-13T04:24:34.000Z",
+      "scout_score": 80,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "supabase",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook",
+              "supabase",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 55
+        },
+        "opportunityScore": 65,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"AI-Powered Web and Mobile Platform Development\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, node.js.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812903",
+      "title": "Google Workspace Automation and AI Systems",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/automation/Google-Workspace-Automation-Systems",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Website Design",
+        "Software Architecture",
+        "HTML",
+        "Google Sheets",
+        "Automation",
+        "AI Chatbot",
+        "AI Integration"
+      ],
+      "posted_at": "2026-11-11T06:55:38.000Z",
+      "scout_score": 80,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Automation workflows",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5562.5,
+          "netRevenueUsd": 31937.5,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 58
+        },
+        "opportunityScore": 67,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Google Workspace Automation and AI Systems\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, automation.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819380",
+      "title": "Kenyan Melodic Rap Beat Production",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/music-production/Kenyan-Melodic-Rap-Beat-Production",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Engineering",
+        "Music Production"
+      ],
+      "posted_at": "2026-11-15T16:37:35.000Z",
+      "scout_score": 78,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 821.75,
+          "netRevenueUsd": -71.75,
+          "estimatedHours": 16,
+          "competitionScore": 64,
+          "clientRiskScore": 40,
+          "riskScore": 52,
+          "economicallyViable": false,
+          "opportunityScore": 30
+        },
+        "opportunityScore": 49,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Kenyan Melodic Rap Beat Production\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, producer, beat, sound design.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818964",
+      "title": "Social Caption Automation Tool",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-content-creation/Social-Caption-Automation-Tool",
+      "budget": {
+        "min": 750,
+        "max": 1250,
+        "currency": "INR",
+        "type": "hourly"
+      },
+      "skills": [
+        "JavaScript",
+        "Python",
+        "Copywriting",
+        "Software Architecture",
+        "Node.js",
+        "Web Development",
+        "AI Content Creation",
+        "AI Writing"
+      ],
+      "posted_at": "2026-11-15T09:08:52.000Z",
+      "scout_score": 78,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "workflow",
+              "script",
+              "scheduler"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Automation workflows",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 7500,
+          "platformFeeUsd": 750,
+          "processingFeeUsd": 217.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 1332.5,
+          "netRevenueUsd": 6167.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 75,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Social Caption Automation Tool\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, gpt, automation, python.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40813684",
+      "title": "Meta Pixel & Conversions API – Einrichtung und Tracking-Setup für Webanwendung",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/meta-pixel/Meta-Pixel-Conversions-API-Einrichtung",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "EUR",
+        "type": "fixed"
+      },
+      "skills": [
+        "HTML",
+        "Typescript",
+        "Meta Pixel",
+        "Supabase"
+      ],
+      "posted_at": "2026-11-11T17:14:47.000Z",
+      "scout_score": 78,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "supabase",
+              "api",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 75,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Meta Pixel & Conversions API – Einrichtung und Tracking-Setup für Webanwendung\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, typescript, supabase, api.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40816171",
+      "title": "Scalable WhatsApp Support Platform",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/api-developmet/Scalable-WhatsApp-Support-Platform",
+      "budget": {
+        "min": 750,
+        "max": 1250,
+        "currency": "INR",
+        "type": "hourly"
+      },
+      "skills": [
+        "Java",
+        "JavaScript",
+        "Python",
+        "Cloud Computing",
+        "Node.js",
+        "Docker",
+        "Full Stack Development",
+        "API Development"
+      ],
+      "posted_at": "2026-11-13T06:57:15.000Z",
+      "scout_score": 76,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot",
+              "agent"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "webhook"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "audit",
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "audit"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 7500,
+          "platformFeeUsd": 750,
+          "processingFeeUsd": 217.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 1332.5,
+          "netRevenueUsd": 6167.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 69,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Scalable WhatsApp Support Platform\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, node.js, full stack, full-stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812129",
+      "title": "QR Code Tribute Page Development/ Family Tree -- 2",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/mobile-app-development/Code-Tribute-Page-Development-Family-40812129",
+      "budget": {
+        "min": 750,
+        "max": 1500,
+        "currency": "GBP",
+        "type": "fixed"
+      },
+      "skills": [
+        "Mobile App Development",
+        "iPhone",
+        "Android",
+        "Database Development",
+        "Backend Development",
+        "React Native",
+        "Flutter",
+        "Database Management",
+        "API Development",
+        "Supabase"
+      ],
+      "posted_at": "2026-11-10T19:03:29.000Z",
+      "scout_score": 76,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 80,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "supabase",
+              "stripe",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "stripe",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix",
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.88,
+        "economics": {
+          "grossRevenueUsd": 1500,
+          "platformFeeUsd": 150,
+          "processingFeeUsd": 43.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 558.5,
+          "netRevenueUsd": 941.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 73
+        },
+        "opportunityScore": 74,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"QR Code Tribute Page Development/ Family Tree -- 2\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, dashboard, supabase, api.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40811048",
+      "title": "Dynamic Enrollment Platform Development",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/php/Dynamic-Enrollment-Platform-Development",
+      "budget": {
+        "min": 25,
+        "max": 50,
+        "currency": "USD",
+        "type": "hourly"
+      },
+      "skills": [
+        "PHP",
+        "JavaScript",
+        "CSS",
+        "HTML5",
+        "Typescript",
+        "Frontend Development",
+        "Next.js",
+        "Supabase"
+      ],
+      "posted_at": "2026-11-10T05:50:16.000Z",
+      "scout_score": 76,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 95,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "supabase",
+              "stripe",
+              "typescript"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "stripe",
+              "supabase"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "lighthouse",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "typescript"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 1,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 397.25,
+          "netRevenueUsd": -147.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 55
+        },
+        "opportunityScore": 63,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Dynamic Enrollment Platform Development\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, typescript, supabase.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818092",
+      "title": "SupTech Analytics Dashboard Training Expert",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/data-analytics/SupTech-Analytics-Dashboard-Training",
+      "budget": {
+        "min": 37500,
+        "max": 75000,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Java",
+        "Python",
+        "SQL",
+        "MySQL",
+        "React.js",
+        "Data Analytics",
+        "Backend Development",
+        "Local Job"
+      ],
+      "posted_at": "2026-11-14T15:56:00.000Z",
+      "scout_score": 74,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report",
+              "sql",
+              "analytics"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "rest"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Data processing and reporting",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 75000,
+          "platformFeeUsd": 7500,
+          "processingFeeUsd": 2175,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 10040,
+          "netRevenueUsd": 64960,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 69,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"SupTech Analytics Dashboard Training Expert\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: react, full-stack, dashboard, api.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40811820",
+      "title": "Bot WhatsApp Curhat AI",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-automation/Bot-WhatsApp-Curhat",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Java",
+        "Graphic Design",
+        "Logo Design",
+        "AI Automation"
+      ],
+      "posted_at": "2026-11-10T15:10:01.000Z",
+      "scout_score": 74,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 821.75,
+          "netRevenueUsd": -71.75,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 49,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Bot WhatsApp Curhat AI\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, gpt, openai.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40816817",
+      "title": "Rapid Resource Management Tool Build",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Rapid-Resource-Management-Tool-Build",
+      "budget": {
+        "min": 250,
+        "max": 750,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "JavaScript",
+        "Python",
+        "NoSQL Couch & Mongo",
+        "Node.js",
+        "Full Stack Development",
+        "AI Integration",
+        "AI Automation",
+        "AI App Development"
+      ],
+      "posted_at": "2026-11-13T15:37:11.000Z",
+      "scout_score": 72,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "automation",
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "postgres",
+              "sql"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "documentation"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "node"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "next.js"
+            ],
+            "executionReady": false
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 750,
+          "platformFeeUsd": 75,
+          "processingFeeUsd": 21.75,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 461.75,
+          "netRevenueUsd": 288.25,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 68,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Rapid Resource Management Tool Build\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, node.js, full stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819650",
+      "title": "Detailed Playhouse CAD Design",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/3d-cad/Detailed-Playhouse-CAD-Design",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "EUR",
+        "type": "fixed"
+      },
+      "skills": [
+        "CAD/CAM",
+        "Solidworks",
+        "AutoCAD",
+        "SketchUp",
+        "3D Modelling",
+        "3D Design",
+        "Fusion 360",
+        "3D CAD"
+      ],
+      "posted_at": "2026-11-15T21:38:08.000Z",
+      "scout_score": 70,
+      "division": "ProtoForge Manufacturing",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 25
+        },
+        "opportunityScore": 43,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Detailed Playhouse CAD Design\".\n\nThis is squarely what we do: prototyping: CAD, 3D printing and small-batch fabrication. Relevant here: cad, fusion 360, solidworks.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818583",
+      "title": "Onsite Azure AI Trainer Chennai",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/azure/Onsite-Azure-Trainer-Chennai",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Java",
+        "Android",
+        "UML Design",
+        "Software Architecture",
+        "Azure",
+        "Azure OpenAI",
+        "Chatbot Development",
+        "AI App Development"
+      ],
+      "posted_at": "2026-11-15T01:34:16.000Z",
+      "scout_score": 70,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "workflow"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "fix"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5562.5,
+          "netRevenueUsd": 31937.5,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 58
+        },
+        "opportunityScore": 63,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Onsite Azure AI Trainer Chennai\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, openai.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40818037",
+      "title": "Unfiltered All-Purpose Chatbot",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-chatbot-development/Unfiltered-All-Purpose-Chatbot",
+      "budget": {
+        "min": 2,
+        "max": 5,
+        "currency": "GBP",
+        "type": "hourly"
+      },
+      "skills": [
+        "PHP",
+        "JavaScript",
+        "Python",
+        "HTML",
+        "Web Development",
+        "Backend Development",
+        "Natural Language Processing",
+        "AI Chatbot Development",
+        "AI Development",
+        "AI Integration"
+      ],
+      "posted_at": "2026-11-14T15:05:38.000Z",
+      "scout_score": 70,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 20,
+          "platformFeeUsd": 2,
+          "processingFeeUsd": 0.5800000000000001,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 727.58,
+          "netRevenueUsd": -707.58,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Unfiltered All-Purpose Chatbot\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, chatbot, python.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40814899",
+      "title": "Next.js Project Enhancement - 12/11/2026 06:01 EST",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Next-Project-Enhancement-EST",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Website Design",
+        "UX / User Experience",
+        "React.js",
+        "Full Stack Development",
+        "Next.js"
+      ],
+      "posted_at": "2026-11-12T11:12:10.000Z",
+      "scout_score": 70,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "debug"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 67,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Next.js Project Enhancement - 12/11/2026 06:01 EST\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, full stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40814877",
+      "title": "Next.js Project Enhancement",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/full-stack-development/Next-Project-Enhancement",
+      "budget": {
+        "min": 12500,
+        "max": 37500,
+        "currency": "INR",
+        "type": "fixed"
+      },
+      "skills": [
+        "Website Design",
+        "UX / User Experience",
+        "React.js",
+        "Full Stack Development",
+        "Next.js"
+      ],
+      "posted_at": "2026-11-12T11:00:18.000Z",
+      "scout_score": 70,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "next.js",
+              "react",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "performance_audit",
+            "category": "Website audits and performance improvements",
+            "matched": [
+              "performance",
+              "next.js"
+            ],
+            "executionReady": false
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "bug_investigation",
+            "category": "Bug investigation and code fixes",
+            "matched": [
+              "debug"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 37500,
+          "platformFeeUsd": 3750,
+          "processingFeeUsd": 1087.5,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 5202.5,
+          "netRevenueUsd": 32297.5,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 67,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"Next.js Project Enhancement\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: next.js, react, full stack.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40814124",
+      "title": "80%-Win AI Betting App",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/machine-learning/Win-Betting-App",
+      "budget": {
+        "min": 30,
+        "max": 250,
+        "currency": "AUD",
+        "type": "fixed"
+      },
+      "skills": [
+        "PHP",
+        "Python",
+        "Mobile App Development",
+        "iPhone",
+        "Android",
+        "User Interface / IA",
+        "Machine Learning (ML)",
+        "Data Science",
+        "Tensorflow",
+        "Pytorch"
+      ],
+      "posted_at": "2026-11-11T23:56:31.000Z",
+      "scout_score": 70,
+      "division": "Build-A-Mind",
+      "assessment": {
+        "matchScore": 50,
+        "skillMatch": [
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "stripe",
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api",
+              "stripe"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "automation_workflow",
+            "category": "Automation workflows",
+            "matched": [
+              "script"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "Website development and maintenance",
+        "feasibility": 0.64,
+        "economics": {
+          "grossRevenueUsd": 250,
+          "platformFeeUsd": 25,
+          "processingFeeUsd": 7.25,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 757.25,
+          "netRevenueUsd": -507.25,
+          "estimatedHours": 16,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": false,
+          "opportunityScore": 33
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"80%-Win AI Betting App\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, machine learning, python.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40812673",
+      "title": "MVP funcional de Web App B2B con IA y motor de reglas TEMP",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/ai-integration/MVP-funcional-Web-App-con",
+      "budget": {
+        "min": 3000,
+        "max": 5000,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Website Design",
+        "Software Architecture",
+        "UX / User Experience",
+        "Web Development",
+        "API",
+        "Full Stack Development",
+        "Web Application",
+        "AI Model Development",
+        "Large Language Models (LLMs)",
+        "AI Integration"
+      ],
+      "posted_at": "2026-11-11T04:02:15.000Z",
+      "scout_score": 70,
+      "division": "AppForge",
+      "assessment": {
+        "matchScore": 65,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai",
+              "llm",
+              "chatbot"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "web_fullstack",
+            "category": "Website development and maintenance",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "api_integration",
+            "category": "API integrations",
+            "matched": [
+              "api"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "tech_research_docs",
+            "category": "Technical research and documentation",
+            "matched": [
+              "architecture"
+            ],
+            "executionReady": true
+          },
+          {
+            "capabilityId": "data_reporting",
+            "category": "Data processing and reporting",
+            "matched": [
+              "report"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.76,
+        "economics": {
+          "grossRevenueUsd": 5000,
+          "platformFeeUsd": 500,
+          "processingFeeUsd": 145,
+          "laborCostUsd": 360,
+          "infraCostUsd": 5,
+          "totalCostUsd": 1010,
+          "netRevenueUsd": 3990,
+          "estimatedHours": 8,
+          "competitionScore": 100,
+          "clientRiskScore": 40,
+          "riskScore": 70,
+          "economicallyViable": true,
+          "opportunityScore": 65
+        },
+        "opportunityScore": 67,
+        "rejectReason": null,
+        "qualified": true
+      },
+      "proposal_draft": "Hi — I read your post \"MVP funcional de Web App B2B con IA y motor de reglas TEMP\".\n\nThis is squarely what we do: full-stack web and app builds on Next.js, React, Node and Supabase, shipped with tests and a working deploy. Relevant here: full stack, web app, api.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819534",
+      "title": "Learn VirtualDJ Mixing Online -- 7",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-services/Learn-VirtualDJ-Mixing-Online-40819534",
+      "budget": {
+        "min": 10,
+        "max": 30,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Editing",
+        "Audio Engineering",
+        "Music Production",
+        "Music Lessons"
+      ],
+      "posted_at": "2026-11-15T19:08:14.000Z",
+      "scout_score": 68,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 30,
+          "platformFeeUsd": 3,
+          "processingFeeUsd": 0.87,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 728.87,
+          "netRevenueUsd": -698.87,
+          "estimatedHours": 16,
+          "competitionScore": 24,
+          "clientRiskScore": 40,
+          "riskScore": 32,
+          "economicallyViable": false,
+          "opportunityScore": 35
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Learn VirtualDJ Mixing Online -- 7\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, beat, mixing, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819528",
+      "title": "Learn VirtualDJ Mixing Online -- 6",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-services/Learn-VirtualDJ-Mixing-Online-40819528",
+      "budget": {
+        "min": 10,
+        "max": 30,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Editing",
+        "Audio Engineering",
+        "Music Production",
+        "Music Lessons"
+      ],
+      "posted_at": "2026-11-15T19:05:50.000Z",
+      "scout_score": 68,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 30,
+          "platformFeeUsd": 3,
+          "processingFeeUsd": 0.87,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 728.87,
+          "netRevenueUsd": -698.87,
+          "estimatedHours": 16,
+          "competitionScore": 24,
+          "clientRiskScore": 40,
+          "riskScore": 32,
+          "economicallyViable": false,
+          "opportunityScore": 35
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Learn VirtualDJ Mixing Online -- 6\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, beat, mixing, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819527",
+      "title": "Learn VirtualDJ Mixing Online -- 5",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-services/Learn-VirtualDJ-Mixing-Online-40819527",
+      "budget": {
+        "min": 10,
+        "max": 30,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Editing",
+        "Audio Engineering",
+        "Music Production",
+        "Music Lessons"
+      ],
+      "posted_at": "2026-11-15T19:03:18.000Z",
+      "scout_score": 68,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 30,
+          "platformFeeUsd": 3,
+          "processingFeeUsd": 0.87,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 728.87,
+          "netRevenueUsd": -698.87,
+          "estimatedHours": 16,
+          "competitionScore": 28,
+          "clientRiskScore": 40,
+          "riskScore": 34,
+          "economicallyViable": false,
+          "opportunityScore": 34
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Learn VirtualDJ Mixing Online -- 5\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, beat, mixing, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    },
+    {
+      "id": "freelancer:40819499",
+      "title": "Learn VirtualDJ Mixing Online -- 4",
+      "company": null,
+      "source": "freelancer",
+      "source_url": "https://www.freelancer.com/projects/audio-services/Learn-VirtualDJ-Mixing-Online-40819499",
+      "budget": {
+        "min": 10,
+        "max": 30,
+        "currency": "USD",
+        "type": "fixed"
+      },
+      "skills": [
+        "Audio Services",
+        "Music",
+        "Sound Design",
+        "Audio Production",
+        "Audio Editing",
+        "Audio Engineering",
+        "Music Production",
+        "Music Lessons"
+      ],
+      "posted_at": "2026-11-15T18:29:40.000Z",
+      "scout_score": 68,
+      "division": "Rezonate / Waveformer Records",
+      "assessment": {
+        "matchScore": 35,
+        "skillMatch": [
+          {
+            "capabilityId": "ai_agent_dev",
+            "category": "AI assistant and agent development",
+            "matched": [
+              "ai"
+            ],
+            "executionReady": true
+          }
+        ],
+        "recommendedService": "AI assistant and agent development",
+        "feasibility": 0.52,
+        "economics": {
+          "grossRevenueUsd": 30,
+          "platformFeeUsd": 3,
+          "processingFeeUsd": 0.87,
+          "laborCostUsd": 720,
+          "infraCostUsd": 5,
+          "totalCostUsd": 728.87,
+          "netRevenueUsd": -698.87,
+          "estimatedHours": 16,
+          "competitionScore": 28,
+          "clientRiskScore": 40,
+          "riskScore": 34,
+          "economicallyViable": false,
+          "opportunityScore": 34
+        },
+        "opportunityScore": 48,
+        "rejectReason": "below_min_net_profit",
+        "qualified": false
+      },
+      "proposal_draft": "Hi — I read your post \"Learn VirtualDJ Mixing Online -- 4\".\n\nThis is squarely what we do: music production, mixing and mastering, and audio post. Relevant here: music production, beat, mixing, audio editing.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+    }
+  ],
+  "recommended_first": {
+    "id": "freelancer:40815577",
+    "title": "AI Workflow Automation Specialist",
+    "company": null,
+    "source": "freelancer",
+    "source_url": "https://www.freelancer.com/projects/ai-workflow-automation/Workflow-Automation-Specialist",
+    "budget": {
+      "min": 3000,
+      "max": 5000,
+      "currency": "USD",
+      "type": "fixed"
+    },
+    "skills": [
+      "Construction",
+      "Construction Management",
+      "Gemini",
+      "LLM Integration",
+      "n8n",
+      "AI Workflow Automation"
+    ],
+    "posted_at": "2026-11-12T20:20:21.000Z",
+    "scout_score": 100,
+    "division": "Build-A-Mind",
+    "assessment": {
+      "matchScore": 95,
+      "skillMatch": [
+        {
+          "capabilityId": "ai_agent_dev",
+          "category": "AI assistant and agent development",
+          "matched": [
+            "ai",
+            "llm",
+            "chatbot",
+            "agent",
+            "orchestration"
+          ],
+          "executionReady": true
+        },
+        {
+          "capabilityId": "automation_workflow",
+          "category": "Automation workflows",
+          "matched": [
+            "automation",
+            "workflow",
+            "script"
+          ],
+          "executionReady": true
+        },
+        {
+          "capabilityId": "tech_research_docs",
+          "category": "Technical research and documentation",
+          "matched": [
+            "documentation",
+            "architecture",
+            "analysis"
+          ],
+          "executionReady": true
+        },
+        {
+          "capabilityId": "web_fullstack",
+          "category": "Website development and maintenance",
+          "matched": [
+            "api"
+          ],
+          "executionReady": true
+        },
+        {
+          "capabilityId": "api_integration",
+          "category": "API integrations",
+          "matched": [
+            "api"
+          ],
+          "executionReady": true
+        }
+      ],
+      "recommendedService": "AI assistant and agent development",
+      "feasibility": 1,
+      "economics": {
+        "grossRevenueUsd": 5000,
+        "platformFeeUsd": 500,
+        "processingFeeUsd": 145,
+        "laborCostUsd": 360,
+        "infraCostUsd": 5,
+        "totalCostUsd": 1010,
+        "netRevenueUsd": 3990,
+        "estimatedHours": 8,
+        "competitionScore": 100,
+        "clientRiskScore": 40,
+        "riskScore": 70,
+        "economicallyViable": true,
+        "opportunityScore": 80
+      },
+      "opportunityScore": 88,
+      "rejectReason": null,
+      "qualified": true
+    },
+    "proposal_draft": "Hi — I read your post \"AI Workflow Automation Specialist\".\n\nThis is squarely what we do: practical AI: LLM chatbots, retrieval over your own documents, and automations that run on infrastructure you control. Relevant here: ai, llm, chatbot, rag.\n\nHow I would approach it:\n1. A short call or a few questions to pin down scope and what \"done\" looks like.\n2. A fixed milestone plan with a first deliverable you can review early.\n3. Delivery with notes so you can maintain it afterwards.\n\nA couple of questions before I quote: [EDIT: 1–2 specific questions about their post].\n\n— Jordan, ProtoForge"
+  },
+  "human_approval_required_before": [
+    "client_contact",
+    "proposal_submission",
+    "contract_acceptance"
+  ]
+}

@@ -1,6 +1,6 @@
 # HEIDI integration status
 
-**Updated:** 2026-11-15 | **SHA:** `c881f0c` baseline
+**Updated:** 2026-11-15 | **SHA:** `e12fac21` baseline (NCM merged, env-gated)
 
 | Integration | Status | Evidence |
 |-------------|--------|----------|
@@ -14,7 +14,10 @@
 | Distributed workers | **SIMULATED** | Acceptance tests; no Frank worker |
 | Resource acquisition → Heidi | **PARTIAL** | Executors stubbed |
 | Ursula Python suite | **SEPARATE** | Not in Heidi delegation graph |
-| Frank local-ci → GitHub | **BROKEN** | Lint infra; fix in flight |
+| Frank local-ci → GitHub | **BROKEN** | Fix in PR #600; Frank re-run **BLOCKED** |
+| Frank production truth | **CODE** | Collector v2 + `frank-truth-loader.js` — needs Frank JSON |
+| Live freelance discovery | **LIVE** | `HEIDI_LIVE_OPPORTUNITY_DISCOVERY.json` (24 qualified, 2026-11-15) |
+| Execution ↔ mission states | **PARTIAL** | `mission-bridge.js` reference mapping |
 | Cloud agent → Frank | **BLOCKED** | Tailnet / tokens |
 | GHA CI | **GREEN** | Recent PR heads |
 

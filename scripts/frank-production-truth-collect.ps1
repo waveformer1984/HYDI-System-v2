@@ -124,8 +124,14 @@ $authFlags = @{
   HEIDI_AUTO_APPROVE_RESTARTS = $env:HEIDI_AUTO_APPROVE_RESTARTS
 }
 
+$localCiHint = @{
+  eslint_use_flat_config_user = [bool][Environment]::GetEnvironmentVariable('ESLINT_USE_FLAT_CONFIG','User')
+  eslint_use_flat_config_machine = [bool][Environment]::GetEnvironmentVariable('ESLINT_USE_FLAT_CONFIG','Machine')
+  eslint_use_flat_config_process = [bool]$env:ESLINT_USE_FLAT_CONFIG
+}
+
 $payload = @{
-  schema_version = 1
+  schema_version = 2
   collected_at = (Get-Date).ToUniversalTime().ToString('o')
   host = $env:COMPUTERNAME
   repo_root = $Root
@@ -144,6 +150,7 @@ $payload = @{
   }
   tailscale = $tailscale
   auth_flags = $authFlags
+  local_ci_hint = $localCiHint
   notes = @(
     'Attach this file to Cursor agent runs; do not commit if it contains sensitive paths.',
     'Complement with: node scripts/heidi-assessment-crew.js --dry-run'
