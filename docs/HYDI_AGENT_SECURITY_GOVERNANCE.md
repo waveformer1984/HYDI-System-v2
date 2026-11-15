@@ -37,6 +37,10 @@
 | Destructive ops | Fabric confirm + role |
 | Credential change | Operator only |
 
+## Workforce vs distributed hardening (PR #590)
+
+New dev-workforce agents **cannot** invoke privileged fabric capabilities (`confirmRequired` or `build` risk) until the operator sets `HYDI_WORKFORCE_DISTRIBUTED_READY=true` after deploying PR #590 concurrency + HMAC replay fixes. Read-only diagnostics (e.g. `git.inspect`) remain allowed.
+
 ## Worker vs dev agent vs PAO agent
 
 | Type | Auth | Execution |

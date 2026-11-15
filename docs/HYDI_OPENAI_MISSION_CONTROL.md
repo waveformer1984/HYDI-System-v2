@@ -3,7 +3,7 @@
 **Repository:** [waveformer1984/HYDI-System-v2](https://github.com/waveformer1984/HYDI-System-v2)  
 **Primary branch:** `clean-main`  
 **Distributed track:** [PR #590](https://github.com/waveformer1984/HYDI-System-v2/pull/590) · [#587](https://github.com/waveformer1984/HYDI-System-v2/issues/587)  
-**Master mission branch:** `Cusor_agent01openai-master-mission-7718`  
+**Master mission branch:** `Cusor_agent01openai-master-mission-7718` · **PR [#591](https://github.com/waveformer1984/HYDI-System-v2/pull/591)**  
 **Orchestrator:** Agent 01 (Executive)  
 **Last updated:** 2026-11-15 UTC
 
@@ -66,7 +66,8 @@ flowchart TB
 | Commit (branch) | Scope |
 |-----------------|--------|
 | `6cff0bb5` | PR #590 — distributed concurrency + HMAC replay |
-| `9ceaf3ee` | Master mission — docs + `lib/providers/openai-adapter.js` + `lib/dev-workforce/*` |
+| `9ceaf3ee` / `921f43db` | Master mission — docs + adapter + dev-workforce (+ mission control SHA) |
+| *(next)* | Workforce security gate — blocks privileged fabric until PR #590 ack |
 
 ## Integration checklist
 

@@ -29,6 +29,17 @@ describe('dev workforce → ExecutionGateway', () => {
     expect(task.actor).toBe('agent:qa-1');
   });
 
+  test('privileged capability blocked without distributed hardening ack', async () => {
+    const gateway = new ExecutionGateway({ store: new MemoryTaskStore(), skipRecovery: true });
+    const reg = new DevWorkforceRegistry();
+    reg.register({ agent_id: 'qa-2', role: AGENT_ROLES.QUALITY_ASSURANCE });
+    const coord = new DevWorkforceCoordinator(gateway, reg);
+    const env = { HYDI_WORKFORCE_DISTRIBUTED_READY: 'false' };
+    const out = await coord.assign({ agent_id: 'qa-2', capabilityId: 'tests.run', confirm: true, role: 'operator' }, env);
+    expect(out.ok).toBe(false);
+    expect(out.error).toBe('distributed_hardening_required');
+  });
+
   test('documentation agent lacks fabric submit', async () => {
     const gateway = new ExecutionGateway({ store: new MemoryTaskStore(), skipRecovery: true });
     const reg = new DevWorkforceRegistry();

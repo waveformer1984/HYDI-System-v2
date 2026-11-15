@@ -33,6 +33,7 @@ register(agent) → assign(capabilityId) → ExecutionGateway FSM
 - Fabric capabilities with `confirmRequired: true` (e.g. `tests.run`)  
 - ProtoForge / mission approvals for autonomous actions  
 - `paid-llm-gate` for any paid model  
+- **`lib/dev-workforce/security-gate.js`** — privileged capabilities (confirm required or `build` risk) blocked until operator sets `HYDI_WORKFORCE_DISTRIBUTED_READY=true` after PR #590 hardening is deployed on that host
 
 ## Failure reporting
 
