@@ -6,17 +6,17 @@
  */
 
 const { guard } = require('../../../lib/heidi-mobile/guard.js');
-const { ResourceAcquisitionEngine } = require('../../../lib/partnerships-funding/resource-engine');
+const { HydiResourceAcquisitionSystem } = require('../../../lib/resource-acquisition/system');
 const { loadApprovedOrgProfileFromEnv } = require('../../../lib/partnerships-funding/profile-loader');
 
-let _engine;
-function engine() {
-  if (!_engine) {
-    _engine = new ResourceAcquisitionEngine();
+let _system;
+function system() {
+  if (!_system) {
+    _system = new HydiResourceAcquisitionSystem();
     const loaded = loadApprovedOrgProfileFromEnv();
-    if (loaded.ok) _engine.setOrgProfile(loaded.profile);
+    if (loaded.ok) _system.setOrgProfile(loaded.profile);
   }
-  return _engine;
+  return _system;
 }
 
 export default async function handler(req, res) {
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   if (!g.ok) return;
 
   try {
-    const snap = engine().acquisitionSnapshot();
+    const snap = system().dashboardSnapshot();
     if (!snap.org_profile_approved) {
       snap.notice =
         'Organization profile not owner-approved — set HYDI_ORG_PROFILE_PATH to a private file with owner_approval_record before drafting.';

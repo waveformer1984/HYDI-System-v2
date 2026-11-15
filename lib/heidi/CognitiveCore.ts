@@ -2417,6 +2417,32 @@ export class CognitiveCore {
         verificationDetails: res.ok ? 'Pending contract verification of persisted resolution row' : 'Refused before write — nothing to verify',
       };
     });
+
+    // Resource acquisition — always wired (local CJS module, no bridge dependency)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { invokeResourceCapability } = require('../resource-acquisition/heidi-executors.js') as {
+      invokeResourceCapability: (
+        capabilityId: string,
+        params?: Record<string, unknown>,
+        operatorContext?: Record<string, unknown> | null,
+      ) => Promise<CapabilityResult>;
+    };
+    const resourceCaps = [
+      'resource.discover',
+      'resource.validate',
+      'resource.qualify',
+      'resource.rank',
+      'resource.prepare_application',
+      'resource.request_approval',
+      'resource.record_submission',
+      'resource.track_application',
+      'resource.record_award',
+      'resource.integrate',
+      'resource.validate_profile',
+    ] as const;
+    for (const capId of resourceCaps) {
+      this.wireExecutor(capId, async (params) => invokeResourceCapability(capId, params));
+    }
   }
 
   private wireExecutor(capabilityId: string, executor: CapabilityExecutor): void {
