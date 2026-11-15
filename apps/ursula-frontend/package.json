@@ -48,7 +48,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.12",
-    "wrangler": "^4.150.0"
+    "wrangler": "^4.162.0"
   },
   "overrides": {
     "postcss": "^8.5.28",
@@ -57,7 +57,7 @@
     "nanoid": "^3.3.19",
     "browserslist": "^4.28.9",
     "js-yaml": "^4.3.2",
-    "undici": "^7.29.1",
+    "undici": "^7.30.2",
     "vite": "^8.1.6",
     "@node-minify/core": {
       "glob": "^10.5.0"
