@@ -23,6 +23,13 @@
       "description": "Event pipeline and agent bus backbone",
       "depends_on": ["supabase"]
     },
+    "ncm-inference": {
+      "port": 8791,
+      "name": "NCM Experimental Inference",
+      "env_var": "HYDI_NCM_PORT",
+      "description": "Isolated Python NCM adapter (optional; not started by boot-agent)",
+      "depends_on": []
+    },
     "heidi-core": {
       "port": 3459,
       "name": "HEIDI Core Orchestrator",

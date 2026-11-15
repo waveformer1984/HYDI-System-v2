@@ -36,6 +36,7 @@
     "soak-test:1h": "node scripts/soak-test.js --duration 3600000",
     "test:soak:hydi-v3": "node scripts/soak-test-v3.js",
     "benchmark:performance": "node scripts/performance-benchmark.js",
+    "benchmark:ncm": "node scripts/benchmark-ncm-integration.js",
     "security-audit": "node scripts/security-audit.js",
     "validate:rezonate-contract": "node scripts/validate-rezonate-capability-contract.js",
     "capability:gap-map": "tsx scripts/capability-contract-gap-map.ts",

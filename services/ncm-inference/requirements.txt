@@ -1,0 +1,10 @@
+# Isolated NCM inference service. Install official NCM separately:
+#   git clone https://github.com/HazyResearch/ncm && pip install -r ncm/requirements.txt
+# This service runs with mock backend unless HYDI_NCM_CHECKPOINT_DIR points at Hugging Face artifacts.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# Official NCM (optional — only on GPU benchmark machines):
+# torch>=2.2.0
+# huggingface_hub>=0.23.0

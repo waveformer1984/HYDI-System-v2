@@ -10,7 +10,10 @@ const {
 describe('inference-route registry (audit only — execution unchanged)', () => {
   test('lists all surfaces with provider metadata', () => {
     const routes = listInferenceSurfaces({ HYDI_ALLOW_PAID_LLM: 'false' });
-    expect(routes.length).toBeGreaterThanOrEqual(6);
+    expect(routes.length).toBeGreaterThanOrEqual(7);
+    const ncm = routes.find((r) => r.surface === SURFACES.HYDI_NCM_EXPERIMENTAL);
+    expect(ncm.enabled).toBe(false);
+    expect(ncm.fallback.provider).toBe('ollama');
     const core = routes.find((r) => r.surface === SURFACES.HEIDI_CORE_CHAT_TOOLS);
     expect(core.primary.provider).toBe('ollama');
   });

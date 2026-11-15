@@ -413,6 +413,57 @@ export class ModelManager {
     let response: ModelResponse;
     let fallbackReason: string | null = null;
 
+    if (process.env.HYDI_INTELLIGENCE_ROUTER === '1' && process.env.HYDI_ROUTER_TASK) {
+      const { maybeCompleteViaIntelligenceRouter } = await import(
+        './inference/model-manager-router-bridge.js'
+      );
+      const routed = await maybeCompleteViaIntelligenceRouter(
+        prompt,
+        process.env,
+        async () => {
+          if (this.isCircuitBreakerActive() || !(await this.isLocalModelEnabled())) {
+            const api = await this.generateAPIResponse(prompt, sessionId);
+            return {
+              content: api.content,
+              success: api.success,
+              model: api.model,
+              latency: api.latency,
+              error: api.error,
+            };
+          }
+          const local = await this.generateLocalResponse(prompt);
+          return {
+            content: local.content,
+            success: local.success,
+            model: 'local',
+            error: local.error,
+          };
+        }
+      );
+      type RoutedResult = {
+        content: string;
+        success: boolean;
+        model?: string;
+        latency?: number;
+        engine?: string;
+        metadata?: InferenceMetadata;
+      };
+      const routedHit = routed as RoutedResult | null;
+      if (routedHit && routedHit.success && this.validateOutput(routedHit.content)) {
+        const latency = routedHit.latency ?? Date.now() - startTime;
+        const modelLabel =
+          routedHit.engine === 'ncm' ? 'ncm/experimental' : routedHit.model || 'local';
+        await this.updateSessionState(sessionId, modelLabel === 'ncm/experimental' ? 'local' : 'local', 'success');
+        return {
+          content: routedHit.content,
+          model: modelLabel,
+          latency,
+          success: true,
+          metadata: routedHit.metadata,
+        };
+      }
+    }
+
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
       fallbackReason = 'circuit-breaker';
