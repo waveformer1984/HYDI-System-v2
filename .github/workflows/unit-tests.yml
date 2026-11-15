@@ -37,7 +37,7 @@ jobs:
       # local-development defaults, not project secrets.
       - name: Start local Supabase
         run: |
-          npx supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          npx supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor
           npx supabase status -o env > "$RUNNER_TEMP/supabase.env"
           api_url=$(grep '^API_URL=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
           service_key=$(grep '^SERVICE_ROLE_KEY=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
