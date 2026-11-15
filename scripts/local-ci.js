@@ -188,6 +188,21 @@ function supabaseCheckEnv(statusOutput, env = process.env) {
 }
 
 /**
+ * Environment for child npm/eslint/jest processes. Inherits the parent
+ * process (often PM2 on heidi-pc) except for variables known to break this
+ * repo's legacy ESLint setup (.eslintrc.json + --ext flags).
+ *
+ * ESLINT_USE_FLAT_CONFIG=true in a parent shell/PM2 env makes `npm run lint`
+ * and `npm run lint:hydi-v3` exit 2 while typecheck still passes — the exact
+ * Frank local-ci failure pattern seen on 2026-11-15 (DESKTOP-I719OIN).
+ */
+function ciChildEnv(extraEnv = {}) {
+  const env = { ...process.env, ...extraEnv, CI: 'true' };
+  delete env.ESLINT_USE_FLAT_CONFIG;
+  return env;
+}
+
+/**
  * `supabase status -o env` for the stack already running on this machine, or
  * null if none is. Never starts or stops it: on heidi-pc it is the live one.
  */
@@ -204,8 +219,12 @@ function readLocalSupabaseStatus(cwd) {
 /** Runs one command, streaming to the log file; resolves with exit code + output. */
 function run(cmd, args, cwd, logStream, extraEnv = {}) {
   return new Promise((resolve) => {
+    const childEnv = ciChildEnv(extraEnv);
+    if (process.env.ESLINT_USE_FLAT_CONFIG) {
+      logStream.write('[local-ci] unset ESLINT_USE_FLAT_CONFIG for child (legacy .eslintrc.json lint scripts)\n');
+    }
     logStream.write(`\n$ ${cmd} ${args.join(' ')}\n`);
-    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, windowsHide: true, env: { ...process.env, ...extraEnv, CI: 'true' } });
+    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, windowsHide: true, env: childEnv });
     let output = '';
     const onData = (chunk) => {
       output += chunk;
@@ -423,4 +442,19 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CHECKS, REPO, MAIN_BRANCH, diskGate, noteDiskBlock, cleanJestCache, watchOnce, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };
+module.exports = {
+  CHECKS,
+  REPO,
+  MAIN_BRANCH,
+  diskGate,
+  noteDiskBlock,
+  cleanJestCache,
+  watchOnce,
+  parseArgs,
+  summarizeJest,
+  describe,
+  selectPullsToTest,
+  needsRun,
+  supabaseCheckEnv,
+  ciChildEnv,
+};
