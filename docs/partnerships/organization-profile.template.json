@@ -1,0 +1,46 @@
+{
+  "_notice": "Owner must review, complete known facts, and set approved_by_owner true before HYDI uses this for external drafts.",
+  "approved_by_owner": false,
+  "approved_at": null,
+  "legal": {
+    "entity_name": "UNKNOWN",
+    "location_country": "UNKNOWN",
+    "location_region": "UNKNOWN",
+    "formation_date": "UNKNOWN",
+    "business_email": "UNKNOWN"
+  },
+  "classification": {
+    "structure": "UNKNOWN",
+    "notes": "company | personal_project | open_source | combination — operator chooses"
+  },
+  "funding": {
+    "vc_backed": "UNKNOWN",
+    "vc_partner_name": "UNKNOWN",
+    "accelerator_affiliations": [],
+    "existing_program_benefits": []
+  },
+  "repository": {
+    "url": "https://github.com/waveformer1984/HYDI-System-v2",
+    "license": "UNKNOWN",
+    "public_portion_description": "Open-source application codebase; operator confirms license in repo"
+  },
+  "product": {
+    "one_line_description": "Local-first AI orchestration and mobile operations platform (Heidi/HYDI)",
+    "api_use_case": "UNKNOWN",
+    "operating_status": "UNKNOWN",
+    "verified_metrics": {
+      "active_users": "UNKNOWN",
+      "revenue_usd": "UNKNOWN",
+      "production_customers": "UNKNOWN"
+    }
+  },
+  "goals": {
+    "requested_support": ["api_credits", "technical_support", "distribution"],
+    "not_requesting": ["unrestricted_cash_grant"]
+  },
+  "sharing": {
+    "may_share_public_repo_link": true,
+    "may_share_metrics_externally": false,
+    "may_share_founder_contact": false
+  }
+}

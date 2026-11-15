@@ -1,0 +1,40 @@
+{
+  "provider": "OpenAI",
+  "program_name": "OpenAI for Startups — API credits via eligible VC partners",
+  "benefit_category": "credits",
+  "benefit_summary": "Portfolio companies of eligible VC partners may receive API credits, rate limit upgrades, and technical support — requires VC referral code (not a universal public grant form).",
+  "benefit_amount_published": null,
+  "benefit_restrictions": "Requires referral from a listed VC partner; standard billing after credits consumed",
+  "is_guaranteed_amount": false,
+  "application_status": "rolling",
+  "deadline": null,
+  "deadline_timezone": null,
+  "official_source_url": "https://openai.com/business/why-openai/startups/",
+  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_excerpt": "If your startup is backed by a VC in our partner network... your startup may be eligible for benefits like free API credits... ask your VC for a referral code.",
+  "is_commercial_partnership": false,
+  "eligibility_requirements": [
+    {
+      "id": "vc_backed",
+      "label": "Startup backed by an eligible OpenAI VC partner",
+      "profile_field": "funding.vc_backed",
+      "expect": "truthy",
+      "fail_reason": "Not VC-backed per owner profile"
+    },
+    {
+      "id": "vc_referral",
+      "label": "VC referral code for credit application",
+      "profile_field": "funding.vc_partner_name",
+      "expect": "not_unknown_string",
+      "fail_reason": "No VC partner on file"
+    },
+    {
+      "id": "business_email",
+      "label": "Valid business email for application",
+      "profile_field": "legal.business_email",
+      "expect": "not_unknown_string",
+      "fail_reason": "Business email not provided"
+    }
+  ],
+  "research_classification": "VERIFIED_SIMULATED"
+}
