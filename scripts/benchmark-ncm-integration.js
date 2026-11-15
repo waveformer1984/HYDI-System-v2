@@ -52,13 +52,13 @@ async function ollamaGenerate(prompt) {
   }
 }
 
-async function main() {
+async function buildNcmBenchmarkReport(env = process.env) {
   const report = {
     schema_version: 1,
     collected_at: new Date().toISOString(),
     host: { platform: os.platform(), arch: os.arch(), cpus: os.cpus().length },
-    router: describeRouter(process.env),
-    ncm_url: ncmServiceUrl(process.env),
+    router: describeRouter(env),
+    ncm_url: ncmServiceUrl(env),
     ollama_url: ollamaUrl,
     probes: {},
     cases: [],
@@ -69,15 +69,15 @@ async function main() {
     },
   };
 
-  report.probes.ncm = await probeNcmHealth(process.env);
+  report.probes.ncm = await probeNcmHealth(env);
   report.probes.ollama = await probeOllama();
 
   for (const { task, prompt } of PROMPTS) {
-    const selection = selectEngine({ task, env: process.env });
+    const selection = selectEngine({ task, env });
     const caseRow = { task, selection, ncm: null, ollama: null, routed: null };
 
     if (report.probes.ncm.ok) {
-      const env = { ...process.env, HYDI_NCM_ENABLED: '1', HYDI_INTELLIGENCE_ROUTER: '1' };
+      const envEnabled = { ...env, HYDI_NCM_ENABLED: '1', HYDI_INTELLIGENCE_ROUTER: '1' };
       const routed = await completeWithRouter(
         { prompt, task },
         async () => {
@@ -90,7 +90,7 @@ async function main() {
             error: o.error,
           };
         },
-        env,
+        envEnabled,
       );
       caseRow.routed = {
         engine: routed.engine,
@@ -111,12 +111,21 @@ async function main() {
     report.cases.push(caseRow);
   }
 
-  console.log(JSON.stringify(report, null, 2));
-  const anyBlocked = !report.probes.ncm.ok || !report.probes.ollama.ok;
-  process.exit(anyBlocked ? 2 : 0);
+  report.blocked = !report.probes.ncm.ok || !report.probes.ollama.ok;
+  return report;
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+async function main() {
+  const report = await buildNcmBenchmarkReport(process.env);
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(report.blocked ? 2 : 0);
+}
+
+module.exports = { buildNcmBenchmarkReport, PROMPTS };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

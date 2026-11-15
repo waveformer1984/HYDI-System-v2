@@ -413,11 +413,13 @@ export class ModelManager {
     let response: ModelResponse;
     let fallbackReason: string | null = null;
 
-    const routerTask = process.env.HYDI_ROUTER_TASK;
-    if (process.env.HYDI_INTELLIGENCE_ROUTER === '1' && routerTask) {
-      const { completeWithRouter } = await import('./inference/intelligence-router.js');
-      const routed = await completeWithRouter(
-        { prompt, task: routerTask },
+    if (process.env.HYDI_INTELLIGENCE_ROUTER === '1' && process.env.HYDI_ROUTER_TASK) {
+      const { maybeCompleteViaIntelligenceRouter } = await import(
+        './inference/model-manager-router-bridge.js'
+      );
+      const routed = await maybeCompleteViaIntelligenceRouter(
+        prompt,
+        process.env,
         async () => {
           if (this.isCircuitBreakerActive() || !(await this.isLocalModelEnabled())) {
             const api = await this.generateAPIResponse(prompt, sessionId);
@@ -436,20 +438,28 @@ export class ModelManager {
             model: 'local',
             error: local.error,
           };
-        },
-        process.env
+        }
       );
-      if (routed.success && this.validateOutput(routed.content)) {
-        const latency = routed.latency ?? Date.now() - startTime;
+      type RoutedResult = {
+        content: string;
+        success: boolean;
+        model?: string;
+        latency?: number;
+        engine?: string;
+        metadata?: InferenceMetadata;
+      };
+      const routedHit = routed as RoutedResult | null;
+      if (routedHit && routedHit.success && this.validateOutput(routedHit.content)) {
+        const latency = routedHit.latency ?? Date.now() - startTime;
         const modelLabel =
-          routed.engine === 'ncm' ? 'ncm/experimental' : routed.model || 'local';
+          routedHit.engine === 'ncm' ? 'ncm/experimental' : routedHit.model || 'local';
         await this.updateSessionState(sessionId, modelLabel === 'ncm/experimental' ? 'local' : 'local', 'success');
         return {
-          content: routed.content,
+          content: routedHit.content,
           model: modelLabel,
           latency,
           success: true,
-          metadata: routed.metadata as InferenceMetadata | undefined,
+          metadata: routedHit.metadata,
         };
       }
     }
