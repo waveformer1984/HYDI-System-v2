@@ -4,7 +4,7 @@
 **Repository:** `waveformer1984/HYDI-System-v2`  
 **PR:** [#601](https://github.com/waveformer1984/HYDI-System-v2/pull/601)  
 **Branch:** `Cusor_agent01heidi-ops-truth-revenue-7718`  
-**PR HEAD (after rebase onto post-#600 clean-main):** `b307cde4`  
+**PR HEAD (after rebase onto post-#600 clean-main):** `065421b9`  
 **clean-main HEAD:** `1b4076cd` (includes merged **#600** local-CI fix)
 
 ## mission_complete
