@@ -7,7 +7,7 @@ const {
   listInferenceSurfaces,
 } = require('../../lib/heidi/inference-route');
 
-describe('inference-route registry', () => {
+describe('inference-route registry (audit only — execution unchanged)', () => {
   test('lists all surfaces with provider metadata', () => {
     const routes = listInferenceSurfaces({ HYDI_ALLOW_PAID_LLM: 'false' });
     expect(routes.length).toBeGreaterThanOrEqual(6);
