@@ -857,3 +857,67 @@ describe('Frank auto-deploy staged builds', () => {
     expect(fs.existsSync(path.join(root, '.next', 'hydi-build.json'))).toBe(false);
   });
 });
+
+describe('productionBuildEnv', () => {
+  const { productionBuildEnv } = require('../../scripts/frank-auto-deploy');
+
+  it('pins NODE_ENV=production even when the parent runs with NODE_ENV=development', () => {
+    const env = productionBuildEnv({ NODE_ENV: 'development', PATH: '/usr/bin' });
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.PATH).toBe('/usr/bin');
+  });
+
+  it('defaults HYDI_BUILD_CPUS to 1 and preserves a valid override', () => {
+    expect(productionBuildEnv({}).HYDI_BUILD_CPUS).toBe('1');
+    expect(productionBuildEnv({ NODE_ENV: 'development' }).HYDI_BUILD_CPUS).toBe('1');
+    expect(productionBuildEnv({ HYDI_BUILD_CPUS: '4' }).HYDI_BUILD_CPUS).toBe('4');
+  });
+
+  it('rejects non-numeric or non-positive worker overrides back to the safe default', () => {
+    for (const bad of ['abc', '0', '-2', '1.5', '']) {
+      expect(productionBuildEnv({ HYDI_BUILD_CPUS: bad }).HYDI_BUILD_CPUS).toBe('1');
+    }
+  });
+
+  it('stagedBuild passes the production env plus the staging dist dir to npm run build', async () => {
+    const { stagedBuild, STAGING_DIR } = require('../../scripts/frank-auto-deploy');
+    const root = 'C:/HYDI-System-v2';
+    const fsx = memFs([`${root}/.next`, `${root}/.next/BUILD_ID`]);
+    let seen;
+    const run = jest.fn(async (file, args, options = {}) => {
+      seen = options.env;
+      fsx.produceBuild(root);
+      return ok();
+    });
+    await stagedBuild({ run, root, platform: 'win32', fsx, env: { NODE_ENV: 'development' } });
+    expect(seen.NODE_ENV).toBe('production');
+    expect(seen.HYDI_NEXT_DIST_DIR).toBe(STAGING_DIR);
+    expect(seen.HYDI_BUILD_CPUS).toBe('1');
+  });
+});
+
+describe('next.config build worker cap', () => {
+  const loadConfig = () => {
+    jest.resetModules();
+    return require('../../next.config.js');
+  };
+  const OLD_ENV = process.env.HYDI_BUILD_CPUS;
+  afterEach(() => {
+    if (OLD_ENV === undefined) delete process.env.HYDI_BUILD_CPUS;
+    else process.env.HYDI_BUILD_CPUS = OLD_ENV;
+  });
+
+  it('omits experimental.cpus when HYDI_BUILD_CPUS is unset or invalid', () => {
+    delete process.env.HYDI_BUILD_CPUS;
+    expect(loadConfig().experimental.cpus).toBeUndefined();
+    process.env.HYDI_BUILD_CPUS = 'abc';
+    expect(loadConfig().experimental.cpus).toBeUndefined();
+    process.env.HYDI_BUILD_CPUS = '0';
+    expect(loadConfig().experimental.cpus).toBeUndefined();
+  });
+
+  it('sets experimental.cpus to the requested worker count', () => {
+    process.env.HYDI_BUILD_CPUS = '2';
+    expect(loadConfig().experimental.cpus).toBe(2);
+  });
+});

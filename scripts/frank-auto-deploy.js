@@ -325,6 +325,29 @@ function memoryPreflight(env = process.env, freemem = os.freemem) {
 }
 
 /**
+ * Environment for the `npm run build` child. `next build` only defaults
+ * NODE_ENV when it is unset, and frank-auto-deploy itself runs under PM2 with
+ * NODE_ENV=development (ecosystem.config.js) — that value used to leak into
+ * the build and ran prerendering in dev mode, killing export workers on
+ * 2026-11-15. NODE_ENV is therefore pinned here rather than trusted from the
+ * inherited environment. HYDI_BUILD_CPUS maps to next.config.js
+ * experimental.cpus (the supported worker-count knob); it defaults to 1
+ * because Frank's 16 GB host cannot afford Next's CPU-count default, and is
+ * overridable per-host. `extra` carries per-callsite values like
+ * HYDI_NEXT_DIST_DIR. Revalidate the worker default if host RAM or the
+ * page count changes materially.
+ */
+function productionBuildEnv(env = process.env, extra = {}) {
+  const workers = String(env.HYDI_BUILD_CPUS || '').trim();
+  return {
+    ...env,
+    NODE_ENV: 'production',
+    HYDI_BUILD_CPUS: /^\d+$/.test(workers) && Number(workers) > 0 ? workers : '1',
+    ...extra,
+  };
+}
+
+/**
  * Build into STAGING_DIR while the live site keeps serving LIVE_DIR.
  * Throws if the build fails or leaves an incomplete output.
  */
@@ -341,7 +364,7 @@ async function stagedBuild({ run, root, platform, fsx = realFs, env = process.en
   await mustRun(run, executable('npm', platform), ['run', 'build'], {
     cwd: root,
     timeout: 20 * 60 * 1000,
-    env: { ...env, HYDI_NEXT_DIST_DIR: STAGING_DIR },
+    env: productionBuildEnv(env, { HYDI_NEXT_DIST_DIR: STAGING_DIR }),
   });
   const missing = BUILD_MARKERS.filter((f) => !fsx.exists(path.join(staging, f)));
   if (missing.length) throw new Error(`build incomplete: ${missing.join(', ')} missing`);
@@ -428,7 +451,11 @@ async function rollback({ run, root, platform, oldCommit, lockChanged, healthOpt
     if (swap.stoppedWeb) extra = [WEB_APP];
   } else {
     // No previous build kept (first staged deploy): fall back to rebuilding.
-    await mustRun(run, executable('npm', platform), ['run', 'build'], { cwd: root, timeout: 20 * 60 * 1000 });
+    await mustRun(run, executable('npm', platform), ['run', 'build'], {
+      cwd: root,
+      timeout: 20 * 60 * 1000,
+      env: productionBuildEnv(),
+    });
   }
   await restoreGenerated(run, root);
   await restartApps(run, root, platform, extra);
@@ -712,6 +739,7 @@ module.exports = {
   waitForHealth,
   memoryPreflight,
   stagedBuild,
+  productionBuildEnv,
   swapLive,
   copySwap,
   rollback,
