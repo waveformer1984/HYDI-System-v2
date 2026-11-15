@@ -1,0 +1,32 @@
+{
+  "provider": "GitHub",
+  "program_name": "GitHub for Startups — platform credits",
+  "benefit_category": "platform_credits",
+  "benefit_summary": "Eligible startups may receive published platform credits (e.g. $10,000 tier per GitHub Enterprise Startups page) — platform credits, not cash.",
+  "benefit_amount_published": "up_to_10000_usd_platform_credits",
+  "benefit_restrictions": "Partner affiliation, funding stage, and Enterprise history requirements per official page — operator must verify current terms",
+  "is_guaranteed_amount": false,
+  "application_status": "open",
+  "deadline": null,
+  "official_source_url": "https://github.com/enterprise/startups",
+  "source_verified_at": "2026-11-15T00:00:00.000Z",
+  "source_excerpt": "Build your startup on GitHub — startup program credits are platform credits for GitHub products, distinct from cash grants.",
+  "is_commercial_partnership": false,
+  "eligibility_requirements": [
+    {
+      "id": "legal_entity",
+      "label": "Eligible startup entity per GitHub criteria",
+      "profile_field": "legal.entity_name",
+      "expect": "not_unknown_string",
+      "fail_reason": "Legal entity not confirmed"
+    },
+    {
+      "id": "funding_stage",
+      "label": "Funding stage within program limits",
+      "profile_field": "funding.vc_backed",
+      "expect": "not_unknown_string",
+      "fail_reason": "Funding status unknown"
+    }
+  ],
+  "research_classification": "VERIFIED_SIMULATED"
+}

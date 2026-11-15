@@ -63,11 +63,11 @@ Template: `docs/partnerships/organization-profile.template.json`
 2. Directory sites (e.g. awesome lists) are **leads only** — not stored as authoritative  
 3. Anthropic / GitHub programs: add separate opportunity records with distinct `dedup_key` (fixtures phase 2)  
 
-| Program | Official URL | Benefit type |
-|---------|----------------|--------------|
-| Anthropic Claude for Startups | https://claude.com/programs/startups | credits / support (verify terms) |
-| GitHub for Startups | https://github.com/enterprise/startups | platform credits (not cash) |
-| GitHub Fund | https://github.com/open-source/github-fund | investment / OSS (separate from startup credits) |
+| Program | Official URL | Fixture |
+|---------|--------------|---------|
+| Anthropic Claude for Startups | https://claude.com/programs/startups | `tests/fixtures/partnerships/anthropic-claude-for-startups.json` |
+| GitHub for Startups | https://github.com/enterprise/startups | `tests/fixtures/partnerships/github-for-startups-platform-credits.json` |
+| GitHub Fund | https://github.com/open-source/github-fund | separate record (investment / OSS — not startup credits) |
 
 ## Phase 2 (requires approval)
 

@@ -81,6 +81,18 @@ describe('Partnerships & Funding workflow', () => {
     expect(redactSecrets('token sk-abcdefghijklmnopqrstuvwxyz123456')).toContain('[REDACTED]');
   });
 
+  test('multi-provider fixtures stay deduped', () => {
+    const dir = tempDir();
+    const coord = new PartnershipsFundingCoordinator({ dir });
+    const gh = require('../fixtures/partnerships/github-for-startups-platform-credits.json');
+    const an = require('../fixtures/partnerships/anthropic-claude-for-startups.json');
+    coord.discoverFromSource(openaiFixture);
+    coord.discoverFromSource(gh);
+    coord.discoverFromSource(an);
+    const snap = coord.mobileSnapshot();
+    expect(snap.monitor.total).toBe(3);
+  });
+
   test('mobile snapshot distinguishes empty research', () => {
     const coord = new PartnershipsFundingCoordinator({ dir: tempDir() });
     const snap = coord.mobileSnapshot();
