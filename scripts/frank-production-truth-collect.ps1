@@ -125,6 +125,7 @@ $authFlags = @{
 }
 
 $payload = @{
+  schema_version = 1
   collected_at = (Get-Date).ToUniversalTime().ToString('o')
   host = $env:COMPUTERNAME
   repo_root = $Root

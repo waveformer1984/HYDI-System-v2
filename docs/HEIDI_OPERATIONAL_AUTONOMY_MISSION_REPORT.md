@@ -50,7 +50,7 @@ See mission canvas / prior analysis. Summary:
 
 | Phase | Goal | Code / tests present | Production verified |
 |-------|------|----------------------|---------------------|
-| 2 Routing | Single authoritative model router | `lib/heidi/inference-route.js` + `lib/ModelManager.ts`, `paid-llm-gate.js` | **PARTIAL** — route registry + conflict detect; dispatch not centralized |
+| 2 Routing | Single authoritative model router | `lib/heidi/inference-route.js` (audit registry only), `paid-llm-enforcement-sites.js`, `inference-dispatch-proposal.js` (proposal) | **NOT consolidation** — execution paths unchanged; paid calls blocked only at `paidApiKey()` call sites |
 | 3 Maintenance | Detect → propose → approve → verify | Health observer, mission lifecycle, ops agent, `restart-module.js` | **PARTIAL** — hermetic; Frank E2E **NO** |
 | 4 Contracts | 77 capabilities + verification/undo | `CapabilityRegistry`, `capability-contract-audit.ts` | **FAIL audit** — 77× VERIFICATION_ABSENT, 19× NO_UNDO_PATH |
 | 5 Distributed | Frank + cloud + mobile nodes | Control plane tests `[SIMULATED]`; GHA worker dispatch | **NO live Frank worker** |
@@ -126,10 +126,22 @@ See mission canvas / prior analysis. Summary:
 
 ---
 
-## 10. Remaining blockers and operator actions
+## 10. Evidence / auditability (PR follow-up to #597)
 
-1. **Run Phase 1 collector on Frank** (required before claiming OPERATIONAL).
-2. **Set cloud tailnet** — `TS_AUTHKEY` + `PROTOFORGE_MCP_TOKEN` in Cursor environment for read-only MCP audits.
+- `GET /operations/snapshot` (heidi-core) requires **`x-heidi-secret`** matching `HEIDI_SECRET` even on loopback — no open bypass of the heidi-web proxy.
+- `GET /api/heidi-operations/snapshot` requires **`x-hydi-service-token`** and forwards the secret to core; returns 503 if `HEIDI_SECRET` unset.
+- Snapshot bundle: per-block `collected_at`, `source`, `evidence_state` (`fresh` / `stale` / `missing` / `failed`); `live_probe_rollup` is **only** from live probes, not stale status files.
+- Missions without memory store: **`missing`**, not zero counts.
+- Capability labels: **77** = inventory descriptors; **96** = audit finding total; live execution verification is **`null`** on this endpoint.
+- Frank operator JSON: `schema_version: 1`; mismatch → `failed` evidence block (timestamped, not permanent health proof).
+- **No** `TS_AUTHKEY` in cloud for this step — attach sanitized collector JSON instead (separate decision if tailnet read access is approved later).
+
+---
+
+## 11. Remaining blockers and operator actions
+
+1. **Run Phase 1 collector on Frank** (required before claiming OPERATIONAL) and **attach JSON** to the cloud run.
+2. **Optional** tailnet/MCP — only if operator approves limited destinations; not a prerequisite for collector attachment.
 3. **Choose Phase 2 RFC** — consolidate routing behind one service vs document matrix (audit-first).
 4. **Phase 4** — prioritize contracts that mutate state above R2 (undo + verification).
 5. **Phase 6 UI** — consume `GET /operations/snapshot` on Frank (service token); add canvas/dashboard page when Phase 1 JSON confirms live shape.
