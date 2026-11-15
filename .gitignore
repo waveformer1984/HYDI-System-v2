@@ -159,3 +159,5 @@ heidi-report-*.txt
 HYDI_LIVE_DEMONSTRATION_LOG.txt
 HYDI_LIVE_DEMONSTRATION_RESULTS.json
 HYDI_LIVE_STATUS_REPORT.md
+
+services/ncm-inference/.venv/

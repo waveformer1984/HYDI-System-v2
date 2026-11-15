@@ -28,6 +28,30 @@ import { getSessionState as getSharedSessionState, updateSessionState as updateS
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 import { paidApiKey } from './cost/paid-llm-gate';
 
+// Experimental multi-architecture router (NCM). Off unless HYDI_INTELLIGENCE_ROUTER=1.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const intelligenceRouter = require('./inference/intelligence-router') as {
+  completeWithRouter: (
+    input: { prompt: string; task?: string; max_tokens?: number },
+    llmFallback: () => Promise<{
+      content: string;
+      success: boolean;
+      model?: string;
+      latency?: number;
+      error?: string;
+    }>,
+    env?: NodeJS.ProcessEnv
+  ) => Promise<{
+    content: string;
+    success: boolean;
+    model?: string;
+    latency?: number;
+    error?: string;
+    engine?: string;
+    metadata?: InferenceMetadata;
+  }>;
+};
+
 export interface InferenceMetadata {
   provider: string;
   selectedModel: string;
@@ -412,6 +436,46 @@ export class ModelManager {
     const requestId = context?.requestId || randomUUID();
     let response: ModelResponse;
     let fallbackReason: string | null = null;
+
+    const routerTask = process.env.HYDI_ROUTER_TASK;
+    if (process.env.HYDI_INTELLIGENCE_ROUTER === '1' && routerTask) {
+      const routed = await intelligenceRouter.completeWithRouter(
+        { prompt, task: routerTask },
+        async () => {
+          if (this.isCircuitBreakerActive() || !(await this.isLocalModelEnabled())) {
+            const api = await this.generateAPIResponse(prompt, sessionId);
+            return {
+              content: api.content,
+              success: api.success,
+              model: api.model,
+              latency: api.latency,
+              error: api.error,
+            };
+          }
+          const local = await this.generateLocalResponse(prompt);
+          return {
+            content: local.content,
+            success: local.success,
+            model: 'local',
+            error: local.error,
+          };
+        },
+        process.env
+      );
+      if (routed.success && this.validateOutput(routed.content)) {
+        const latency = routed.latency ?? Date.now() - startTime;
+        const modelLabel =
+          routed.engine === 'ncm' ? 'ncm/experimental' : routed.model || 'local';
+        await this.updateSessionState(sessionId, modelLabel === 'ncm/experimental' ? 'local' : 'local', 'success');
+        return {
+          content: routed.content,
+          model: modelLabel,
+          latency,
+          success: true,
+          metadata: routed.metadata,
+        };
+      }
+    }
 
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
