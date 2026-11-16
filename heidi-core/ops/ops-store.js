@@ -79,7 +79,7 @@ class OpsStore {
   }
 
   async openIncident(incident) {
-    const at = incident.opened_at;
+    const at = incident.opened_at || new Date().toISOString();
     await this.memory.run(
       `INSERT INTO ops_incidents (id, signature, component, kind, state, mode, observation, confirmed, opened_at, updated_at)
        VALUES (?, ?, ?, ?, 'open', ?, ?, 0, ?, ?)`,
