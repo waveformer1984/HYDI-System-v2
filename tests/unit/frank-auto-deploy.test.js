@@ -1029,3 +1029,32 @@ describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () 
     expect(h.fsx.exists(`${ROOT}/.node_modules-failed`)).toBe(false);
   });
 });
+
+describe('node_modules preserve/restore edge cases', () => {
+  const { preserveNodeModules, restoreNodeModules } = require('../../scripts/frank-auto-deploy');
+  const ROOT = 'C:/HYDI-System-v2';
+
+  it('preserveNodeModules reports a locked tree as blocked, not raw EPERM', () => {
+    const fsx = memFs([`${ROOT}/node_modules`, `${ROOT}/node_modules/next`]);
+    fsx.failRename = (from) => from.endsWith('/node_modules');
+    expect(() => preserveNodeModules({ root: ROOT, fsx })).toThrow(/dependency tree in use/);
+    // Live tree untouched.
+    expect(fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
+  });
+
+  it('restoreNodeModules tolerates a locked file in the failed tree', () => {
+    const fsx = memFs([
+      `${ROOT}/node_modules`, `${ROOT}/.node_modules-prev`, `${ROOT}/.node_modules-prev/next`,
+    ]);
+    const realRm = fsx.rm;
+    fsx.rm = (p) => {
+      if (String(p).includes('.node_modules-failed')) throw new Error('EPERM locked');
+      return realRm(p);
+    };
+    // Simulate: live (partial ci output) + prev (good tree).
+    fsx.mkdir(`${ROOT}/.node_modules-failed`);
+    expect(restoreNodeModules({ root: ROOT, fsx })).toBe(true);
+    expect(fsx.exists(`${ROOT}/node_modules/next`)).toBe(true); // good tree restored
+    expect(fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+  });
+});

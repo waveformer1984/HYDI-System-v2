@@ -39,6 +39,8 @@ const FAILED_DIR = '.next-failed';
 // and hydi-daemon could no longer restart at all.
 const NM_PREV_DIR = '.node_modules-prev';
 const NM_FAILED_DIR = '.node_modules-failed';
+// Extra free-space floor (GB) while a preserved + fresh node_modules coexist.
+const DEPLOY_NM_HEADROOM_GB = 5;
 const WEB_APP = 'heidi-web-standalone';
 const BUILD_MARKERS = Object.freeze(['BUILD_ID', path.join('server', 'pages-manifest.json')]);
 const GIB = 1024 ** 3;
@@ -463,7 +465,18 @@ function preserveNodeModules({ root, fsx = realFs }) {
   fsx.rm(d.prev);
   fsx.rm(d.failed);
   if (!fsx.exists(d.live)) return false;
-  fsx.rename(d.live, d.prev);
+  try {
+    fsx.rename(d.live, d.prev);
+  } catch (e) {
+    // Windows refuses to rename a directory while any process has a file
+    // inside it loaded — running executables (esbuild.exe under hydi-daemon's
+    // tsx) and native modules (sharp, sqlite3) all count. Fail with an
+    // actionable reason instead of a raw EPERM; the live tree is untouched.
+    throw new Error(
+      `blocked: dependency tree in use — a process holds files under node_modules ` +
+      `(e.g. daemon esbuild or a native module). Stop the holder or defer this deploy. (${e.message})`
+    );
+  }
   return true;
 }
 
@@ -476,10 +489,23 @@ function preserveNodeModules({ root, fsx = realFs }) {
 function restoreNodeModules({ root, fsx = realFs }) {
   const d = nodeModulesDirs(root);
   if (!fsx.exists(d.prev)) return false;
-  fsx.rm(d.failed);
-  if (fsx.exists(d.live)) fsx.rename(d.live, d.failed);
+  try { fsx.rm(d.failed); } catch { /* locked leftover — suffixed below */ }
+  // If the failed-tree slot is still occupied (locked files), move the
+  // partial ci output aside under a unique name rather than failing the
+  // restore — getting the good tree back is what matters.
+  let failedTarget = d.failed;
+  if (fsx.exists(failedTarget) && fsx.exists(d.live)) {
+    failedTarget = `${d.failed}-${Date.now()}`;
+  }
+  if (fsx.exists(d.live)) fsx.rename(d.live, failedTarget);
   fsx.rename(d.prev, d.live);
-  fsx.rm(d.failed); // failed ci output is disposable — don't keep a second tree on disk
+  try {
+    fsx.rm(failedTarget); // failed ci output is disposable — don't keep a second tree on disk
+  } catch {
+    // A locked file inside the failed tree must not fail the rollback — the
+    // restore already succeeded. The leftover is evidence; the next
+    // preserveNodeModules drops it.
+  }
   return true;
 }
 
@@ -657,6 +683,13 @@ async function runAutoDeploy(overrides = {}) {
       }
       updated = true;
       if (lockChanged) {
+        // preserveNodeModules + npm ci means TWO full dependency trees coexist
+        // during the install — require headroom for the second tree on top of
+        // the earlier deploy gate before touching anything.
+        const nmSpace = (overrides.diskPreflight || disk.preflight)({
+          minFreeGb: DEPLOY_NM_HEADROOM_GB, volume: disk.defaultVolume(root),
+        });
+        if (!nmSpace.ok) throw new Error(`blocked: insufficient disk for dependency reinstall — ${nmSpace.reason}`);
         // Preserve the complete current tree before npm ci deletes it, so any
         // failure below restores it by rename instead of reinstalling.
         preserveNodeModules({ root, fsx });
