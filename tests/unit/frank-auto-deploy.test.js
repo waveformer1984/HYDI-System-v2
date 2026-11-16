@@ -1013,19 +1013,30 @@ describe('automatic dependency installs are disabled (fail-closed)', () => {
     return { calls, posts, fsx, deploy };
   }
 
-  it('lockfile change blocks BEFORE merge, install, or any dependency mutation', async () => {
+  const DEPS_STALE = async () => ({ ok: false, reason: 'package-lock.json: 3 version/integrity mismatch(es)', problems: ['package-lock.json: stale'] });
+
+  it('lockfile change with installed trees not matching blocks BEFORE merge, install, or any dependency mutation', async () => {
     const h = harness({ lockChanged: true });
-    const result = await h.deploy();
+    const result = await h.deploy({ verifyInstalledDependencies: DEPS_STALE });
     expect(result.status).toBe('blocked');
-    expect(result.reason).toMatch(/manual maintenance/i);
+    expect(result.reason).toMatch(/dependency manifests changed .*package-lock\.json.* do not match/);
+    expect(result.reason).toMatch(/maintenance window is required/i);
     // No merge, no install, no build, no swap — checkout and tree untouched.
-    expect(h.calls).not.toContain(`git merge --ff-only ${NEW}`);
+    expect(h.calls.some((c) => c.startsWith('git merge --ff-only'))).toBe(false);
     expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
     expect(h.calls).not.toContain('npm.cmd run build');
     expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
     expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
     // Operator is alerted with the blocked reason.
     expect(h.posts.some((p) => /lockfile_change|paused/i.test(p.body))).toBe(true);
+  });
+
+  it('lockfile change whose trees were already installed and verified (maintenance window) deploys without installing', async () => {
+    const h = harness({ lockChanged: true });
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.calls).toContain(`git merge --ff-only ${NEW}`);
+    expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
   });
 
   it('lockfile unchanged: deploy proceeds normally and never runs npm ci', async () => {
@@ -1335,11 +1346,14 @@ describe('deploy: exact candidate and dependency identity', () => {
     pinnedResolves = {},
     onMain = () => true,
     stamp = null,
+    tree = ['package-lock.json', 'README.md'],
+    extraDirs = [],
+    extraFiles = {},
   } = {}) {
     const calls = [];
     const fsx = memFs(
-      [`${ROOT}/node_modules`, `${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`],
-      installed === null ? {} : { [`${ROOT}/node_modules/.package-lock.json`]: installed },
+      [`${ROOT}/node_modules`, `${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`, ...extraDirs],
+      { ...(installed === null ? {} : { [`${ROOT}/node_modules/.package-lock.json`]: installed }), ...extraFiles },
     );
     let merged = null;
     const show = { [`${origin}:package-lock.json`]: LOCK, [`${head}:package-lock.json`]: LOCK, ...files };
@@ -1360,7 +1374,7 @@ describe('deploy: exact candidate and dependency identity', () => {
       if (file === 'git' && args[0] === 'show') {
         return show[args[1]] === undefined ? { code: 128, stdout: '', stderr: 'missing' } : ok(show[args[1]]);
       }
-      if (file === 'git' && args[0] === 'ls-tree') return ok('package-lock.json\nREADME.md\n');
+      if (file === 'git' && args[0] === 'ls-tree') return ok(tree.map((f) => `${f}\n`).join(''));
       const fixed = {
         'git fetch origin clean-main': ok(),
         'git branch --show-current': ok('clean-main\n'),
@@ -1421,16 +1435,36 @@ describe('deploy: exact candidate and dependency identity', () => {
     });
     const result = await h.deploy();
     expect(result.status).toBe('blocked');
-    expect(result.reason).toMatch(/dependency manifests changed .*package\.json/);
+    expect(result.reason).toMatch(/package\.json dependencies changed without a lockfile update \(package\.json\)/);
     expect(touchedCheckout(h.calls)).toBe(false);
   });
 
-  it('a sub-project lockfile change blocks before merge', async () => {
-    const h = harness({ changed: ['heidi-core/package-lock.json'] });
+  it('a sub-project lockfile change blocks when that sub-project is installed and stale', async () => {
+    const CORE = lockfile({ 'node_modules/express': { version: '5.1.0', integrity: 'sha512-ex' } });
+    const h = harness({
+      changed: ['heidi-core/package-lock.json'],
+      tree: ['package-lock.json', 'heidi-core/package-lock.json'],
+      files: { [`${NEW}:heidi-core/package-lock.json`]: CORE },
+      extraDirs: [`${ROOT}/heidi-core/node_modules`],
+      extraFiles: { [`${ROOT}/heidi-core/node_modules/.package-lock.json`]: installedRecord(CORE, { change: { 'node_modules/express': { version: '5.0.0' } } }) },
+    });
     const result = await h.deploy();
     expect(result.status).toBe('blocked');
     expect(result.manifestChanges).toEqual(['heidi-core/package-lock.json']);
+    expect(result.reason).toMatch(/heidi-core\/package-lock\.json: .*express 5\.0\.0≠5\.1\.0/);
     expect(touchedCheckout(h.calls)).toBe(false);
+  });
+
+  it('a sub-project lockfile change deploys once that sub-project was installed to match', async () => {
+    const CORE = lockfile({ 'node_modules/express': { version: '5.1.0', integrity: 'sha512-ex' } });
+    const h = harness({
+      changed: ['heidi-core/package-lock.json'],
+      tree: ['package-lock.json', 'heidi-core/package-lock.json'],
+      files: { [`${NEW}:heidi-core/package-lock.json`]: CORE },
+      extraDirs: [`${ROOT}/heidi-core/node_modules`],
+      extraFiles: { [`${ROOT}/heidi-core/node_modules/.package-lock.json`]: installedRecord(CORE) },
+    });
+    await expect(h.deploy()).resolves.toEqual(expect.objectContaining({ status: 'deployed' }));
   });
 
   it('unchanged manifests but a stale installed tree blocks before merge', async () => {

@@ -546,6 +546,11 @@ const DEPENDENCY_FIELDS = Object.freeze([
   'overrides', 'workspaces', 'packageManager',
 ]);
 
+function dirOf(p) {
+  const i = String(p).lastIndexOf('/');
+  return i < 0 ? '' : String(p).slice(0, i);
+}
+
 function baseName(p) {
   const parts = String(p).split('/');
   return parts[parts.length - 1];
@@ -762,6 +767,7 @@ async function runAutoDeploy(overrides = {}) {
   let newCommit = null;
   let updated = false;
   let lockChanged = false;
+  let manifestChanges = [];
   let swapped = false;
   let prTitles = [];
   // rebuild: clean-main has not moved, but the live .next was built from an
@@ -884,34 +890,36 @@ async function runAutoDeploy(overrides = {}) {
       if (!rebuild) {
         const log = await mustRun(run, 'git', ['log', '--format=%B%x1e', `${oldCommit}..${newCommit}`], { cwd: root });
         prTitles = parseMergedPrTitles(log.stdout);
-        const manifestChanges = await dependencyManifestChanges({ run, root, from: oldCommit, to: newCommit });
+        manifestChanges = await dependencyManifestChanges({ run, root, from: oldCommit, to: newCommit });
         lockChanged = manifestChanges.length > 0;
-
-        if (lockChanged) {
-          // FAIL CLOSED: a lockfile change means dependencies must change, and
-          // automatic `npm ci` in the live root is disabled — running consumers
-          // can hold files under node_modules (daemon esbuild, sharp, sqlite3)
-          // and a rename does not prove they tolerate it. A successful rename
-          // is not consumer safety. Manual maintenance / staged-release
-          // migration is required; nothing is touched.
-          const listed = manifestChanges.slice(0, 5).join(', ') + (manifestChanges.length > 5 ? `, +${manifestChanges.length - 5} more` : '');
-          const reason = `dependency manifests changed ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)} (${listed}) — ` +
-            'automatic dependency install is disabled; manual maintenance window required';
+        // A package.json whose dependencies changed while its lockfile did
+        // not is an inconsistent commit: npm ci would refuse it, and the
+        // installed-tree check below compares against the old lockfile.
+        const lockDirs = new Set(manifestChanges.filter((f) => LOCKFILE_NAMES.includes(baseName(f))).map(dirOf));
+        const unlocked = manifestChanges.filter((f) => baseName(f) === 'package.json' && !lockDirs.has(dirOf(f)));
+        if (unlocked.length) {
+          const reason = `package.json dependencies changed without a lockfile update (${unlocked.slice(0, 5).join(', ')}) — fix the commit; nothing deployed`;
           await alert('lockfile_change', `Frank auto-deploy paused: ${reason}. Nothing changed.`);
           result = { status: 'blocked', reason, manifestChanges };
         }
       }
       if (!result) {
-        // The manifests did not change, but that says nothing about what is
-        // actually on disk: a hand-run install, a half-finished npm ci, or a
-        // checkout that already sits at the candidate can all leave
-        // node_modules belonging to some other lockfile. Check the trees
-        // themselves against the candidate before anything moves.
+        // The deploy never installs. What gates it is whether the trees on
+        // disk already match the candidate's lockfiles — after a manifest
+        // change that means a maintenance window installed them; without one
+        // it still catches a hand-run install, a half-finished npm ci, or a
+        // checkout that already sits at the candidate with stale node_modules.
         const deps = await (overrides.verifyInstalledDependencies || verifyInstalledDependencies)({ run, root, commit: newCommit, fsx });
         if (!deps.ok) {
-          const reason = `installed dependencies do not match ${newCommit.slice(0, 8)}: ${deps.reason}`;
-          await alert('dependency_mismatch', `Frank auto-deploy paused: ${reason}. Nothing changed. A manual dependency maintenance window is required.`);
-          result = { status: 'blocked', reason, dependencyProblems: deps.problems };
+          const changedText = manifestChanges.length
+            ? `dependency manifests changed ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)} (${manifestChanges.slice(0, 5).join(', ')}${manifestChanges.length > 5 ? `, +${manifestChanges.length - 5} more` : ''}) and `
+            : '';
+          const reason = `${changedText}installed dependencies do not match ${newCommit.slice(0, 8)}: ${deps.reason} — ` +
+            'automatic dependency install is disabled; a dependency maintenance window is required';
+          await alert(manifestChanges.length ? 'lockfile_change' : 'dependency_mismatch', `Frank auto-deploy paused: ${reason}. Nothing changed.`);
+          result = { status: 'blocked', reason, manifestChanges, dependencyProblems: deps.problems };
+        } else if (manifestChanges.length) {
+          log(`[${APP_NAME}] dependency manifests changed (${manifestChanges.join(', ')}); installed trees already match ${newCommit.slice(0, 8)} — proceeding without install`);
         }
       }
       if (!result && !rebuild) {
