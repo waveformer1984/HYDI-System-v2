@@ -40,7 +40,6 @@ const FAILED_DIR = '.next-failed';
 const NM_PREV_DIR = '.node_modules-prev';
 const NM_FAILED_DIR = '.node_modules-failed';
 // Extra free-space floor (GB) while a preserved + fresh node_modules coexist.
-const DEPLOY_NM_HEADROOM_GB = 5;
 const WEB_APP = 'heidi-web-standalone';
 const BUILD_MARKERS = Object.freeze(['BUILD_ID', path.join('server', 'pages-manifest.json')]);
 const GIB = 1024 ** 3;
@@ -679,23 +678,24 @@ async function runAutoDeploy(overrides = {}) {
         const lockDiff = await mustRun(run, 'git', ['diff', '--name-only', oldCommit, newCommit, '--', 'package-lock.json'], { cwd: root });
         lockChanged = lockDiff.stdout.split(/\r?\n/).some((line) => line.trim() === 'package-lock.json');
 
-        await mustRun(run, 'git', ['merge', '--ff-only', 'origin/clean-main'], { cwd: root });
+        if (lockChanged) {
+          // FAIL CLOSED: a lockfile change means dependencies must change, and
+          // automatic `npm ci` in the live root is disabled — running consumers
+          // can hold files under node_modules (daemon esbuild, sharp, sqlite3)
+          // and a rename does not prove they tolerate it. A successful rename
+          // is not consumer safety. Manual maintenance / staged-release
+          // migration is required; nothing is touched.
+          const reason = `package-lock.json changed ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)} — ` +
+            'automatic dependency install is disabled; manual maintenance window required';
+          await alert('lockfile_change', `Frank auto-deploy paused: ${reason}. Nothing changed.`);
+          result = { status: 'blocked', reason };
+        } else {
+          await mustRun(run, 'git', ['merge', '--ff-only', 'origin/clean-main'], { cwd: root });
+        }
       }
-      updated = true;
-      if (lockChanged) {
-        // preserveNodeModules + npm ci means TWO full dependency trees coexist
-        // during the install — require headroom for the second tree on top of
-        // the earlier deploy gate before touching anything.
-        const nmSpace = (overrides.diskPreflight || disk.preflight)({
-          minFreeGb: DEPLOY_NM_HEADROOM_GB, volume: disk.defaultVolume(root),
-        });
-        if (!nmSpace.ok) throw new Error(`blocked: insufficient disk for dependency reinstall — ${nmSpace.reason}`);
-        // Preserve the complete current tree before npm ci deletes it, so any
-        // failure below restores it by rename instead of reinstalling.
-        preserveNodeModules({ root, fsx });
-        await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
-      }
-      await stagedBuild({ run, root, platform, fsx, env: overrides.env || process.env });
+      if (!result) {
+        updated = true;
+        await stagedBuild({ run, root, platform, fsx, env: overrides.env || process.env });
       await restoreGenerated(run, root);
       const swap = await swapLive({ run, root, platform, from: STAGING_DIR, keepAs: PREV_DIR, fsx });
       swapped = true;
@@ -734,6 +734,7 @@ async function runAutoDeploy(overrides = {}) {
           `Duration: ${Math.round((now() - started) / 1000)}s`,
         ].join('\n'));
         result = { status: 'deployed', oldCommit: from, newCommit, health, rebuild };
+      }
       }
     }
   } catch (error) {
