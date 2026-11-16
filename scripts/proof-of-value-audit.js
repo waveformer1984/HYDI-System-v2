@@ -67,7 +67,7 @@ async function main() {
     ollama_11434: await portOpen('127.0.0.1', 11434),
   };
 
-  let jest = { skipped: true };
+  let jest;
   try {
     const out = execSync(
       'npx jest tests/proof-of-value/acceptance.test.js --testMatch="**/*.test.js" --runInBand --forceExit --json',
