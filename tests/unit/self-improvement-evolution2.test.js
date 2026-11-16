@@ -9,6 +9,8 @@ const { classifyOutcome } = require('../../lib/heidi/self-improvement/regression
 const { scoreGap, rankWithHistory, WEIGHTS } = require('../../lib/heidi/self-improvement/scoring');
 const { appendMissionRecord, loadAllMissions } = require('../../lib/heidi/self-improvement/history');
 const { redactRecord } = require('../../lib/heidi/self-improvement/redact');
+const { frankLiveTruthEligible } = require('../../lib/heidi/self-improvement/frank-context');
+const { resolveProofLabel } = require('../../lib/heidi/self-improvement/verification');
 const { runBoundedSelfImprovement } = require('../../lib/heidi/bounded-self-improvement-loop');
 
 const gapFix = {
@@ -68,6 +70,30 @@ describe('Self-improvement Evolution 2.0', () => {
   test('redacts secrets in records', () => {
     const row = redactRecord({ token: 'sk_test_fixture_redact_example' });
     expect(row.token).toBe('[REDACTED]');
+  });
+
+  test('FRANK_VERIFIED proof requires LIVE collector file, not simulation', () => {
+    expect(frankLiveTruthEligible(tmpRoot)).toBe(false);
+    expect(
+      resolveProofLabel({ frank: false, cloud: true, simulated: true, verified: true }),
+    ).toBe('SIMULATED');
+    const truthDir = path.join(tmpRoot, '.runtime', 'production-truth');
+    fs.mkdirSync(truthDir, { recursive: true });
+    const now = Date.now();
+    fs.writeFileSync(
+      path.join(truthDir, 'frank-production-truth-20261116T010000Z.json'),
+      JSON.stringify({
+        schema_version: 2,
+        collected_at: new Date(now).toISOString(),
+        host: 'TEST_HOST',
+        probes: [],
+        pm2: { ok: true },
+      }),
+    );
+    expect(frankLiveTruthEligible(tmpRoot, now)).toBe(true);
+    expect(
+      resolveProofLabel({ frank: true, cloud: false, simulated: false, verified: true }),
+    ).toBe('FRANK_VERIFIED');
   });
 
   test('rankWithHistory lowers score after failures', () => {

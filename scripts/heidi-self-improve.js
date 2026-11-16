@@ -31,10 +31,11 @@ async function main() {
 
   if (cmd === 'dashboard') {
     const { buildImprovementDashboard } = require('../lib/heidi/self-improvement/dashboard');
+    const { frankLiveTruthEligible } = require('../lib/heidi/self-improvement/frank-context');
     const dash = await buildImprovementDashboard({
       root,
       fetchImpl,
-      frankReachable: false,
+      frankReachable: frankLiveTruthEligible(root),
       localCiIncidentOpen: process.argv.includes('--local-ci-open'),
     });
     console.log(JSON.stringify(dash, null, 2));
