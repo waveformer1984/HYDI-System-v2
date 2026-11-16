@@ -5,7 +5,8 @@
 **Pull request:** [#603](https://github.com/waveformer1984/HYDI-System-v2/pull/603)  
 **Feature branch:** `Cusor_agent01heidi-self-improve-evolution2-7718`  
 **Base at open:** `b07d492158201c8f78e02cb8889d2a9d9cf73cc5` (post PR #602)  
-**PR head (CI truth SHA):** `c6c131ac48c4c03d8b7b92698a65bb339353a39e`
+**Implementation CI SHA:** `c6c131ac48c4c03d8b7b92698a65bb339353a39e`  
+**Branch head (incl. acceptance docs):** `a553fd3d592b26053bbe8adac5949ea71fdd75b1`
 
 **Overall mission status:** **PARTIAL** — merge-ready on GitHub; production acceptance blocked on owner merge and Frank verification.
 
@@ -16,7 +17,7 @@
 | Status | Verdict | Evidence |
 |--------|---------|----------|
 | **CLOUD_VERIFIED** | **YES** | Cloud agent VM: targeted Jest 13/13 pass; `node scripts/heidi-self-improve.js dashboard` returned schema v2 brief with `frank_truth: UNAVAILABLE`, `live_probe_rollup: UNAVAILABLE` (no simulation masquerading as Frank). Artifacts: `/opt/cursor/artifacts/evolution2-dashboard-cloud.json`, `frank-reachability-probe.txt`. |
-| **CI_VERIFIED** | **YES** | GitHub Actions terminal success on **`c6c131ac`**: Jest Unit Tests, HYDI V3 Integration, verify-quick, Change Safety, CodeQL Analyze, CodeQL — 6/6 success (queried 2026-11-16T00:00:30Z). |
+| **CI_VERIFIED** | **YES** | GitHub Actions terminal success on branch head **`a553fd3d`**: 7/7 success including Jest, integration, verify-quick, change-safety, CodeQL, codecov/patch (queried 2026-11-16T00:12:00Z). Implementation code validated on **`c6c131ac`** with identical green gate before docs-only commit. |
 | **MERGED** | **NO** | PR #603 `state: open`, `merged_at: null`. **Not merged** — owner authorization required per master directive. |
 | **FRANK_VERIFIED** | **NO** | `curl -m 5 https://heidi-pc.tailc50af2.ts.net/api/health` from cloud agent: no response (unreachable). Dashboard reports `frank_truth: UNAVAILABLE`. |
 | **PRODUCTION_ACCEPTED** | **NO** | Requires **MERGED** + Frank steps (pull `clean-main`, `runtime:audit`, live probe rollup, persisted history across restart). Not executed. |
