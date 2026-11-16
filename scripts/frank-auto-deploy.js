@@ -13,6 +13,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const board = require('../lib/forge-board/sdk');
 const disk = require('../lib/storage/disk');
@@ -30,6 +31,16 @@ const LIVE_DIR = '.next';
 const STAGING_DIR = '.next-staging';
 const PREV_DIR = '.next-prev';
 const FAILED_DIR = '.next-failed';
+// node_modules gets the same treatment as .next: the complete tree is moved
+// aside before `npm ci` rebuilds it, so a failed install or a later rollback
+// restores the previous runnable tree by rename — never by another install.
+// 2026-11-16 incident: rollback ran `npm ci` in the live root, it EPERMed
+// unlinking a locked esbuild.exe, and left node_modules gutted — heidi-web
+// and hydi-daemon could no longer restart at all.
+const NM_PREV_DIR = '.node_modules-prev';
+const NM_FAILED_DIR = '.node_modules-failed';
+// Extra free-space floor (GB) while a preserved + fresh node_modules coexist.
+const DEPLOY_NM_HEADROOM_GB = 5;
 const WEB_APP = 'heidi-web-standalone';
 const BUILD_MARKERS = Object.freeze(['BUILD_ID', path.join('server', 'pages-manifest.json')]);
 const GIB = 1024 ** 3;
@@ -304,6 +315,8 @@ const realFs = Object.freeze({
       fs.rmSync(path.join(p, name), { recursive: true, force: true, maxRetries: 2 });
     }
   },
+  readFile: (p) => fs.readFileSync(p),
+  writeFile: (p, c) => fs.writeFileSync(p, c),
 });
 
 /**
@@ -434,11 +447,94 @@ async function swapLive({ run, root, platform, from, keepAs, fsx = realFs }) {
   }
 }
 
+function nodeModulesDirs(root) {
+  return {
+    live: path.join(root, 'node_modules'),
+    prev: path.join(root, NM_PREV_DIR),
+    failed: path.join(root, NM_FAILED_DIR),
+  };
+}
+
+/**
+ * Move the current node_modules aside before `npm ci` rebuilds it.
+ * Returns true when a previous tree was preserved. Any older preserved copy
+ * is dropped first (bounded cleanup — it was already superseded).
+ */
+function preserveNodeModules({ root, fsx = realFs }) {
+  const d = nodeModulesDirs(root);
+  fsx.rm(d.prev);
+  fsx.rm(d.failed);
+  if (!fsx.exists(d.live)) return false;
+  try {
+    fsx.rename(d.live, d.prev);
+  } catch (e) {
+    // Windows refuses to rename a directory while any process has a file
+    // inside it loaded — running executables (esbuild.exe under hydi-daemon's
+    // tsx) and native modules (sharp, sqlite3) all count. Fail with an
+    // actionable reason instead of a raw EPERM; the live tree is untouched.
+    throw new Error(
+      `blocked: dependency tree in use — a process holds files under node_modules ` +
+      `(e.g. daemon esbuild or a native module). Stop the holder or defer this deploy. (${e.message})`
+    );
+  }
+  return true;
+}
+
+/**
+ * Restore the preserved tree after a failed ci/build/activation. Install-free:
+ * renames only. No-op (returns false) when nothing was preserved, so the
+ * current tree — whatever state it is in — is left untouched rather than
+ * replaced by nothing.
+ */
+function restoreNodeModules({ root, fsx = realFs }) {
+  const d = nodeModulesDirs(root);
+  if (!fsx.exists(d.prev)) return false;
+  try { fsx.rm(d.failed); } catch { /* locked leftover — suffixed below */ }
+  // If the failed-tree slot is still occupied (locked files), move the
+  // partial ci output aside under a unique name rather than failing the
+  // restore — getting the good tree back is what matters.
+  let failedTarget = d.failed;
+  if (fsx.exists(failedTarget) && fsx.exists(d.live)) {
+    failedTarget = `${d.failed}-${Date.now()}`;
+  }
+  if (fsx.exists(d.live)) fsx.rename(d.live, failedTarget);
+  fsx.rename(d.prev, d.live);
+  try {
+    fsx.rm(failedTarget); // failed ci output is disposable — don't keep a second tree on disk
+  } catch {
+    // A locked file inside the failed tree must not fail the rollback — the
+    // restore already succeeded. The leftover is evidence; the next
+    // preserveNodeModules drops it.
+  }
+  return true;
+}
+
+/** After a deploy verifies healthy, drop both preserved copies (bounded). */
+function dropNodeModulesBackup({ root, fsx = realFs }) {
+  const d = nodeModulesDirs(root);
+  fsx.rm(d.prev);
+  fsx.rm(d.failed);
+}
+
+/** Record what actually went live: commit + lockfile identity. */
+function writeDeployManifest({ root, commit, fsx = realFs }) {
+  try {
+    if (typeof fsx.writeFile !== 'function') return; // test doubles: skip
+    const lockfile = path.join(root, 'package-lock.json');
+    const lockfileSha256 = fsx.exists(lockfile) && typeof fsx.readFile === 'function'
+      ? crypto.createHash('sha256').update(fsx.readFile(lockfile)).digest('hex')
+      : null;
+    fsx.writeFile(path.join(root, 'deploy-manifest.json'), JSON.stringify({
+      commit, lockfileSha256, deployedAt: new Date().toISOString(),
+    }, null, 2));
+  } catch { /* manifest is evidence, never a deploy blocker */ }
+}
+
 async function rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped = false, fsx = realFs }) {
   await mustRun(run, 'git', ['reset', '--hard', oldCommit], { cwd: root });
-  if (lockChanged) {
-    await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
-  }
+  // Restore the preserved dependency tree by rename — rollback must never
+  // install. If npm ci never ran (no backup), this is a no-op.
+  restoreNodeModules({ root, fsx });
   // The build never went live: the running apps still have the old code and
   // the old .next, so there is nothing to rebuild or restart.
   if (!swapped) {
@@ -587,6 +683,16 @@ async function runAutoDeploy(overrides = {}) {
       }
       updated = true;
       if (lockChanged) {
+        // preserveNodeModules + npm ci means TWO full dependency trees coexist
+        // during the install — require headroom for the second tree on top of
+        // the earlier deploy gate before touching anything.
+        const nmSpace = (overrides.diskPreflight || disk.preflight)({
+          minFreeGb: DEPLOY_NM_HEADROOM_GB, volume: disk.defaultVolume(root),
+        });
+        if (!nmSpace.ok) throw new Error(`blocked: insufficient disk for dependency reinstall — ${nmSpace.reason}`);
+        // Preserve the complete current tree before npm ci deletes it, so any
+        // failure below restores it by rename instead of reinstalling.
+        preserveNodeModules({ root, fsx });
         await mustRun(run, executable('npm', platform), ['ci'], { cwd: root, timeout: 15 * 60 * 1000 });
       }
       await stagedBuild({ run, root, platform, fsx, env: overrides.env || process.env });
@@ -618,6 +724,8 @@ async function runAutoDeploy(overrides = {}) {
         result = { status: 'rolled_back', oldCommit: from, newCommit, health, rollbackHealth, rebuild };
       } else {
         if (rebuild) clearRebuildMarker(rebuildMarkerPath);
+        dropNodeModulesBackup({ root, fsx });
+        writeDeployManifest({ root, commit: newCommit, fsx });
         await postToBoard('ops', [
           `${what}: ${from.slice(0, 8)}→${newCommit.slice(0, 8)}`,
           `Merged PRs: ${prTitles.join('; ') || 'none detected'}`,
@@ -742,6 +850,12 @@ module.exports = {
   productionBuildEnv,
   swapLive,
   copySwap,
+  preserveNodeModules,
+  restoreNodeModules,
+  dropNodeModulesBackup,
+  writeDeployManifest,
+  NM_PREV_DIR,
+  NM_FAILED_DIR,
   rollback,
   LIVE_DIR,
   STAGING_DIR,
