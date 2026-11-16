@@ -1076,6 +1076,17 @@ function parseCliArgs(argv) {
   return out;
 }
 
+/**
+ * The checkout whose board environment to load: the --root value when one is
+ * given, else this script's own repo. Never throws — argument errors are
+ * reported by parseCliArgs right after, once the environment is loaded.
+ */
+function cliRoot(argv) {
+  const i = argv.indexOf('--root');
+  const value = i >= 0 ? argv[i + 1] : null;
+  return value && !value.startsWith('--') ? path.resolve(value) : path.resolve(__dirname, '..');
+}
+
 /** Exit code for a --once pass: 0 deployed/noop, 2 blocked/lock held, 1 anything else. */
 function onceExitCode(result) {
   const status = result && result.status;
@@ -1097,6 +1108,7 @@ async function runOnce({ root, commit, deploy = runAutoDeploy, out = (line) => c
 }
 
 if (require.main === module) {
+  require('../lib/runtime/board-env').loadBoardEnv(cliRoot(process.argv.slice(2)));
   let cli;
   try {
     cli = parseCliArgs(process.argv.slice(2));
@@ -1109,7 +1121,6 @@ if (require.main === module) {
     console.error(`[${APP_NAME}] --root ${root} is not a git checkout`);
     process.exit(64);
   }
-  require('../lib/runtime/board-env').loadBoardEnv(root);
   if (cli.once) {
     runOnce({ root, commit: cli.commit }).then((code) => { process.exitCode = code; }, (error) => {
       console.error(`[${APP_NAME}] ${error instanceof Error ? error.message : error}`);
@@ -1154,6 +1165,7 @@ module.exports = {
   compareInstalledTree,
   verifyInstalledDependencies,
   parseCliArgs,
+  cliRoot,
   onceExitCode,
   runOnce,
   NM_PREV_DIR,

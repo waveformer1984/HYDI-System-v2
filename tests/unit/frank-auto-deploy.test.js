@@ -1111,6 +1111,7 @@ const {
   dependencyManifestChanges,
   verifyInstalledDependencies,
   parseCliArgs,
+  cliRoot,
   onceExitCode,
   runOnce,
 } = require('../../scripts/frank-auto-deploy');
@@ -1476,6 +1477,13 @@ describe('frank-auto-deploy CLI (--once / --root / --commit)', () => {
     expect(() => parseCliArgs(['--root', 'C:/prod'])).toThrow(/require --once/);
     expect(() => parseCliArgs(['--once', '--root'])).toThrow(/needs a value/);
     expect(() => parseCliArgs(['--once', '--loop'])).toThrow(/unknown argument/);
+  });
+
+  it('cliRoot picks the --root checkout for the board env, else this repo, and never throws', () => {
+    expect(cliRoot(['--once', '--root', 'C:/prod'])).toBe(path.resolve('C:/prod'));
+    expect(cliRoot([])).toBe(path.resolve(__dirname, '../..'));
+    expect(cliRoot(['--root'])).toBe(path.resolve(__dirname, '../..'));
+    expect(cliRoot(['--root', '--once'])).toBe(path.resolve(__dirname, '../..'));
   });
 
   it('maps outcomes to exit codes', () => {
