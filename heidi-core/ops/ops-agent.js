@@ -201,6 +201,7 @@ class OpsAgent {
       const id = randomUUID().slice(0, 12);
       await this.store.openIncident({
         id, signature, component: o.component, kind: o.kind, mode: this.mode,
+        opened_at: new Date().toISOString(),
         observation: { url: o.url || null, consecutiveFailures: n, mission: o.mission || null, at: new Date().toISOString() },
       });
       this.log(`[OPS AGENT] incident ${id}: ${o.component} ${o.kind} (${n} consecutive failures)`);

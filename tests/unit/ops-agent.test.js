@@ -3,6 +3,9 @@
 // HeidiMemory's run/get/all/createMission/getMission/getMissions), fake
 // probe results, and a temp sqlite-free path. No real spawns, no network.
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const OpsAgent = require('../../heidi-core/ops/ops-agent');
 const OpsStore = require('../../heidi-core/ops/ops-store');
 const { runOpsCommand, isOpsQuery, parseOpsCommand } = require('../../heidi-core/ops/ops-commands');
@@ -255,5 +258,41 @@ describe('ops agent — redaction + commands', () => {
     expect(pause).toMatch(/PAUSED/);
     expect(isOpsQuery('ops status')).toBe(true);
     expect(isOpsQuery('not ops')).toBe(false);
+  });
+});
+
+describe('ops store — real sqlite regression (opened_at NOT NULL)', () => {
+  // The fake memory store above never enforced NOT NULL, which is why the
+  // missing opened_at shipped: reconcile() opened incidents without a
+  // timestamp and every live insert failed with SQLITE_CONSTRAINT. This
+  // block runs OpsStore against a real temp sqlite DB so constraints apply.
+  let sqliteAvailable = true;
+  let SqliteStore = null;
+  try { require('sqlite3'); SqliteStore = require('../../heidi-core/memory/sqlite-store'); }
+  catch { sqliteAvailable = false; }
+  const maybe = sqliteAvailable ? it : it.skip;
+
+  maybe('openIncident without opened_at still writes a row (defaults to now)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ops-store-'));
+    const mem = new SqliteStore({ dbPath: path.join(dir, 'heidi_memory.db') });
+    const s = new OpsStore(mem); await s.ready;
+    expect(await s.ready).toBe(true);
+    // Exact shape reconcile() used to send — no opened_at/updated_at.
+    await s.openIncident({ id: 'rt1', signature: 'svc:module_down', component: 'svc', kind: 'module_down', mode: 'observe', observation: {} });
+    const inc = await s.getIncident('rt1');
+    expect(inc).toBeTruthy();
+    expect(inc.opened_at).toBeTruthy();
+    expect(inc.updated_at).toBeTruthy();
+    expect(new Date(inc.opened_at).getTime()).not.toBeNaN();
+  });
+
+  maybe('openIncident honors an explicit opened_at', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ops-store-'));
+    const mem = new SqliteStore({ dbPath: path.join(dir, 'heidi_memory.db') });
+    const s = new OpsStore(mem); await s.ready;
+    await s.openIncident({ id: 'rt2', signature: 'svc:module_down', component: 'svc', kind: 'module_down', mode: 'observe', opened_at: '2026-01-01T00:00:00.000Z', observation: {} });
+    const inc = await s.getIncident('rt2');
+    expect(inc.opened_at).toBe('2026-01-01T00:00:00.000Z');
+    expect(inc.updated_at).toBe('2026-01-01T00:00:00.000Z');
   });
 });
