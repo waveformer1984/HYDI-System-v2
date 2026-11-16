@@ -23,41 +23,112 @@ const ROOT = path.resolve(__dirname, '..');
 const REPORT_DIR = path.join(ROOT, '.runtime', 'watchdog');
 const PROPOSAL_TTL_MS = 60 * 60 * 1000;
 
-let pm2AppsCache = null;
-function pm2Apps() {
-  if (pm2AppsCache) return pm2AppsCache;
+// PM2 snapshot lifecycle (fixed 2026-11-16): the original code cached the
+// first `pm2 jlist` result for the life of the watchdog process. When that
+// first read caught heidi-web-standalone mid-restart ("waiting restart",
+// pid=none), every later tick reported SPLIT-BRAIN against a stale snapshot
+// even though PM2 had long since recovered — a false positive that also
+// masked real orphan detection. The snapshot now refreshes once per
+// monitoring cycle (TTL below), is shared by all endpoints in that cycle,
+// distinguishes query/parse failure from a legitimately absent process, and
+// is only reused stale (bounded) when a refresh fails — never silently.
+const PM2_SNAPSHOT_TTL_MS = 20 * 1000;        // ~one watchdog cycle; shared within it
+const PM2_SNAPSHOT_MAX_STALE_MS = 120 * 1000; // older than this = unusable, report unknown
+const PM2_JLIST_TIMEOUT_MS = 8000;
+const NETSTAT_TIMEOUT_MS = 8000;
+
+let pm2Snapshot = null; // { at, apps: array|null, error: string|null }
+
+function queryPm2Apps() {
+  let out;
   try {
-    const out = execSync('pm2 jlist', {
-      encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+    out = execSync('pm2 jlist', {
+      encoding: 'utf8', timeout: PM2_JLIST_TIMEOUT_MS, stdio: 'pipe', windowsHide: true,
     });
-    const list = JSON.parse(out);
-    pm2AppsCache = Array.isArray(list) ? list : [];
-  } catch {
-    pm2AppsCache = [];
+  } catch (e) {
+    return { apps: null, error: `pm2 jlist failed: ${e.message}` };
   }
-  return pm2AppsCache;
+  let list;
+  try {
+    list = JSON.parse(out);
+  } catch (e) {
+    return { apps: null, error: `pm2 jlist returned unparseable output: ${e.message}` };
+  }
+  if (!Array.isArray(list)) {
+    // Valid JSON but not a process list — a shape failure, NOT "process absent".
+    return { apps: null, error: 'pm2 jlist returned JSON that is not an array' };
+  }
+  return { apps: list, error: null };
 }
 
-function appForEndpoint(epName) {
-  return pm2Apps().find((a) =>
+/**
+ * Returns { status, apps, ageMs, error }:
+ *   'fresh'       — snapshot taken within TTL (or just refreshed) this cycle
+ *   'stale'       — refresh failed; last-good snapshot reused, age <= MAX_STALE
+ *   'unavailable' — no usable snapshot (first query failed, or last-good too old)
+ * 'apps' is null unless status is 'fresh' or 'stale'. 'stale'/'unavailable'
+ * must never be treated as authoritative current PM2 state.
+ */
+function getPm2Snapshot(now = Date.now()) {
+  if (pm2Snapshot && now - pm2Snapshot.at < PM2_SNAPSHOT_TTL_MS) {
+    return { status: 'fresh', apps: pm2Snapshot.apps, ageMs: now - pm2Snapshot.at, error: null };
+  }
+  const q = queryPm2Apps();
+  if (!q.error) {
+    pm2Snapshot = { at: now, apps: q.apps, error: null };
+    return { status: 'fresh', apps: q.apps, ageMs: 0, error: null };
+  }
+  if (pm2Snapshot && now - pm2Snapshot.at <= PM2_SNAPSHOT_MAX_STALE_MS) {
+    return { status: 'stale', apps: pm2Snapshot.apps, ageMs: now - pm2Snapshot.at, error: q.error };
+  }
+  return { status: 'unavailable', apps: null, ageMs: pm2Snapshot ? now - pm2Snapshot.at : null, error: q.error };
+}
+
+function appForEndpoint(apps, epName) {
+  return (apps || []).find((a) =>
     a && a.name && (a.name === epName || a.name.startsWith(`${epName}-`) || epName.startsWith(`${a.name}-`))
   ) || null;
 }
 
+// Listener table is refreshed once per annotateSplitBrain() call (i.e. per
+// monitoring cycle) — the old process-lifetime cache froze port→PID mappings
+// exactly like the PM2 cache did. { available:false } is distinct from an
+// available-but-empty table: exec failure/timeout vs. genuinely no LISTENING
+// row. On Windows a port that just answered HTTP always has a row, so an
+// empty result after a *successful* netstat means the parse found nothing —
+// still reported as available with zero PIDs (no evidence of an orphan).
 const listenerCache = new Map();
 function listenerPids(port) {
   if (listenerCache.has(port)) return listenerCache.get(port);
-  const pids = new Set();
+  const result = { available: false, pids: new Set(), error: null };
+  let out;
   try {
-    const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true });
-    const re = new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`);
-    for (const line of out.split(/\r?\n/)) {
-      const m = line.match(re);
-      if (m) pids.add(Number(m[1]));
-    }
-  } catch { /* netstat unavailable — no evidence either way */ }
-  listenerCache.set(port, pids);
-  return pids;
+    out = execSync('netstat -ano', { encoding: 'utf8', timeout: NETSTAT_TIMEOUT_MS, stdio: 'pipe', windowsHide: true });
+  } catch (e) {
+    result.error = `netstat -ano failed: ${e.message}`;
+    listenerCache.set(port, result);
+    return result;
+  }
+  result.available = true;
+  const re = new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`);
+  for (const line of out.split(/\r?\n/)) {
+    const m = line.match(re);
+    if (m) result.pids.add(Number(m[1]));
+  }
+  listenerCache.set(port, result);
+  return result;
+}
+
+function writeSnapshotReport(snap) {
+  try {
+    fs.mkdirSync(REPORT_DIR, { recursive: true });
+    const file = path.join(REPORT_DIR, 'pm2-snapshot.json');
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify({
+      status: snap.status, ageMs: snap.ageMs, appCount: snap.apps ? snap.apps.length : null,
+      error: snap.error, at: new Date().toISOString(),
+    }, null, 2));
+    fs.renameSync(`${file}.tmp`, file);
+  } catch { /* best-effort observability */ }
 }
 
 function portOf(url) {
@@ -117,9 +188,26 @@ function proposeKill(epName, report) {
  * Safe to call when PM2 is unreachable — it just finds no apps and skips.
  */
 function annotateSplitBrain(results) {
-  let apps;
-  try { apps = pm2Apps(); } catch { return; }
-  if (!apps.length) return;
+  listenerCache.clear(); // fresh listener table once per monitoring cycle
+  const snap = getPm2Snapshot();
+  writeSnapshotReport(snap);
+
+  if (snap.status === 'unavailable') {
+    // No usable PM2 snapshot: ownership is unverifiable this cycle. Surface
+    // the uncertainty on each healthy result instead of silently skipping
+    // (a permanently unreadable jlist must not become invisible) and instead
+    // of flipping health on zero evidence. Split-brain detection resumes on
+    // the next cycle with a fresh snapshot.
+    for (const r of results) {
+      if (!r || r.ok !== true || r.splitBrainChecked) continue;
+      const port = portOf(r.url);
+      if (!port) continue;
+      r.splitBrainChecked = true;
+      r.splitBrainUnknown = true;
+      r.splitBrainNote = `PM2 snapshot unavailable (${snap.error}); split-brain check skipped this cycle`;
+    }
+    return snap;
+  }
 
   for (const r of results) {
     if (!r || r.ok !== true || r.splitBrainChecked) continue;
@@ -127,7 +215,7 @@ function annotateSplitBrain(results) {
     if (!port) continue;
     r.splitBrainChecked = true;
 
-    const app = appForEndpoint(r.name);
+    const app = appForEndpoint(snap.apps, r.name);
     if (!app) continue; // not PM2-managed (or no mapping) — nothing to compare
 
     const listeners = listenerPids(port);
@@ -137,23 +225,37 @@ function annotateSplitBrain(results) {
 
     let orphanPids = [];
     let splitBrain = false;
-    if (listeners.size) {
-      const managedListening = pm2Online && listeners.has(pm2Pid);
+    if (listeners.available && listeners.pids.size) {
+      const managedListening = pm2Online && listeners.pids.has(pm2Pid);
       if (!managedListening) {
         orphanPids = pm2Online
-          ? [...listeners].filter((p) => p !== pm2Pid)
-          : [...listeners];
+          ? [...listeners.pids].filter((p) => p !== pm2Pid)
+          : [...listeners.pids];
         splitBrain = orphanPids.length > 0;
       }
     } else {
-      // Listener table unavailable (sandboxed shell, permissions, non-Windows
-      // netstat differences): the endpoint answered but PM2 does not consider
-      // its app online — that alone is split-brain evidence. Orphan PID is
-      // unknown; report and proposal degrade gracefully.
-      splitBrain = !pm2Online;
+      // Listener table unusable: either netstat failed/timed out
+      // (available=false) or it succeeded but showed no LISTENING row for a
+      // port that just answered HTTP (available=true, empty — e.g. a
+      // permission-limited or IPv6-only view). In both cases we cannot name
+      // the listener PID. If PM2 (fresh snapshot) says its app is not online,
+      // the answered port is provably not PM2-owned — flag SPLIT-BRAIN with
+      // unknown orphan PID (the 2026-11-11 blind spot this module exists for).
+      // If PM2 says online, ownership is plausible but unverified — surface
+      // uncertainty, do not flip health.
+      if (!pm2Online) {
+        splitBrain = true;
+      } else {
+        r.splitBrainUnknown = true;
+        r.splitBrainNote = `listener table ${listeners.available ? 'has no row' : `unavailable (${listeners.error})`}; ` +
+          `PM2 ${app.name} online pid=${pm2Pid} — ownership unverified`;
+      }
     }
     if (!splitBrain) continue; // PM2's own instance owns the port (or unverifiable + PM2 online)
 
+    const staleNote = snap.status === 'stale'
+      ? `; pm2 snapshot stale (age ${Math.round(snap.ageMs / 1000)}s, refresh error: ${snap.error})`
+      : '';
     const report = {
       component: r.name,
       port,
@@ -162,6 +264,10 @@ function annotateSplitBrain(results) {
       pm2Status,
       pm2Pid,
       orphanPids,
+      listenerAvailable: listeners.available,
+      listenerError: listeners.error,
+      pm2SnapshotStatus: snap.status,
+      pm2SnapshotAgeMs: snap.ageMs,
       proposedAt: null,
     };
     writeReport(r.name, report);
@@ -177,8 +283,14 @@ function annotateSplitBrain(results) {
     r.reason = `SPLIT-BRAIN: port ${port} answered while PM2 ${app.name} status=${pm2Status} pid=${pm2Pid || 'none'}` +
       (orphanPids.length
         ? `; orphan pid(s) ${orphanPids.join(', ')} (not killed; kill proposed via mission inbox).`
-        : '; listener table unavailable so orphan pid unknown (not killed).');
+        : '; listener table unavailable so orphan pid unknown (not killed).') +
+      staleNote;
   }
+  return snap;
 }
 
-module.exports = { annotateSplitBrain, _reset: () => { pm2AppsCache = null; listenerCache.clear(); } };
+module.exports = {
+  annotateSplitBrain,
+  _reset: () => { pm2Snapshot = null; listenerCache.clear(); },
+  _getPm2Snapshot: getPm2Snapshot,
+};
