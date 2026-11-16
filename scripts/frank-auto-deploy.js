@@ -529,6 +529,193 @@ function writeDeployManifest({ root, commit, fsx = realFs }) {
   } catch { /* manifest is evidence, never a deploy blocker */ }
 }
 
+// ---------------------------------------------------------------------------
+// Dependency identity. A deploy must never build or restart against a
+// dependency tree that does not belong to the candidate commit. Automatic
+// installs are disabled, so the deploy can only proceed when (a) no
+// dependency manifest changes between the live and candidate commits and
+// (b) every installed tree on disk matches the candidate's lockfile.
+// ---------------------------------------------------------------------------
+
+const LOCKFILE_NAMES = Object.freeze(['package-lock.json', 'npm-shrinkwrap.json']);
+// package.json fields that change what `npm ci` would install. Edits to
+// scripts, metadata, etc. do not need a dependency install.
+const DEPENDENCY_FIELDS = Object.freeze([
+  'dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies',
+  'peerDependenciesMeta', 'bundleDependencies', 'bundledDependencies',
+  'overrides', 'workspaces', 'packageManager',
+]);
+
+function baseName(p) {
+  const parts = String(p).split('/');
+  return parts[parts.length - 1];
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stableJson(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+/** Dependency-relevant fields of a package.json text; null when unparseable. */
+function dependencyFields(text) {
+  if (text === null) return {};
+  try {
+    const pkg = JSON.parse(text);
+    const out = {};
+    for (const field of DEPENDENCY_FIELDS) if (pkg[field] !== undefined) out[field] = pkg[field];
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function showFile(run, root, commit, rel) {
+  const result = await run('git', ['show', `${commit}:${rel}`], { cwd: root });
+  return result && result.code === 0 ? String(result.stdout) : null;
+}
+
+/**
+ * Every dependency manifest that changed between two commits in a way that
+ * would need an install: any lockfile/shrinkwrap change anywhere in the repo
+ * (root and sub-projects like heidi-core), and any package.json whose
+ * dependency fields changed (or that could not be parsed — fail closed).
+ * Returns repo-relative paths.
+ */
+async function dependencyManifestChanges({ run, root, from, to }) {
+  const diff = await mustRun(run, 'git', ['diff', '--name-only', from, to], { cwd: root });
+  const files = diff.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const changed = [];
+  for (const rel of files) {
+    const name = baseName(rel);
+    if (LOCKFILE_NAMES.includes(name)) {
+      changed.push(rel);
+    } else if (name === 'package.json') {
+      const before = dependencyFields(await showFile(run, root, from, rel));
+      const after = dependencyFields(await showFile(run, root, to, rel));
+      if (before === null || after === null || stableJson(before) !== stableJson(after)) changed.push(rel);
+    }
+  }
+  return changed;
+}
+
+function platformMatches(entry, platform, arch) {
+  const allowed = (list, value) => {
+    if (!Array.isArray(list) || !list.length) return true;
+    const denied = list.filter((v) => String(v).startsWith('!')).map((v) => String(v).slice(1));
+    if (denied.includes(value)) return false;
+    const wanted = list.filter((v) => !String(v).startsWith('!'));
+    return !wanted.length || wanted.includes(value);
+  };
+  return allowed(entry.os, platform) && allowed(entry.cpu, arch);
+}
+
+/**
+ * Compare npm's record of the installed tree (node_modules/.package-lock.json)
+ * with a candidate lockfile, entry by entry. The two files are never
+ * byte-identical: the installed record omits the root "" entry and every
+ * optional package that was not installed (e.g. other platforms' esbuild and
+ * sharp binaries), so a hash comparison would block every deploy.
+ */
+function compareInstalledTree(candidateText, installedText, { platform = process.platform, arch = process.arch } = {}) {
+  let candidate;
+  let installed;
+  try { candidate = JSON.parse(candidateText); } catch { return { ok: false, reason: 'candidate lockfile is not valid JSON' }; }
+  try { installed = JSON.parse(installedText); } catch { return { ok: false, reason: 'installed-tree record is not valid JSON' }; }
+  const cp = candidate && candidate.packages;
+  const ip = installed && installed.packages;
+  if (!cp || typeof cp !== 'object') return { ok: false, reason: 'candidate lockfile has no "packages" map (lockfileVersion < 2)' };
+  if (!ip || typeof ip !== 'object') return { ok: false, reason: 'installed-tree record has no "packages" map' };
+
+  const mismatched = [];
+  const extraneous = [];
+  const missing = [];
+  for (const [key, have] of Object.entries(ip)) {
+    if (!key) continue;
+    const want = cp[key];
+    if (!want) { extraneous.push(key); continue; }
+    const versionDiffers = (want.version || null) !== (have.version || null);
+    const integrityDiffers = Boolean(want.integrity && have.integrity && want.integrity !== have.integrity);
+    const linkDiffers = Boolean(want.link) !== Boolean(have.link);
+    if (versionDiffers || integrityDiffers || linkDiffers) {
+      mismatched.push(`${key.replace(/^node_modules\//, '')} ${have.version || '?'}≠${want.version || '?'}`);
+    }
+  }
+  for (const [key, want] of Object.entries(cp)) {
+    if (!key || ip[key]) continue;
+    // Optional packages, and packages restricted to another OS/CPU, are
+    // legitimately absent. Everything else npm ci would have installed.
+    if (want.optional || !platformMatches(want, platform, arch)) continue;
+    missing.push(key.replace(/^node_modules\//, ''));
+  }
+  const problems = [];
+  if (mismatched.length) problems.push(`${mismatched.length} version/integrity mismatch(es), e.g. ${mismatched.slice(0, 3).join(', ')}`);
+  if (missing.length) problems.push(`${missing.length} missing, e.g. ${missing.slice(0, 3).join(', ')}`);
+  if (extraneous.length) problems.push(`${extraneous.length} not in lockfile, e.g. ${extraneous.slice(0, 3).map((k) => k.replace(/^node_modules\//, '')).join(', ')}`);
+  return { ok: problems.length === 0, reason: problems.join('; '), mismatched, missing, extraneous };
+}
+
+/**
+ * Verify every installed dependency tree on disk against the candidate
+ * commit's lockfiles. The root tree must exist and match. A sub-project
+ * (heidi-core, mcp/protoforge-mcp, ...) with a node_modules must match; one
+ * with no node_modules is not installed on this host and is reported as
+ * skipped. A tree without npm's installed-tree record is unverifiable and
+ * blocks (fail closed).
+ */
+async function verifyInstalledDependencies({ run, root, commit, fsx = realFs, platform, arch }) {
+  const tree = await mustRun(run, 'git', ['ls-tree', '-r', '--name-only', commit], { cwd: root });
+  const lockfiles = tree.stdout.split(/\r?\n/).map((line) => line.trim())
+    .filter((rel) => rel && LOCKFILE_NAMES.includes(baseName(rel)));
+  const problems = [];
+  const verified = [];
+  const skipped = [];
+  if (!lockfiles.includes('package-lock.json') && !lockfiles.includes('npm-shrinkwrap.json')) {
+    problems.push('candidate has no root lockfile');
+  }
+  for (const rel of lockfiles) {
+    const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+    const isRoot = dir === '';
+    const nodeModules = path.join(root, dir, 'node_modules');
+    if (!fsx.exists(nodeModules)) {
+      if (isRoot) problems.push(`${rel}: node_modules is missing`);
+      else skipped.push(rel);
+      continue;
+    }
+    const record = path.join(nodeModules, '.package-lock.json');
+    let installedText = null;
+    try {
+      if (fsx.exists(record) && typeof fsx.readFile === 'function') installedText = String(fsx.readFile(record));
+    } catch { installedText = null; }
+    if (installedText === null) {
+      problems.push(`${rel}: no readable node_modules/.package-lock.json — installed tree provenance unverifiable`);
+      continue;
+    }
+    const candidateText = await showFile(run, root, commit, rel);
+    if (candidateText === null) {
+      problems.push(`${rel}: could not read the candidate lockfile`);
+      continue;
+    }
+    const cmp = compareInstalledTree(candidateText, installedText, { platform, arch });
+    if (cmp.ok) verified.push(rel);
+    else problems.push(`${rel}: ${cmp.reason}`);
+  }
+  return {
+    ok: problems.length === 0,
+    reason: problems.slice(0, 3).join(' | ') + (problems.length > 3 ? ` | +${problems.length - 3} more` : ''),
+    problems,
+    verified,
+    skipped,
+  };
+}
+
+/** Full 40-hex commit id, or null. */
+function isFullSha(value) {
+  return /^[0-9a-f]{40}$/.test(String(value || ''));
+}
+
 async function rollback({ run, root, platform, oldCommit, lockChanged, healthOptions, swapped = false, fsx = realFs }) {
   await mustRun(run, 'git', ['reset', '--hard', oldCommit], { cwd: root });
   // Restore the preserved dependency tree by rename — rollback must never
@@ -624,8 +811,30 @@ async function runAutoDeploy(overrides = {}) {
       result = { status: 'blocked', reason };
     } else {
       oldCommit = (await mustRun(run, 'git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim();
-      newCommit = (await mustRun(run, 'git', ['rev-parse', 'origin/clean-main'], { cwd: root })).stdout.trim();
-      if (oldCommit === newCommit) {
+      // The candidate is resolved to one exact commit, once. Everything after
+      // this — the dependency checks, the fast-forward, the manifest — uses
+      // that id, never the moving origin/clean-main ref.
+      if (overrides.commit) {
+        const pinned = String(overrides.commit).trim();
+        const resolved = /^[0-9a-f]{7,40}$/i.test(pinned)
+          ? await run('git', ['rev-parse', '--verify', `${pinned}^{commit}`], { cwd: root })
+          : null;
+        const sha = resolved && resolved.code === 0 ? String(resolved.stdout).trim() : '';
+        if (!isFullSha(sha)) {
+          result = { status: 'blocked', reason: `pinned commit ${pinned} not found` };
+        } else {
+          const onMain = await run('git', ['merge-base', '--is-ancestor', sha, 'origin/clean-main'], { cwd: root });
+          if (!onMain || onMain.code !== 0) result = { status: 'blocked', reason: `pinned commit ${sha.slice(0, 8)} is not on origin/clean-main` };
+          else newCommit = sha;
+        }
+      } else {
+        newCommit = (await mustRun(run, 'git', ['rev-parse', 'origin/clean-main'], { cwd: root })).stdout.trim();
+      }
+      if (result) {
+        await alert(result.reason, `Frank auto-deploy stopped: ${result.reason}. Nothing changed.`);
+      } else if (!isFullSha(oldCommit) || !isFullSha(newCommit)) {
+        result = { status: 'failed', reason: `could not resolve commits (HEAD=${oldCommit || '?'}, candidate=${newCommit || '?'})` };
+      } else if (oldCommit === newCommit) {
         const stamp = readStamp(root);
         const stampSha = stamp && stamp.gitSha;
         if (stampSha && stampSha !== newCommit && readRebuildMarker(rebuildMarkerPath) !== newCommit) {
@@ -675,8 +884,8 @@ async function runAutoDeploy(overrides = {}) {
       if (!rebuild) {
         const log = await mustRun(run, 'git', ['log', '--format=%B%x1e', `${oldCommit}..${newCommit}`], { cwd: root });
         prTitles = parseMergedPrTitles(log.stdout);
-        const lockDiff = await mustRun(run, 'git', ['diff', '--name-only', oldCommit, newCommit, '--', 'package-lock.json'], { cwd: root });
-        lockChanged = lockDiff.stdout.split(/\r?\n/).some((line) => line.trim() === 'package-lock.json');
+        const manifestChanges = await dependencyManifestChanges({ run, root, from: oldCommit, to: newCommit });
+        lockChanged = manifestChanges.length > 0;
 
         if (lockChanged) {
           // FAIL CLOSED: a lockfile change means dependencies must change, and
@@ -685,12 +894,34 @@ async function runAutoDeploy(overrides = {}) {
           // and a rename does not prove they tolerate it. A successful rename
           // is not consumer safety. Manual maintenance / staged-release
           // migration is required; nothing is touched.
-          const reason = `package-lock.json changed ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)} — ` +
+          const listed = manifestChanges.slice(0, 5).join(', ') + (manifestChanges.length > 5 ? `, +${manifestChanges.length - 5} more` : '');
+          const reason = `dependency manifests changed ${oldCommit.slice(0, 8)}→${newCommit.slice(0, 8)} (${listed}) — ` +
             'automatic dependency install is disabled; manual maintenance window required';
           await alert('lockfile_change', `Frank auto-deploy paused: ${reason}. Nothing changed.`);
-          result = { status: 'blocked', reason };
-        } else {
-          await mustRun(run, 'git', ['merge', '--ff-only', 'origin/clean-main'], { cwd: root });
+          result = { status: 'blocked', reason, manifestChanges };
+        }
+      }
+      if (!result) {
+        // The manifests did not change, but that says nothing about what is
+        // actually on disk: a hand-run install, a half-finished npm ci, or a
+        // checkout that already sits at the candidate can all leave
+        // node_modules belonging to some other lockfile. Check the trees
+        // themselves against the candidate before anything moves.
+        const deps = await (overrides.verifyInstalledDependencies || verifyInstalledDependencies)({ run, root, commit: newCommit, fsx });
+        if (!deps.ok) {
+          const reason = `installed dependencies do not match ${newCommit.slice(0, 8)}: ${deps.reason}`;
+          await alert('dependency_mismatch', `Frank auto-deploy paused: ${reason}. Nothing changed. A manual dependency maintenance window is required.`);
+          result = { status: 'blocked', reason, dependencyProblems: deps.problems };
+        }
+      }
+      if (!result && !rebuild) {
+        // From here a failure must reset the checkout, so mark it before the
+        // merge rather than after.
+        updated = true;
+        await mustRun(run, 'git', ['merge', '--ff-only', newCommit], { cwd: root });
+        const head = (await mustRun(run, 'git', ['rev-parse', '--verify', 'HEAD'], { cwd: root })).stdout.trim();
+        if (head !== newCommit) {
+          throw new Error(`checkout is at ${head.slice(0, 8) || 'unknown'} after fast-forward, expected exactly ${newCommit.slice(0, 8)}`);
         }
       }
       if (!result) {
@@ -725,6 +956,8 @@ async function runAutoDeploy(overrides = {}) {
       } else {
         if (rebuild) clearRebuildMarker(rebuildMarkerPath);
         dropNodeModulesBackup({ root, fsx });
+        // newCommit is the verified HEAD: asserted right after the
+        // fast-forward, and equal to HEAD by construction on a rebuild.
         writeDeployManifest({ root, commit: newCommit, fsx });
         await postToBoard('ops', [
           `${what}: ${from.slice(0, 8)}→${newCommit.slice(0, 8)}`,
@@ -820,9 +1053,71 @@ function startDeployLoop({
   return { tick, timer };
 }
 
+/**
+ * CLI: no arguments runs the long-lived loop (PM2). `--once` runs one deploy
+ * pass and exits, which lets a separate clone at an exact commit drive the
+ * production tree: `node scripts/frank-auto-deploy.js --once --root <prod>
+ * [--commit <sha>]`. --root and --commit are only accepted with --once so a
+ * second long-lived loop can never be pointed at production by accident.
+ */
+function parseCliArgs(argv) {
+  const out = { once: false, root: null, commit: null };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--once') out.once = true;
+    else if (arg === '--root' || arg === '--commit') {
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) throw new Error(`${arg} needs a value`);
+      out[arg.slice(2)] = value;
+      i += 1;
+    } else throw new Error(`unknown argument: ${arg}`);
+  }
+  if ((out.root || out.commit) && !out.once) throw new Error('--root and --commit require --once');
+  return out;
+}
+
+/** Exit code for a --once pass: 0 deployed/noop, 2 blocked/lock held, 1 anything else. */
+function onceExitCode(result) {
+  const status = result && result.status;
+  if (status === 'deployed' || status === 'noop') return 0;
+  if (status === 'blocked' || status === 'lock_held') return 2;
+  return 1;
+}
+
+async function runOnce({ root, commit, deploy = runAutoDeploy, out = (line) => console.log(line) } = {}) {
+  const result = await deploy({ root, ...(commit ? { commit } : {}) });
+  out(JSON.stringify({
+    status: result.status,
+    reason: result.reason || null,
+    oldCommit: result.oldCommit || null,
+    newCommit: result.newCommit || null,
+    summary: result.status === 'deployed' || result.status === 'rolled_back' ? describeOutcome(result) : undefined,
+  }));
+  return onceExitCode(result);
+}
+
 if (require.main === module) {
-  require('../lib/runtime/board-env').loadBoardEnv(path.resolve(__dirname, '..'));
-  require('../lib/runtime/provenance').recordProcessProvenance(APP_NAME).then(() => startDeployLoop());
+  let cli;
+  try {
+    cli = parseCliArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`[${APP_NAME}] ${error instanceof Error ? error.message : error}`);
+    process.exit(64);
+  }
+  const root = cli.root ? path.resolve(cli.root) : path.resolve(__dirname, '..');
+  if (cli.root && !fs.existsSync(path.join(root, '.git'))) {
+    console.error(`[${APP_NAME}] --root ${root} is not a git checkout`);
+    process.exit(64);
+  }
+  require('../lib/runtime/board-env').loadBoardEnv(root);
+  if (cli.once) {
+    runOnce({ root, commit: cli.commit }).then((code) => { process.exitCode = code; }, (error) => {
+      console.error(`[${APP_NAME}] ${error instanceof Error ? error.message : error}`);
+      process.exitCode = 1;
+    });
+  } else {
+    require('../lib/runtime/provenance').recordProcessProvenance(APP_NAME).then(() => startDeployLoop());
+  }
 }
 
 module.exports = {
@@ -855,6 +1150,12 @@ module.exports = {
   restoreNodeModules,
   dropNodeModulesBackup,
   writeDeployManifest,
+  dependencyManifestChanges,
+  compareInstalledTree,
+  verifyInstalledDependencies,
+  parseCliArgs,
+  onceExitCode,
+  runOnce,
   NM_PREV_DIR,
   NM_FAILED_DIR,
   rollback,

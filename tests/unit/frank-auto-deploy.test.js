@@ -20,6 +20,9 @@ const {
 } = require('../../scripts/frank-auto-deploy');
 
 const OLD = '1111111111111111111111111111111111111111';
+// Tests that are not about dependency identity stub the installed-tree check
+// as passing; the dependency-identity suite below exercises the real one.
+const DEPS_OK = async () => ({ ok: true, reason: '', problems: [], verified: ['package-lock.json'], skipped: [] });
 const NEW = '2222222222222222222222222222222222222222';
 
 function ok(stdout = '') {
@@ -35,14 +38,20 @@ function tmpDir() {
  * directories that exist; a staged build "produces" its markers when `run`
  * sees the build command.
  */
-function memFs(initial = []) {
+function memFs(initial = [], fileContents = {}) {
   const dirs = new Set(initial.map((p) => p.replace(/\\/g, '/')));
   const norm = (p) => p.replace(/\\/g, '/');
+  const files = new Map(Object.entries(fileContents).map(([k, v]) => [norm(k), v]));
   const ops = [];
   const api = {
     dirs,
+    files,
     ops,
-    exists: (p) => dirs.has(norm(p)),
+    exists: (p) => dirs.has(norm(p)) || files.has(norm(p)),
+    readFile: (p) => {
+      if (!files.has(norm(p))) throw new Error(`ENOENT ${norm(p)}`);
+      return Buffer.from(files.get(norm(p)));
+    },
     rm: (p) => {
       const n = norm(p);
       for (const d of [...dirs]) if (d === n || d.startsWith(`${n}/`)) dirs.delete(d);
@@ -106,6 +115,7 @@ function baseGitRun(overrides = {}) {
     if (key === 'git checkout -- next-env.d.ts') return ok();
     if (key === 'git status --porcelain --untracked-files=no') return ok();
     if (key === 'git rev-parse HEAD') return ok(`${OLD}\n`);
+    if (key === 'git rev-parse --verify HEAD') return ok(`${NEW}\n`);
     if (key === 'git rev-parse origin/clean-main') return ok(`${NEW}\n`);
     throw new Error(`unexpected command: ${key}`);
   });
@@ -117,6 +127,7 @@ describe('Frank auto-deploy', () => {
     const post = jest.fn();
     const release = jest.fn();
     await expect(runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: '/repo',
       run,
       post,
@@ -135,6 +146,7 @@ describe('Frank auto-deploy', () => {
     const post = jest.spyOn(board, 'post').mockResolvedValue({ ok: true });
     try {
       const result = await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
         root: '/repo',
         run,
         acquireLock: () => jest.fn(),
@@ -169,10 +181,13 @@ describe('Frank auto-deploy', () => {
       if (key === 'git status --porcelain --untracked-files=no') return ok();
       if (key === 'git status --porcelain') return ok('?? .next.pre-x-backup/\n?? .codex/\n');
       if (key === 'git rev-parse HEAD') return ok(`${OLD}\n`);
+      if (key === 'git rev-parse --verify HEAD') return ok(`${NEW}\n`);
+    if (key === 'git rev-parse --verify HEAD') return ok(`${NEW}\n`);
       if (key === 'git rev-parse origin/clean-main') return ok(`${OLD}\n`);
       throw new Error(`unexpected command: ${key}`);
     });
     const result = await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: '/repo',
       run,
       post: jest.fn(),
@@ -198,13 +213,15 @@ describe('Frank auto-deploy', () => {
       if (key === 'git checkout -- next-env.d.ts') return ok();
       if (key === 'git status --porcelain --untracked-files=no') return ok();
       if (key === 'git rev-parse HEAD') return ok(`${OLD}\n`);
+      if (key === 'git rev-parse --verify HEAD') return ok(`${NEW}\n`);
+    if (key === 'git rev-parse --verify HEAD') return ok(`${NEW}\n`);
       if (key === 'git rev-parse origin/clean-main') return ok(`${NEW}\n`);
       if (key === `git merge-base --is-ancestor ${OLD} ${NEW}`) return ok();
       if (key === `git log --format=%B%x1e ${OLD}..${NEW}`) {
         return ok('Merge pull request #390 from branch\n\nIsolate board senders\n\x1e');
       }
-      if (key === `git diff --name-only ${OLD} ${NEW} -- package-lock.json`) return ok();
-      if (key === 'git merge --ff-only origin/clean-main') return ok();
+      if (key === `git diff --name-only ${OLD} ${NEW}`) return ok();
+      if (key === `git merge --ff-only ${NEW}`) return ok();
       if (key === `git reset --hard ${OLD}`) {
         rolledBack = true;
         return ok();
@@ -232,6 +249,7 @@ describe('Frank auto-deploy', () => {
     const posts = [];
     let clock = 0;
     const result = await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: ROOT,
       platform: 'win32',
       run,
@@ -284,6 +302,7 @@ describe('Frank auto-deploy', () => {
     const posts = [];
     const preflight = jest.fn(() => ({ ok: false, freeGb: 1.2, reason: 'only 1.2 GB free, needs 5 GB' }));
     const result = await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: tmpDir(),
       platform: 'win32',
       run,
@@ -297,7 +316,7 @@ describe('Frank auto-deploy', () => {
     expect(result).toEqual({ status: 'blocked', reason: 'low disk: only 1.2 GB free, needs 5 GB' });
     expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ minFreeGb: 5 }));
     const commands = run.mock.calls.map(([file, args]) => `${file} ${args.join(' ')}`);
-    expect(commands).not.toContain('git merge --ff-only origin/clean-main');
+    expect(commands).not.toContain(`git merge --ff-only ${NEW}`);
     expect(commands.some((c) => c.includes('run build'))).toBe(false);
     expect(posts).toHaveLength(1);
     expect(posts[0].channel).toBe('alerts');
@@ -308,6 +327,7 @@ describe('Frank auto-deploy', () => {
     const run = jest.fn();
     const post = jest.fn();
     await expect(runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: '/repo',
       run,
       post,
@@ -326,6 +346,7 @@ describe('Frank auto-deploy', () => {
       'git status --porcelain --untracked-files=no': ok(' M lib/file.js\n'),
     });
     const deploy = (run) => runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: '/repo',
       run,
       post,
@@ -369,17 +390,21 @@ describe('Frank auto-deploy', () => {
       alertStatePath,
     };
 
-    await runAutoDeploy({ ...options, run: dirtyRun });
+    await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK, ...options, run: dirtyRun });
     expect(readAlertState(alertStatePath)).toBeNull();
-    await runAutoDeploy({ ...options, run: dirtyRun });
+    await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK, ...options, run: dirtyRun });
     expect(readAlertState(alertStatePath)).toBe('working tree is dirty');
     expect(post).toHaveBeenCalledTimes(2);
 
     post.mockResolvedValueOnce({ ok: false, error: 'offline' });
     const noopRun = baseGitRun({ 'git rev-parse origin/clean-main': ok(`${OLD}\n`) });
-    await runAutoDeploy({ ...options, run: noopRun });
+    await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK, ...options, run: noopRun });
     expect(readAlertState(alertStatePath)).toBe('working tree is dirty');
-    await runAutoDeploy({ ...options, run: noopRun });
+    await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK, ...options, run: noopRun });
     expect(readAlertState(alertStatePath)).toBeNull();
   });
 
@@ -484,6 +509,7 @@ describe('Frank auto-deploy', () => {
     const post = jest.fn(async () => ({ ok: false, skipped: true, error: 'board auth not configured' }));
     const log = jest.fn();
     const result = await runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: '/repo',
       run,
       post,
@@ -628,11 +654,12 @@ describe('Frank auto-deploy staged builds', () => {
         'git checkout -- next-env.d.ts': ok(),
         'git status --porcelain --untracked-files=no': ok(),
         'git rev-parse HEAD': ok(`${OLD}\n`),
+        'git rev-parse --verify HEAD': ok(`${NEW}\n`),
         'git rev-parse origin/clean-main': ok(`${origin}\n`),
         [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
         [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
-        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(),
-        'git merge --ff-only origin/clean-main': ok(),
+        [`git diff --name-only ${OLD} ${NEW}`]: ok(),
+        [`git merge --ff-only ${NEW}`]: ok(),
         [`git reset --hard ${OLD}`]: ok(),
         'pm2.cmd jlist': ok(JLIST),
         'pm2.cmd stop heidi-web-standalone': ok(),
@@ -647,6 +674,7 @@ describe('Frank auto-deploy staged builds', () => {
       throw new Error(`unexpected command: ${key}`);
     });
     const deploy = (extra = {}) => runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: ROOT,
       platform: 'win32',
       run,
@@ -684,7 +712,7 @@ describe('Frank auto-deploy staged builds', () => {
       const h = harness({ origin: OLD });
       const result = await h.deploy({ readBuildStamp: stampOf(STALE), rebuildMarkerPath: path.join(tmpDir(), 'rebuild.json') });
       expect(result).toMatchObject({ status: 'deployed', rebuild: true, oldCommit: STALE, newCommit: OLD });
-      expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+      expect(h.calls).not.toContain(`git merge --ff-only ${NEW}`);
       expect(h.calls.filter((c) => c === 'npm.cmd run build')).toHaveLength(1);
       expect(h.calls.filter((c) => c.startsWith('pm2.cmd restart'))).toHaveLength(1);
       expect(h.fsx.exists(`${ROOT}/.next-prev/BUILD_ID`)).toBe(true);
@@ -833,7 +861,7 @@ describe('Frank auto-deploy staged builds', () => {
     const h = harness();
     const result = await h.deploy({ memoryPreflight: () => ({ ok: false, freeGb: 0.3, reason: 'only 0.3 GB RAM free, needs 0.75 GB' }) });
     expect(result).toEqual({ status: 'blocked', reason: 'low memory: only 0.3 GB RAM free, needs 0.75 GB' });
-    expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+    expect(h.calls).not.toContain(`git merge --ff-only ${NEW}`);
     expect(h.posts[0].body).toContain('waiting: only 0.3 GB RAM free');
   });
 
@@ -944,11 +972,12 @@ describe('automatic dependency installs are disabled (fail-closed)', () => {
         'git checkout -- next-env.d.ts': ok(),
         'git status --porcelain --untracked-files=no': ok(),
         'git rev-parse HEAD': ok(`${OLD}\n`),
+        'git rev-parse --verify HEAD': ok(`${NEW}\n`),
         'git rev-parse origin/clean-main': ok(`${NEW}\n`),
         [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
         [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
-        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(lockChanged ? 'package-lock.json\n' : ''),
-        'git merge --ff-only origin/clean-main': ok(),
+        [`git diff --name-only ${OLD} ${NEW}`]: ok(lockChanged ? 'package-lock.json\n' : ''),
+        [`git merge --ff-only ${NEW}`]: ok(),
         [`git reset --hard ${OLD}`]: ok(),
         'pm2.cmd jlist': ok(JLIST),
         'pm2.cmd restart heidi-web-standalone heidi-core --update-env': ok(),
@@ -964,6 +993,7 @@ describe('automatic dependency installs are disabled (fail-closed)', () => {
       throw new Error(`unexpected command: ${key}`);
     });
     const deploy = (extra = {}) => runAutoDeploy({
+      verifyInstalledDependencies: DEPS_OK,
       root: ROOT,
       platform: 'win32',
       run,
@@ -989,7 +1019,7 @@ describe('automatic dependency installs are disabled (fail-closed)', () => {
     expect(result.status).toBe('blocked');
     expect(result.reason).toMatch(/manual maintenance/i);
     // No merge, no install, no build, no swap — checkout and tree untouched.
-    expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+    expect(h.calls).not.toContain(`git merge --ff-only ${NEW}`);
     expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
     expect(h.calls).not.toContain('npm.cmd run build');
     expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
@@ -1002,7 +1032,7 @@ describe('automatic dependency installs are disabled (fail-closed)', () => {
     const h = harness({ lockChanged: false });
     const result = await h.deploy();
     expect(result.status).toBe('deployed');
-    expect(h.calls).toContain('git merge --ff-only origin/clean-main');
+    expect(h.calls).toContain(`git merge --ff-only ${NEW}`);
     expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
     expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
   });
@@ -1067,5 +1097,402 @@ describe('node_modules preserve/restore edge cases', () => {
     expect(restoreNodeModules({ root: ROOT, fsx })).toBe(true);
     expect(fsx.exists(`${ROOT}/node_modules/next`)).toBe(true); // good tree restored
     expect(fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dependency identity: manifest changes anywhere block, the installed trees on
+// disk must match the candidate's lockfiles, and the candidate is one exact,
+// verified commit.
+// ---------------------------------------------------------------------------
+
+const {
+  compareInstalledTree,
+  dependencyManifestChanges,
+  verifyInstalledDependencies,
+  parseCliArgs,
+  onceExitCode,
+  runOnce,
+} = require('../../scripts/frank-auto-deploy');
+
+/** A v3 lockfile shaped like the real one: root entry, a required package,
+ * a dev package, and an optional per-platform binary family. */
+function lockfile(overrides = {}) {
+  const packages = {
+    '': { name: 'hydi', version: '1.0.0', dependencies: { next: '^16.0.0' } },
+    'node_modules/next': { version: '16.4.6', integrity: 'sha512-next' },
+    'node_modules/jest': { version: '29.7.0', integrity: 'sha512-jest', dev: true },
+    'node_modules/@esbuild/win32-x64': { version: '0.28.2', integrity: 'sha512-win', optional: true, os: ['win32'], cpu: ['x64'] },
+    'node_modules/@esbuild/darwin-arm64': { version: '0.28.2', integrity: 'sha512-mac', optional: true, os: ['darwin'], cpu: ['arm64'] },
+    'node_modules/fsevents': { version: '2.3.3', integrity: 'sha512-fse', dev: true, os: ['darwin'] },
+    ...overrides,
+  };
+  for (const key of Object.keys(packages)) if (packages[key] === undefined) delete packages[key];
+  return JSON.stringify({ name: 'hydi', version: '1.0.0', lockfileVersion: 3, requires: true, packages });
+}
+
+/** npm's node_modules/.package-lock.json for a Windows x64 install of `lock`:
+ * no root entry, and none of the packages that were not installed here. */
+function installedRecord(lockText, { drop = [], change = {}, add = {} } = {}) {
+  const lock = JSON.parse(lockText);
+  const packages = {};
+  for (const [key, entry] of Object.entries(lock.packages)) {
+    if (!key || drop.includes(key)) continue;
+    if (entry.os && !entry.os.includes('win32')) continue;
+    packages[key] = { ...entry, ...(change[key] || {}) };
+  }
+  Object.assign(packages, add);
+  return JSON.stringify({ name: 'hydi', version: '1.0.0', lockfileVersion: 3, requires: true, packages });
+}
+
+const WIN = { platform: 'win32', arch: 'x64' };
+
+describe('compareInstalledTree', () => {
+  it('a correct Windows install matches even though the files are never byte-identical', () => {
+    const lock = lockfile();
+    const installed = installedRecord(lock);
+    expect(installed).not.toBe(lock); // a hash comparison would always block
+    expect(compareInstalledTree(lock, installed, WIN)).toEqual(expect.objectContaining({ ok: true }));
+  });
+
+  it('blocks a version mismatch', () => {
+    const lock = lockfile();
+    const installed = installedRecord(lock, { change: { 'node_modules/next': { version: '16.4.1' } } });
+    const r = compareInstalledTree(lock, installed, WIN);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/next 16\.4\.1≠16\.4\.6/);
+  });
+
+  it('blocks an integrity mismatch at the same version', () => {
+    const lock = lockfile();
+    const installed = installedRecord(lock, { change: { 'node_modules/next': { integrity: 'sha512-other' } } });
+    expect(compareInstalledTree(lock, installed, WIN).ok).toBe(false);
+  });
+
+  it('blocks a required package that is missing (e.g. a half-finished npm ci)', () => {
+    const lock = lockfile();
+    const r = compareInstalledTree(lock, installedRecord(lock, { drop: ['node_modules/next'] }), WIN);
+    expect(r.ok).toBe(false);
+    expect(r.missing).toEqual(['next']);
+  });
+
+  it('blocks an installed package the lockfile does not know (hand-run npm install)', () => {
+    const lock = lockfile();
+    const r = compareInstalledTree(lock, installedRecord(lock, { add: { 'node_modules/left-pad': { version: '1.3.0' } } }), WIN);
+    expect(r.ok).toBe(false);
+    expect(r.extraneous).toEqual(['node_modules/left-pad']);
+  });
+
+  it('accepts a missing optional package even on its own platform', () => {
+    const lock = lockfile();
+    expect(compareInstalledTree(lock, installedRecord(lock, { drop: ['node_modules/@esbuild/win32-x64'] }), WIN).ok).toBe(true);
+  });
+
+  it('a non-optional package restricted to another OS is legitimately absent', () => {
+    // fsevents is dev + os:darwin, not marked optional.
+    const lock = lockfile();
+    expect(compareInstalledTree(lock, installedRecord(lock), WIN).ok).toBe(true);
+    // ...but on darwin it would be required.
+    expect(compareInstalledTree(lock, installedRecord(lock), { platform: 'darwin', arch: 'arm64' }).ok).toBe(false);
+  });
+
+  it('fails closed on unreadable input or a v1 lockfile with no packages map', () => {
+    const lock = lockfile();
+    expect(compareInstalledTree('{nope', installedRecord(lock), WIN).ok).toBe(false);
+    expect(compareInstalledTree(lock, '{nope', WIN).ok).toBe(false);
+    expect(compareInstalledTree(JSON.stringify({ lockfileVersion: 1, dependencies: {} }), installedRecord(lock), WIN).ok).toBe(false);
+  });
+});
+
+/** git stand-in for the dependency checks: `diff` lists changed files,
+ * `show` serves file contents per commit, `ls-tree` lists tracked files. */
+function depGit({ changed = [], files = {}, tree = [] } = {}) {
+  return jest.fn(async (file, args) => {
+    const key = `${file} ${args.join(' ')}`;
+    if (file === 'git' && args[0] === 'diff') return ok(changed.map((f) => `${f}\n`).join(''));
+    if (file === 'git' && args[0] === 'show') {
+      const content = files[args[1]];
+      return content === undefined ? { code: 128, stdout: '', stderr: 'fatal: path does not exist' } : ok(content);
+    }
+    if (file === 'git' && args[0] === 'ls-tree') return ok(tree.map((f) => `${f}\n`).join(''));
+    throw new Error(`unexpected command: ${key}`);
+  });
+}
+
+describe('dependencyManifestChanges', () => {
+  const pkg = (extra = {}) => JSON.stringify({ name: 'x', scripts: { test: 'jest' }, dependencies: { next: '^16.0.0' }, ...extra });
+
+  it('any lockfile change anywhere in the repo counts, including sub-projects', async () => {
+    const run = depGit({ changed: ['heidi-core/package-lock.json', 'docs/readme.md', 'apps/x/npm-shrinkwrap.json'] });
+    await expect(dependencyManifestChanges({ run, root: '/r', from: OLD, to: NEW }))
+      .resolves.toEqual(['heidi-core/package-lock.json', 'apps/x/npm-shrinkwrap.json']);
+  });
+
+  it('a package.json dependency change counts even when the lockfile did not change', async () => {
+    const run = depGit({
+      changed: ['package.json'],
+      files: { [`${OLD}:package.json`]: pkg(), [`${NEW}:package.json`]: pkg({ dependencies: { next: '^17.0.0' } }) },
+    });
+    await expect(dependencyManifestChanges({ run, root: '/r', from: OLD, to: NEW })).resolves.toEqual(['package.json']);
+  });
+
+  it('a scripts-only package.json change does not need an install', async () => {
+    const run = depGit({
+      changed: ['package.json', 'switchboard/package.json'],
+      files: {
+        [`${OLD}:package.json`]: pkg(), [`${NEW}:package.json`]: pkg({ scripts: { test: 'jest --ci' } }),
+        [`${OLD}:switchboard/package.json`]: pkg(), [`${NEW}:switchboard/package.json`]: pkg({ description: 'x' }),
+      },
+    });
+    await expect(dependencyManifestChanges({ run, root: '/r', from: OLD, to: NEW })).resolves.toEqual([]);
+  });
+
+  it('an unparseable or newly added package.json with dependencies fails closed', async () => {
+    const run = depGit({
+      changed: ['a/package.json', 'b/package.json'],
+      files: { [`${OLD}:a/package.json`]: pkg(), [`${NEW}:a/package.json`]: '{broken', [`${NEW}:b/package.json`]: pkg() },
+    });
+    await expect(dependencyManifestChanges({ run, root: '/r', from: OLD, to: NEW })).resolves.toEqual(['a/package.json', 'b/package.json']);
+  });
+});
+
+describe('verifyInstalledDependencies', () => {
+  const ROOT = 'C:/HYDI-System-v2';
+  const lock = lockfile();
+  const coreLock = lockfile({ 'node_modules/next': undefined, 'node_modules/express': { version: '5.1.0', integrity: 'sha512-ex' } });
+
+  function check({ dirs = [], records = {}, tree = ['package-lock.json', 'heidi-core/package-lock.json', 'switchboard/package-lock.json'] } = {}) {
+    const fsx = memFs(dirs, records);
+    const run = depGit({
+      tree,
+      files: {
+        [`${NEW}:package-lock.json`]: lock,
+        [`${NEW}:heidi-core/package-lock.json`]: coreLock,
+        [`${NEW}:switchboard/package-lock.json`]: lock,
+      },
+    });
+    return verifyInstalledDependencies({ run, root: ROOT, commit: NEW, fsx, ...WIN });
+  }
+
+  it('passes when every installed tree matches; uninstalled sub-projects are skipped, not passed', async () => {
+    const r = await check({
+      dirs: [`${ROOT}/node_modules`, `${ROOT}/heidi-core/node_modules`],
+      records: {
+        [`${ROOT}/node_modules/.package-lock.json`]: installedRecord(lock),
+        [`${ROOT}/heidi-core/node_modules/.package-lock.json`]: installedRecord(coreLock),
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.verified).toEqual(['package-lock.json', 'heidi-core/package-lock.json']);
+    expect(r.skipped).toEqual(['switchboard/package-lock.json']);
+  });
+
+  it('blocks a stale sub-project tree (e.g. heidi-core after a Dependabot bump nobody installed)', async () => {
+    const r = await check({
+      dirs: [`${ROOT}/node_modules`, `${ROOT}/heidi-core/node_modules`],
+      records: {
+        [`${ROOT}/node_modules/.package-lock.json`]: installedRecord(lock),
+        [`${ROOT}/heidi-core/node_modules/.package-lock.json`]: installedRecord(coreLock, { change: { 'node_modules/express': { version: '5.0.0' } } }),
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/^heidi-core\/package-lock\.json: .*express 5\.0\.0≠5\.1\.0/);
+  });
+
+  it('blocks a missing root node_modules', async () => {
+    const r = await check();
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/package-lock\.json: node_modules is missing/);
+  });
+
+  it('blocks a tree with no installed-tree record as unverifiable', async () => {
+    const r = await check({ dirs: [`${ROOT}/node_modules`] });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/provenance unverifiable/);
+  });
+
+  it('blocks when the candidate has no root lockfile at all', async () => {
+    const r = await check({ dirs: [`${ROOT}/node_modules`], tree: ['heidi-core/package-lock.json'] });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/no root lockfile/);
+  });
+});
+
+describe('deploy: exact candidate and dependency identity', () => {
+  const ROOT = 'C:/HYDI-System-v2';
+  const JLIST = JSON.stringify([{ name: 'heidi-web-standalone', pm2_env: { status: 'online' } }]);
+  const LOCK = lockfile();
+  const PKG = JSON.stringify({ name: 'hydi', scripts: { build: 'next build' }, dependencies: { next: '^16.0.0' } });
+
+  function harness({
+    head = OLD,
+    origin = NEW,
+    changed = [],
+    files = {},
+    installed = installedRecord(LOCK),
+    headAfterMerge = null,
+    pinnedResolves = {},
+    onMain = () => true,
+    stamp = null,
+  } = {}) {
+    const calls = [];
+    const fsx = memFs(
+      [`${ROOT}/node_modules`, `${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`],
+      installed === null ? {} : { [`${ROOT}/node_modules/.package-lock.json`]: installed },
+    );
+    let merged = null;
+    const show = { [`${origin}:package-lock.json`]: LOCK, [`${head}:package-lock.json`]: LOCK, ...files };
+    const run = jest.fn(async (file, args) => {
+      const key = `${file} ${args.join(' ')}`;
+      calls.push(key);
+      if (key === 'npm.cmd run build') { fsx.produceBuild(ROOT); return ok(); }
+      if (key === 'git rev-parse HEAD') return ok(`${head}\n`);
+      if (key === 'git rev-parse origin/clean-main') return ok(`${origin}\n`);
+      if (key === 'git rev-parse --verify HEAD') return ok(`${headAfterMerge || merged || head}\n`);
+      if (file === 'git' && args[0] === 'rev-parse' && args[1] === '--verify') {
+        const ref = args[2].replace('^{commit}', '');
+        return pinnedResolves[ref] ? ok(`${pinnedResolves[ref]}\n`) : { code: 128, stdout: '', stderr: 'unknown revision' };
+      }
+      if (file === 'git' && args[0] === 'merge-base' && args[3] === 'origin/clean-main') return onMain(args[2]) ? ok() : { code: 1, stdout: '', stderr: '' };
+      if (file === 'git' && args[0] === 'merge' && args[1] === '--ff-only') { merged = args[2]; return ok(); }
+      if (file === 'git' && args[0] === 'diff') return ok(changed.map((f) => `${f}\n`).join(''));
+      if (file === 'git' && args[0] === 'show') {
+        return show[args[1]] === undefined ? { code: 128, stdout: '', stderr: 'missing' } : ok(show[args[1]]);
+      }
+      if (file === 'git' && args[0] === 'ls-tree') return ok('package-lock.json\nREADME.md\n');
+      const fixed = {
+        'git fetch origin clean-main': ok(),
+        'git branch --show-current': ok('clean-main\n'),
+        'git checkout -- next-env.d.ts': ok(),
+        'git status --porcelain --untracked-files=no': ok(),
+        'pm2.cmd jlist': ok(JLIST),
+        'pm2.cmd restart heidi-web-standalone --update-env': ok(),
+      };
+      if (fixed[key]) return fixed[key];
+      if (file === 'git' && (args[0] === 'merge-base' || args[0] === 'log' || args[0] === 'reset')) return ok('');
+      throw new Error(`unexpected command: ${key}`);
+    });
+    const deploy = (extra = {}) => runAutoDeploy({
+      root: ROOT,
+      platform: 'win32',
+      run,
+      fsx,
+      post: async () => ({ ok: true }),
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(tmpDir(), 'alert.json'),
+      rebuildMarkerPath: path.join(tmpDir(), 'rebuild.json'),
+      readBuildStamp: () => stamp,
+      now: () => 0,
+      sleep: async () => {},
+      diskPreflight: () => ({ ok: true, freeGb: 50, reason: 'ok' }),
+      memoryPreflight: () => ({ ok: true, freeGb: 4, reason: 'ok' }),
+      healthTimeoutMs: 0,
+      probe: async (check) => ({ name: check.name, ok: true, status: 200 }),
+      verifyInstalledDependencies: (args) => verifyInstalledDependencies({ ...args, ...WIN }),
+      ...extra,
+    });
+    return { calls, deploy, merged: () => merged };
+  }
+
+  const touchedCheckout = (calls) => calls.some((c) => c.startsWith('git merge --ff-only') || c.startsWith('git reset') || c === 'npm.cmd run build');
+
+  it('fast-forwards to the exact resolved commit, not the moving ref, and deploys when the tree matches', async () => {
+    const h = harness();
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.calls).toContain(`git merge --ff-only ${NEW}`);
+    expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+  });
+
+  it('rolls the checkout back when HEAD is not exactly the candidate after the fast-forward', async () => {
+    const h = harness({ headAfterMerge: '3333333333333333333333333333333333333333' });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(result.reason).toMatch(/expected exactly 22222222/);
+    expect(h.calls).toContain(`git reset --hard ${OLD}`);
+    expect(h.calls).not.toContain('npm.cmd run build');
+  });
+
+  it('a package.json-only dependency change blocks before merge', async () => {
+    const h = harness({
+      changed: ['package.json'],
+      files: { [`${OLD}:package.json`]: PKG, [`${NEW}:package.json`]: PKG.replace('^16.0.0', '^17.0.0') },
+    });
+    const result = await h.deploy();
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toMatch(/dependency manifests changed .*package\.json/);
+    expect(touchedCheckout(h.calls)).toBe(false);
+  });
+
+  it('a sub-project lockfile change blocks before merge', async () => {
+    const h = harness({ changed: ['heidi-core/package-lock.json'] });
+    const result = await h.deploy();
+    expect(result.status).toBe('blocked');
+    expect(result.manifestChanges).toEqual(['heidi-core/package-lock.json']);
+    expect(touchedCheckout(h.calls)).toBe(false);
+  });
+
+  it('unchanged manifests but a stale installed tree blocks before merge', async () => {
+    const h = harness({ installed: installedRecord(LOCK, { change: { 'node_modules/next': { version: '16.4.1' } } }) });
+    const result = await h.deploy();
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toMatch(/installed dependencies do not match 22222222/);
+    expect(touchedCheckout(h.calls)).toBe(false);
+  });
+
+  it('closes the bypass: checkout already at the candidate (stale-build rebuild) with stale deps blocks, no build', async () => {
+    const h = harness({ head: NEW, origin: NEW, stamp: { gitSha: OLD }, installed: null });
+    const result = await h.deploy();
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toMatch(/provenance unverifiable/);
+    expect(h.calls).not.toContain('npm.cmd run build');
+  });
+
+  it('a pinned --commit is resolved, must be on origin/clean-main, and is what gets merged', async () => {
+    const PIN = '4444444444444444444444444444444444444444';
+    const h = harness({ origin: '5555555555555555555555555555555555555555', pinnedResolves: { '44444444': PIN }, files: { [`${PIN}:package-lock.json`]: LOCK } });
+    const result = await h.deploy({ commit: '44444444' });
+    expect(result.status).toBe('deployed');
+    expect(result.newCommit).toBe(PIN);
+    expect(h.calls).toContain(`git merge --ff-only ${PIN}`);
+  });
+
+  it('a pinned commit that is unknown or not on origin/clean-main blocks without touching anything', async () => {
+    const unknown = harness();
+    await expect(unknown.deploy({ commit: 'deadbeef' })).resolves.toEqual(expect.objectContaining({ status: 'blocked', reason: expect.stringMatching(/not found/) }));
+    const offMain = harness({ pinnedResolves: { '44444444': '4444444444444444444444444444444444444444' }, onMain: () => false });
+    await expect(offMain.deploy({ commit: '44444444' })).resolves.toEqual(expect.objectContaining({ status: 'blocked', reason: expect.stringMatching(/not on origin\/clean-main/) }));
+    expect(touchedCheckout(unknown.calls) || touchedCheckout(offMain.calls)).toBe(false);
+    const injected = harness();
+    await expect(injected.deploy({ commit: 'HEAD;rm -rf' })).resolves.toEqual(expect.objectContaining({ status: 'blocked' }));
+    expect(injected.calls.some((c) => c.includes('rm -rf'))).toBe(false);
+  });
+});
+
+describe('frank-auto-deploy CLI (--once / --root / --commit)', () => {
+  it('parses the one-shot form and refuses --root/--commit without --once', () => {
+    expect(parseCliArgs([])).toEqual({ once: false, root: null, commit: null });
+    expect(parseCliArgs(['--once', '--root', 'C:/prod', '--commit', 'abc1234'])).toEqual({ once: true, root: 'C:/prod', commit: 'abc1234' });
+    expect(() => parseCliArgs(['--root', 'C:/prod'])).toThrow(/require --once/);
+    expect(() => parseCliArgs(['--once', '--root'])).toThrow(/needs a value/);
+    expect(() => parseCliArgs(['--once', '--loop'])).toThrow(/unknown argument/);
+  });
+
+  it('maps outcomes to exit codes', () => {
+    expect(onceExitCode({ status: 'deployed' })).toBe(0);
+    expect(onceExitCode({ status: 'noop' })).toBe(0);
+    expect(onceExitCode({ status: 'blocked' })).toBe(2);
+    expect(onceExitCode({ status: 'lock_held' })).toBe(2);
+    expect(onceExitCode({ status: 'rolled_back' })).toBe(1);
+    expect(onceExitCode({ status: 'rollback_failed' })).toBe(1);
+  });
+
+  it('runOnce drives the given root and commit once and prints one JSON line', async () => {
+    const deploy = jest.fn(async () => ({ status: 'blocked', reason: 'low memory' }));
+    const lines = [];
+    const code = await runOnce({ root: 'C:/prod', commit: 'abc1234', deploy, out: (l) => lines.push(l) });
+    expect(deploy).toHaveBeenCalledWith({ root: 'C:/prod', commit: 'abc1234' });
+    expect(code).toBe(2);
+    expect(JSON.parse(lines[0])).toEqual(expect.objectContaining({ status: 'blocked', reason: 'low memory' }));
   });
 });
