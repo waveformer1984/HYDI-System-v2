@@ -18,7 +18,7 @@
 |--------|---------|----------|
 | **CLOUD_VERIFIED** | **YES** | Cloud agent VM: targeted Jest 13/13 pass; `node scripts/heidi-self-improve.js dashboard` returned schema v2 brief with `frank_truth: UNAVAILABLE`, `live_probe_rollup: UNAVAILABLE` (no simulation masquerading as Frank). Artifacts: `/opt/cursor/artifacts/evolution2-dashboard-cloud.json`, `frank-reachability-probe.txt`. |
 | **CI_VERIFIED** | **YES** | GitHub Actions terminal success on branch head **`a553fd3d`**: 7/7 success including Jest, integration, verify-quick, change-safety, CodeQL, codecov/patch (queried 2026-11-16T00:12:00Z). Implementation code validated on **`c6c131ac`** with identical green gate before docs-only commit. |
-| **MERGED** | **NO** | PR #603 `state: open`, `merged_at: null`. **Not merged** — owner authorization required per master directive. |
+| **MERGED** | **YES** | Owner merged PR #603 at 2026-11-16T00:26:42Z → `clean-main` @ `1a86a7ee`. (Updated by production-truth audit 2026-11-16.) |
 | **FRANK_VERIFIED** | **NO** | `curl -m 5 https://heidi-pc.tailc50af2.ts.net/api/health` from cloud agent: no response (unreachable). Dashboard reports `frank_truth: UNAVAILABLE`. |
 | **PRODUCTION_ACCEPTED** | **NO** | Requires **MERGED** + Frank steps (pull `clean-main`, `runtime:audit`, live probe rollup, persisted history across restart). Not executed. |
 
