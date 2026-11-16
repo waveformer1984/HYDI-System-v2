@@ -101,7 +101,7 @@
     "@types/react-dom": "^19.3.0",
     "axios": "^1.20.0",
     "dotenv": "^17.4.2",
-    "express-rate-limit": "^8.7.2",
+    "express-rate-limit": "^8.7.4",
     "jsonwebtoken": "^9.0.3",
     "next": "^16.4.6",
     "node-fetch": "^2.7.0",
