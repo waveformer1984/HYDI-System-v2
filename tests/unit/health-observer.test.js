@@ -177,3 +177,57 @@ describe('HealthObserver: start/stop', () => {
     expect(http.get).not.toHaveBeenCalled();
   });
 });
+
+describe('HealthObserver: liveness vs readiness', () => {
+  const LIVENESS_CONFIG = {
+    modules: [
+      {
+        id: 'heidi-web', type: 'process', enabled: true,
+        liveness: { url: 'http://127.0.0.1:3000/api/ping' },
+        health: { url: 'http://127.0.0.1:3000/api/health' },
+      },
+    ],
+  };
+
+  it('probes the liveness URL, not the heavy health URL, when configured', async () => {
+    fs.readFileSync.mockReturnValue(JSON.stringify(LIVENESS_CONFIG));
+    mockProbeResults({
+      'http://127.0.0.1:3000/api/ping': true,
+      'http://127.0.0.1:3000/api/health': false, // dependency-degraded but alive
+    });
+    const memory = fakeMemory();
+    const observer = new HealthObserver(memory, { log: () => {}, debounceFailures: 1 });
+
+    await observer.tick();
+    await observer.tick();
+
+    expect(http.get).toHaveBeenCalledWith('http://127.0.0.1:3000/api/ping', expect.anything(), expect.any(Function));
+    expect(http.get).not.toHaveBeenCalledWith('http://127.0.0.1:3000/api/health', expect.anything(), expect.any(Function));
+    expect(memory.createMission).not.toHaveBeenCalled();
+  });
+
+  it('still proposes a restart when liveness itself fails', async () => {
+    fs.readFileSync.mockReturnValue(JSON.stringify(LIVENESS_CONFIG));
+    mockProbeResults({ 'http://127.0.0.1:3000/api/ping': false });
+    const memory = fakeMemory();
+    const observer = new HealthObserver(memory, { log: () => {}, debounceFailures: 1 });
+
+    await observer.tick();
+
+    expect(memory.createMission).toHaveBeenCalledTimes(1);
+    const [, , context] = memory.createMission.mock.calls[0];
+    expect(context.action.args).toEqual(['heidi-web']);
+  });
+
+  it('falls back to health.url for modules without a liveness block', async () => {
+    fs.readFileSync.mockReturnValue(JSON.stringify(SAMPLE_CONFIG));
+    mockProbeResults({ 'http://127.0.0.1:3005/health': false, 'http://127.0.0.1:3006/api/health': true });
+    const memory = fakeMemory();
+    const observer = new HealthObserver(memory, { log: () => {}, debounceFailures: 1 });
+
+    await observer.tick();
+
+    expect(http.get).toHaveBeenCalledWith('http://127.0.0.1:3005/health', expect.anything(), expect.any(Function));
+    expect(memory.createMission).toHaveBeenCalledTimes(1);
+  });
+});

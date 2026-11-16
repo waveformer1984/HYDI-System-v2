@@ -50,14 +50,17 @@ function loadWatchedModules(configPath) {
   );
 }
 
+// Returns { up, reason } so failure logs classify the observation instead of
+// collapsing timeout / HTTP 5xx / connection error into one boolean.
 function httpOk(url, timeoutMs) {
   return new Promise((resolve) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       res.resume();
-      resolve(res.statusCode >= 200 && res.statusCode < 500);
+      const up = res.statusCode >= 200 && res.statusCode < 500;
+      resolve({ up, reason: up ? 'ok' : `http_${res.statusCode}` });
     });
-    req.on('timeout', () => { req.destroy(); resolve(false); });
-    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve({ up: false, reason: 'timeout' }); });
+    req.on('error', (err) => resolve({ up: false, reason: `error:${err && err.code ? err.code : 'unknown'}` }));
   });
 }
 
@@ -110,7 +113,11 @@ class HealthObserver {
   }
 
   async checkModule(mod) {
-    const up = await httpOk(mod.health.url, this.probeTimeoutMs);
+    // Liveness vs readiness: restart eligibility keys on the cheap liveness
+    // probe when configured. A slow/degraded dependency response on the rich
+    // health endpoint must not restart an otherwise responsive process.
+    const probeUrl = (mod.liveness && mod.liveness.url) || mod.health.url;
+    const { up, reason } = await httpOk(probeUrl, this.probeTimeoutMs);
 
     if (up) {
       this.consecutiveFailures.set(mod.id, 0);
@@ -121,7 +128,7 @@ class HealthObserver {
     this.consecutiveFailures.set(mod.id, failures);
 
     if (failures < this.debounceFailures) {
-      this.log(`[HEALTH OBSERVER] ${mod.id} probe failed (${failures}/${this.debounceFailures}, not yet acting)`);
+      this.log(`[HEALTH OBSERVER] ${mod.id} liveness probe failed (${failures}/${this.debounceFailures}, reason=${reason}, not yet acting)`);
       return;
     }
 
@@ -150,11 +157,11 @@ class HealthObserver {
     // exact run_script call (see tool-registry.js's restart_service
     // handler). Mission actions must already be in ActionExecutor's shape.
     const missionId = await this.memory.createMission(
-      `Auto-detected: ${mod.id} failed ${failures} consecutive health checks -- restart it`,
+      `Auto-detected: ${mod.id} failed ${failures} consecutive liveness checks -- restart it`,
       2,
       { action: { type: 'run_script', target: RESTART_MODULE_SCRIPT, args: [mod.id] } },
       this.assignedAgent,
-      { actor: 'health-observer', reason: `${mod.id} failed ${failures} health checks` }
+      { actor: 'health-observer', reason: `${mod.id} failed ${failures} liveness checks (${reason})` }
     );
     this.lastProposedAt.set(mod.id, Date.now());
     this.log(`[HEALTH OBSERVER] ${mod.id} down (${failures} consecutive failures) -- proposed mission ${missionId} assigned to ${this.assignedAgent}`);

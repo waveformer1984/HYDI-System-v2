@@ -74,7 +74,7 @@ function loadWatchedModules(configPath) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     return (config.modules || []).filter(
       (m) => m.type === 'process' && m.enabled !== false && m.health && m.health.url
-    ).map((m) => ({ id: m.id, healthUrl: m.health.url }));
+    ).map((m) => ({ id: m.id, healthUrl: m.health.url, livenessUrl: m.liveness && m.liveness.url }));
   } catch { return []; }
 }
 
@@ -162,8 +162,11 @@ class OpsAgent {
   async observe() {
     const out = [];
     for (const mod of this.modules) {
-      const up = await this.probeFn(mod.healthUrl, this.probeTimeoutMs);
-      out.push({ component: mod.id, kind: 'module_down', up: up === 'up', url: mod.healthUrl });
+      // Liveness probe when configured — a degraded-but-responsive service is
+      // not 'module_down'; dependency slowness belongs to readiness reporting.
+      const probeUrl = mod.livenessUrl || mod.healthUrl;
+      const up = await this.probeFn(probeUrl, this.probeTimeoutMs);
+      out.push({ component: mod.id, kind: 'module_down', up: up === 'up', url: probeUrl });
     }
     // Stalled missions: 'running' far past their deadline (post-#508 these
     // should not exist — flagging one is honest observation, not repair).
@@ -341,7 +344,7 @@ class OpsAgent {
   async verifyRecovered(inc) {
     const mod = this.modules.find((x) => x.id === inc.component);
     if (!mod) return null; // unknown — can't verify a component we don't watch
-    return (await this.probeFn(mod.healthUrl, this.probeTimeoutMs)) === 'up';
+    return (await this.probeFn(mod.livenessUrl || mod.healthUrl, this.probeTimeoutMs)) === 'up';
   }
 
   async status() {
