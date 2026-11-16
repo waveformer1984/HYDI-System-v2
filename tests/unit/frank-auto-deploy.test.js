@@ -922,7 +922,7 @@ describe('next.config build worker cap', () => {
   });
 });
 
-describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () => {
+describe('automatic dependency installs are disabled (fail-closed)', () => {
   const ROOT = 'C:/HYDI-System-v2';
   const JLIST = JSON.stringify([
     { name: 'heidi-web-standalone', pm2_env: { status: 'online' } },
@@ -930,7 +930,7 @@ describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () 
   ]);
   const NM_DIRS = [`${ROOT}/node_modules`, `${ROOT}/node_modules/next`, `${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`];
 
-  function harness({ ci = 'ok', build = 'ok', healthy = () => true } = {}) {
+  function harness({ lockChanged = true, healthy = () => true } = {}) {
     const calls = [];
     const posts = [];
     let clock = 0;
@@ -947,21 +947,18 @@ describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () 
         'git rev-parse origin/clean-main': ok(`${NEW}\n`),
         [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
         [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
-        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok('package-lock.json\n'),
+        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok(lockChanged ? 'package-lock.json\n' : ''),
         'git merge --ff-only origin/clean-main': ok(),
         [`git reset --hard ${OLD}`]: ok(),
         'pm2.cmd jlist': ok(JLIST),
         'pm2.cmd restart heidi-web-standalone heidi-core --update-env': ok(),
       };
-      if (key === 'npm.cmd ci') {
-        if (ci === 'fail') return { code: 1, stdout: '', stderr: 'EPERM: operation not permitted, unlink esbuild.exe' };
-        fsx.mkdir(`${ROOT}/node_modules`); // ci "succeeds" — fresh tree exists
-        return ok();
-      }
       if (key === 'npm.cmd run build') {
-        if (build === 'fail') return { code: 1, stdout: '', stderr: 'build failed' };
         fsx.produceBuild(ROOT);
         return ok();
+      }
+      if (key === 'npm.cmd ci' || key === 'npm ci') {
+        throw new Error(`unexpected install command: ${key}`);
       }
       if (base[key]) return base[key];
       throw new Error(`unexpected command: ${key}`);
@@ -986,53 +983,67 @@ describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () 
     return { calls, posts, fsx, deploy };
   }
 
-  it('npm ci failure restores the preserved tree by rename — no second install', async () => {
-    const h = harness({ ci: 'fail' });
+  it('lockfile change blocks BEFORE merge, install, or any dependency mutation', async () => {
+    const h = harness({ lockChanged: true });
     const result = await h.deploy();
-    expect(result.status).toBe('rolled_back');
-    // Exactly one ci attempt; rollback never reinstalls.
-    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
-    // Previous complete tree restored; failed/prev copies cleaned up.
-    expect(h.fsx.exists(`${ROOT}/node_modules`)).toBe(true);
+    expect(result.status).toBe('blocked');
+    expect(result.reason).toMatch(/manual maintenance/i);
+    // No merge, no install, no build, no swap — checkout and tree untouched.
+    expect(h.calls).not.toContain('git merge --ff-only origin/clean-main');
+    expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
+    expect(h.calls).not.toContain('npm.cmd run build');
     expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
     expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
-    expect(h.fsx.exists(`${ROOT}/.node_modules-failed`)).toBe(false);
-    // Live .next untouched (build never ran).
-    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
-    expect(h.fsx.exists(`${ROOT}/.next-prev`)).toBe(false);
+    // Operator is alerted with the blocked reason.
+    expect(h.posts.some((p) => /lockfile_change|paused/i.test(p.body))).toBe(true);
   });
 
-  it('build failure after successful ci also restores the preserved tree', async () => {
-    const h = harness({ build: 'fail' });
-    const result = await h.deploy();
-    expect(result.status).toBe('rolled_back');
-    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
-    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
-    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
-  });
-
-  it('post-swap health failure restores BOTH .next and node_modules', async () => {
-    const h = harness({ healthy: () => false });
-    const result = await h.deploy();
-    expect(result.status).toBe('rolled_back');
-    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true); // old build back
-    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true); // old tree back
-    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
-    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
-  });
-
-  it('successful deploy drops the preserved copy (bounded cleanup)', async () => {
-    const h = harness();
+  it('lockfile unchanged: deploy proceeds normally and never runs npm ci', async () => {
+    const h = harness({ lockChanged: false });
     const result = await h.deploy();
     expect(result.status).toBe('deployed');
-    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
-    expect(h.fsx.exists(`${ROOT}/.node_modules-failed`)).toBe(false);
+    expect(h.calls).toContain('git merge --ff-only origin/clean-main');
+    expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
+    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
+  });
+
+  it('lockfile unchanged + health failure rolls back .next only — still no install', async () => {
+    const h = harness({ lockChanged: false, healthy: () => false });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.calls.some((c) => c.includes('npm') && c.includes('ci'))).toBe(false);
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true); // old build restored
   });
 });
 
 describe('node_modules preserve/restore edge cases', () => {
   const { preserveNodeModules, restoreNodeModules } = require('../../scripts/frank-auto-deploy');
   const ROOT = 'C:/HYDI-System-v2';
+
+  it('preserveNodeModules clears stale backups before rename (name collisions)', () => {
+    const fsx = memFs([
+      `${ROOT}/node_modules`, `${ROOT}/node_modules/next`,
+      `${ROOT}/.node_modules-prev`, `${ROOT}/.node_modules-prev/stale`,
+      `${ROOT}/.node_modules-failed`, `${ROOT}/.node_modules-failed/junk`,
+    ]);
+    expect(preserveNodeModules({ root: ROOT, fsx })).toBe(true);
+    // Stale backup contents displaced; live tree is now the preserved copy.
+    expect(fsx.exists(`${ROOT}/.node_modules-prev/stale`)).toBe(false);
+    expect(fsx.exists(`${ROOT}/.node_modules-prev/next`)).toBe(true);
+    expect(fsx.exists(`${ROOT}/.node_modules-failed/junk`)).toBe(false);
+    expect(fsx.exists(`${ROOT}/node_modules`)).toBe(false);
+  });
+
+  it('restoreNodeModules propagates a failed-tree displacement failure (incomplete recovery surfaces)', () => {
+    const fsx = memFs([
+      `${ROOT}/node_modules`, `${ROOT}/node_modules/partial`,
+      `${ROOT}/.node_modules-prev`, `${ROOT}/.node_modules-prev/next`,
+    ]);
+    fsx.failRename = (from) => from.endsWith('/node_modules'); // live→failed fails
+    expect(() => restoreNodeModules({ root: ROOT, fsx })).toThrow();
+    // Prev tree NOT consumed — recovery state is inspectable, not silently "ok".
+    expect(fsx.exists(`${ROOT}/.node_modules-prev/next`)).toBe(true);
+  });
 
   it('preserveNodeModules reports a locked tree as blocked, not raw EPERM', () => {
     const fsx = memFs([`${ROOT}/node_modules`, `${ROOT}/node_modules/next`]);
