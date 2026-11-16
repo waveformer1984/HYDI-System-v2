@@ -93,7 +93,7 @@
     "node": ">=22.x"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.137.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.110.8",
     "@types/node": "^20.19.43",
