@@ -921,3 +921,111 @@ describe('next.config build worker cap', () => {
     expect(loadConfig().experimental.cpus).toBe(2);
   });
 });
+
+describe('node_modules preservation across npm ci (2026-11-16 gutting fix)', () => {
+  const ROOT = 'C:/HYDI-System-v2';
+  const JLIST = JSON.stringify([
+    { name: 'heidi-web-standalone', pm2_env: { status: 'online' } },
+    { name: 'heidi-core', pm2_env: { status: 'online' } },
+  ]);
+  const NM_DIRS = [`${ROOT}/node_modules`, `${ROOT}/node_modules/next`, `${ROOT}/.next`, `${ROOT}/.next/BUILD_ID`];
+
+  function harness({ ci = 'ok', build = 'ok', healthy = () => true } = {}) {
+    const calls = [];
+    const posts = [];
+    let clock = 0;
+    const fsx = memFs(NM_DIRS);
+    const run = jest.fn(async (file, args) => {
+      const key = `${file} ${args.join(' ')}`;
+      calls.push(key);
+      const base = {
+        'git fetch origin clean-main': ok(),
+        'git branch --show-current': ok('clean-main\n'),
+        'git checkout -- next-env.d.ts': ok(),
+        'git status --porcelain --untracked-files=no': ok(),
+        'git rev-parse HEAD': ok(`${OLD}\n`),
+        'git rev-parse origin/clean-main': ok(`${NEW}\n`),
+        [`git merge-base --is-ancestor ${OLD} ${NEW}`]: ok(),
+        [`git log --format=%B%x1e ${OLD}..${NEW}`]: ok(''),
+        [`git diff --name-only ${OLD} ${NEW} -- package-lock.json`]: ok('package-lock.json\n'),
+        'git merge --ff-only origin/clean-main': ok(),
+        [`git reset --hard ${OLD}`]: ok(),
+        'pm2.cmd jlist': ok(JLIST),
+        'pm2.cmd restart heidi-web-standalone heidi-core --update-env': ok(),
+      };
+      if (key === 'npm.cmd ci') {
+        if (ci === 'fail') return { code: 1, stdout: '', stderr: 'EPERM: operation not permitted, unlink esbuild.exe' };
+        fsx.mkdir(`${ROOT}/node_modules`); // ci "succeeds" — fresh tree exists
+        return ok();
+      }
+      if (key === 'npm.cmd run build') {
+        if (build === 'fail') return { code: 1, stdout: '', stderr: 'build failed' };
+        fsx.produceBuild(ROOT);
+        return ok();
+      }
+      if (base[key]) return base[key];
+      throw new Error(`unexpected command: ${key}`);
+    });
+    const deploy = (extra = {}) => runAutoDeploy({
+      root: ROOT,
+      platform: 'win32',
+      run,
+      fsx,
+      post: async (channel, body) => { posts.push({ channel, body }); return { ok: true }; },
+      acquireLock: () => jest.fn(),
+      alertStatePath: path.join(tmpDir(), 'alert.json'),
+      now: () => clock,
+      sleep: async (ms) => { clock += ms; },
+      diskPreflight: () => ({ ok: true, freeGb: 50, reason: 'ok' }),
+      memoryPreflight: () => ({ ok: true, freeGb: 4, reason: 'ok' }),
+      healthTimeoutMs: 50,
+      healthIntervalMs: 25,
+      probe: async (check) => ({ name: check.name, ok: healthy(), status: healthy() ? 200 : 0 }),
+      ...extra,
+    });
+    return { calls, posts, fsx, deploy };
+  }
+
+  it('npm ci failure restores the preserved tree by rename — no second install', async () => {
+    const h = harness({ ci: 'fail' });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    // Exactly one ci attempt; rollback never reinstalls.
+    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
+    // Previous complete tree restored; failed/prev copies cleaned up.
+    expect(h.fsx.exists(`${ROOT}/node_modules`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+    expect(h.fsx.exists(`${ROOT}/.node_modules-failed`)).toBe(false);
+    // Live .next untouched (build never ran).
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/.next-prev`)).toBe(false);
+  });
+
+  it('build failure after successful ci also restores the preserved tree', async () => {
+    const h = harness({ build: 'fail' });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
+    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true);
+    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+  });
+
+  it('post-swap health failure restores BOTH .next and node_modules', async () => {
+    const h = harness({ healthy: () => false });
+    const result = await h.deploy();
+    expect(result.status).toBe('rolled_back');
+    expect(h.fsx.exists(`${ROOT}/.next/BUILD_ID`)).toBe(true); // old build back
+    expect(h.fsx.exists(`${ROOT}/node_modules/next`)).toBe(true); // old tree back
+    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+    expect(h.calls.filter((c) => c === 'npm.cmd ci')).toHaveLength(1);
+  });
+
+  it('successful deploy drops the preserved copy (bounded cleanup)', async () => {
+    const h = harness();
+    const result = await h.deploy();
+    expect(result.status).toBe('deployed');
+    expect(h.fsx.exists(`${ROOT}/.node_modules-prev`)).toBe(false);
+    expect(h.fsx.exists(`${ROOT}/.node_modules-failed`)).toBe(false);
+  });
+});
