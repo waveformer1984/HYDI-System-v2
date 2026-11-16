@@ -351,27 +351,31 @@ describe('GET /api/heidi-mobile/status', () => {
   });
 
   it('reports online only for an authenticated, healthy snapshot', async () => {
-    const res = await call('status');
-    expect(res.statusCode).toBe(200);
-    // Frank evidence is usually stale in Jest (no live observatory); that must not read as "online".
-    expect(res.body.state).toBe(res.body.frank_host?.stale ? 'degraded' : 'online');
-    expect(res.body.system.subsystems[0]).toMatchObject({ name: 'hydi_core', status: 'healthy' });
-    expect(res.body.errors).toEqual([]);
-    expect(res.body.diagnostics).toMatchObject({
-      upstream_valid: true,
-      upstream_host: 'hydi.test',
-      upstream_uses_default: false,
-      service_secret_configured: true,
-      device_pending_at_pairing: false,
-    });
-    expect(calls.find((c) => c.path === '/api/status/system').auth.valid).toBe(true);
-    expect(res.body.frank_host).toMatchObject({
-      state: expect.stringMatching(/^(healthy|degraded|stale|unknown)$/),
-      stale: expect.any(Boolean),
-      metrics: expect.objectContaining({
-        kong: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
-        db: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
-      }),
+    // Isolate from the host's live .observatory sample: on Frank the real
+    // evidence is fresh and degraded, which must not leak into this test.
+    await withFrankRepo({}, async () => {
+      const res = await call('status');
+      expect(res.statusCode).toBe(200);
+      // Frank evidence is usually stale in Jest (no live observatory); that must not read as "online".
+      expect(res.body.state).toBe(res.body.frank_host?.stale ? 'degraded' : 'online');
+      expect(res.body.system.subsystems[0]).toMatchObject({ name: 'hydi_core', status: 'healthy' });
+      expect(res.body.errors).toEqual([]);
+      expect(res.body.diagnostics).toMatchObject({
+        upstream_valid: true,
+        upstream_host: 'hydi.test',
+        upstream_uses_default: false,
+        service_secret_configured: true,
+        device_pending_at_pairing: false,
+      });
+      expect(calls.find((c) => c.path === '/api/status/system').auth.valid).toBe(true);
+      expect(res.body.frank_host).toMatchObject({
+        state: expect.stringMatching(/^(healthy|degraded|stale|unknown)$/),
+        stale: expect.any(Boolean),
+        metrics: expect.objectContaining({
+          kong: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
+          db: expect.stringMatching(/^(healthy|unhealthy|stale|unknown)$/),
+        }),
+      });
     });
   });
 

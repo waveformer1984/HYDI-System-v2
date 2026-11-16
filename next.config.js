@@ -1,8 +1,21 @@
 /** @type {import('next').NextConfig} */
 const path = require('path')
 
+// Explicit build-worker cap for resource-constrained hosts. Next's default is
+// logical CPUs - 1, which OOM-killed export workers on Frank (16 GB RAM,
+// 2026-11-15). Only applied when HYDI_BUILD_CPUS is a positive integer;
+// otherwise Next's default stands. Verified against next@16.4.1: the value
+// feeds experimental.cpus -> getNumberOfWorkers in build/index.js and caps
+// static-generation/page-data workers (it does not limit webpack compile
+// parallelism). Scope/version dependency: revalidate on Next upgrades or
+// when host RAM or the page count changes materially.
+const buildCpus = Number.parseInt(process.env.HYDI_BUILD_CPUS || '', 10)
+
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    ...(Number.isInteger(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : {}),
+  },
   // frank-auto-deploy builds into a staging directory and swaps it in only
   // once the build is complete, so a build that dies halfway never leaves
   // the live site without a working .next. Unset means the normal .next.

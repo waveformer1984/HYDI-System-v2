@@ -5,6 +5,8 @@
  * the task commands run on the in-memory store -- no database file is touched.
  */
 
+const os = require('os');
+const path = require('path');
 const { parseFlags, cmdCreate, cmdList, cmdCancel, cmdTask } = require('../../scripts/mission-cli');
 
 function fakeMemory() {
@@ -140,6 +142,10 @@ describe('mission-cli: cancel / approve through the task lifecycle', () => {
     });
     jest.dontMock('sqlite3');
     memory = new Store({});
+    // Point at a throwaway DB file: when the sqlite3 mock does not take,
+    // Store falls back to the real driver and the default path is the LIVE
+    // heidi_memory.db — tests must never read production mission rows.
+    memory.dbPath = path.join(os.tmpdir(), `mission-cli-test-${process.pid}-${Date.now()}.db`);
     await memory.initialize();
   });
   afterEach(() => {
