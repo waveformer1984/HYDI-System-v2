@@ -424,11 +424,16 @@ module.exports = {
         NODE_ENV: 'development',
         HEIDI_PORT: '3459',
         HEIDI_ALLOW_EXEC: 'false',
+        // Governed control plane (watchdog -> RecoveryEngine) owns recovery;
+        // HealthObserver inside heidi-core becomes observe-only and stops
+        // dispatching restart missions. See heidi-core/missions/health-observer.js.
+        HYDI_DELEGATE_RECOVERY: 'true',
       },
       env_production: {
         NODE_ENV: 'production',
         HEIDI_PORT: '3459',
         HEIDI_ALLOW_EXEC: 'false',
+        HYDI_DELEGATE_RECOVERY: 'true',
       },
       autorestart: true,
       watch: false,
