@@ -27,6 +27,8 @@ Frank-side phases **1–5 were not executed** from this environment. Cloud canno
 
 Run on **`C:\Users\Owner\HYDI-System-v2`** (DESKTOP-I719OIN). **Preserve uncommitted work** — use `git status` before pull.
 
+**Preferred:** `scripts/frank-align-clean-main.ps1` (see `docs/reports/FRANK_CLOUD_TO_PRODUCTION_HANDOFF.md`).
+
 ```powershell
 $ts = (Get-Date).ToUniversalTime().ToString("o")
 $Accept = ".runtime\acceptance\m1-$ts"
