@@ -21,6 +21,8 @@
     "fixture:deadline": "node scripts/fixtures/deadline-tree.js",
     "ci:local": "node scripts/local-ci.js",
     "frank:align": "node -e \"console.error('Run on Frank (Windows): powershell -NoProfile -ExecutionPolicy Bypass -File scripts/frank-align-clean-main.ps1'); process.exit(1)\"",
+    "pov:audit": "node scripts/proof-of-value-audit.js",
+    "test:pov": "jest tests/proof-of-value/acceptance.test.js --testMatch=\"**/*.test.js\" --runInBand --forceExit",
     "test:replay": "jest tests/unit/pipeline-replay.test.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

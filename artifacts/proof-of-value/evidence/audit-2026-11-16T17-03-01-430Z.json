@@ -1,0 +1,193 @@
+{
+  "schema": "heidi-proof-of-value-v1",
+  "generated_at": "2026-11-16T17:03:01.430Z",
+  "commit": "855141a4479a827fffc580978b274acca02142b2",
+  "environment": {
+    "node": "v22.23.4",
+    "cwd": "/agent/repos/HYDI-System-v2",
+    "host": "cursor"
+  },
+  "probes": {
+    "health_3000": {
+      "ok": true,
+      "status": 200,
+      "body_snippet": "{\"status\":\"degraded\",\"hydi_status\":null,\"trend_status\":\"unknown\",\"escalation_level\":\"OK\",\"timestamp\":\"2026-11-16T17:03:01.447Z\",\"last_check\":null,\"version\":\"2.0.0-hydi\",\"system\":\"protoforge-hydi\",\"environment\":\"development\",\"vercel\":true,\"cloud\":{\"available\":false,\"source\":\"local\",\"reason\":\"Supabase not configured\"},\"daemon\":{\"state\":\"running\",\"healthy\":false,\"reasons\":[\"daemon status is 52093s old (limit 180s)\"],\"pid\":176774,\"cycleCount\":0,\"lastCycleAt\":null,\"lastCycleOutcome\":null,\"consecutiveFailures\":0,\"lastError\":null,\"lastErrorAt\":null,\"persistence\":{\"pg\":\"down\",\"rest\":\"unknown\",\"checkedAt\":\"2026-11-16T02:34:48.376Z\"},\"updatedAt\":\"2026-11-16T02:34:48.511Z\",\"ageMs\":52092936,\"provenance\":{\"name\":\"hydi-daemon\",\"pid\":176774,\"gitSha\":\"24b45bc3d8410d6a7dd0fa20fdecce2796fadbfc\",\"gitDirty\":f"
+    },
+    "port_3005": {
+      "open": false,
+      "error": "connect ECONNREFUSED 127.0.0.1:3005"
+    },
+    "port_54321": {
+      "open": false,
+      "error": "connect ECONNREFUSED 127.0.0.1:54321"
+    },
+    "ollama_11434": {
+      "open": false,
+      "error": "connect ECONNREFUSED 127.0.0.1:11434"
+    }
+  },
+  "jest_acceptance": {
+    "numFailedTestSuites": 0,
+    "numFailedTests": 0,
+    "numPassedTestSuites": 1,
+    "numPassedTests": 8,
+    "numPendingTestSuites": 0,
+    "numPendingTests": 0,
+    "numRuntimeErrorTestSuites": 0,
+    "numTodoTests": 0,
+    "numTotalTestSuites": 1,
+    "numTotalTests": 8,
+    "openHandles": [],
+    "snapshot": {
+      "added": 0,
+      "didUpdate": false,
+      "failure": false,
+      "filesAdded": 0,
+      "filesRemoved": 0,
+      "filesRemovedList": [],
+      "filesUnmatched": 0,
+      "filesUpdated": 0,
+      "matched": 0,
+      "total": 0,
+      "unchecked": 0,
+      "uncheckedKeysByFile": [],
+      "unmatched": 0,
+      "updated": 0
+    },
+    "startTime": 1794848581931,
+    "success": true,
+    "testResults": [
+      {
+        "assertionResults": [
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 3,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance records commit SHA for evidence chain",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "records commit SHA for evidence chain"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 31,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance startup: Next heidi-web responds on :3000 (degraded allowed without Supabase)",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 3,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "startup: Next heidi-web responds on :3000 (degraded allowed without Supabase)"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 1083,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance execution: mission worker completes read-only lifecycle (unit truth)",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "execution: mission worker completes read-only lifecycle (unit truth)"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 283,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance evolution: assess + dashboard CLI emit structured JSON",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 2,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "evolution: assess + dashboard CLI emit structured JSON"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 1116,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance revenue: billing memory-tier acceptance passes without Stripe network",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "revenue: billing memory-tier acceptance passes without Stripe network"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 1103,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance mobile: BFF contract tests pass (mock upstream)",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "mobile: BFF contract tests pass (mock upstream)"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 4,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance inference: Ollama on :11434 (skip when absent)",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "inference: Ollama on :11434 (skip when absent)"
+          },
+          {
+            "ancestorTitles": [
+              "Proof of value acceptance"
+            ],
+            "duration": 5,
+            "failureDetails": [],
+            "failureMessages": [],
+            "fullName": "Proof of value acceptance Frank: tailnet heidi-pc unreachable from cloud (documented skip)",
+            "invocations": 1,
+            "location": null,
+            "numPassingAsserts": 1,
+            "retryReasons": [],
+            "status": "passed",
+            "title": "Frank: tailnet heidi-pc unreachable from cloud (documented skip)"
+          }
+        ],
+        "endTime": 1794848585871,
+        "message": "",
+        "name": "/agent/repos/HYDI-System-v2/tests/proof-of-value/acceptance.test.js",
+        "startTime": 1794848581964,
+        "status": "passed",
+        "summary": ""
+      }
+    ],
+    "wasInterrupted": false
+  }
+}
