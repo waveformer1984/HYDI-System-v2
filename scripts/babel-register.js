@@ -13,9 +13,20 @@
  * but the CLI is unreachable at runtime.
  *
  * Presets mirror `babel.jest.config.js` exactly.
+ *
+ * Inside Jest this is a no-op: babel-jest already transforms these files, and
+ * @babel/register's hook is process-global (pirates patches Module._extensions).
+ * Installed from a test's module sandbox, it outlives that sandbox and later
+ * intercepts Jest's own native requires (e.g. the coverage reporter loading
+ * istanbul-lib-report after all suites finish). Babel then lazy-requires its
+ * helpers through the torn-down sandbox and crashes the run with
+ * "isBrowsersQueryValid is not a function". `jest` is injected into every
+ * module Jest loads, but not into child processes a test may spawn, so those
+ * still get the loader.
  */
 
-require('@babel/register')({
+// eslint-disable-next-line no-undef
+if (typeof jest === 'undefined') require('@babel/register')({
   extensions: ['.ts', '.js', '.jsx', '.tsx'],
   presets: [
     ['@babel/preset-env', { targets: { node: 'current' } }],
