@@ -27,6 +27,20 @@ async function main() {
     ? async () => ({ ok: false, status: 0 })
     : undefined;
 
+  const simulated = process.argv.includes('--simulated') || demoFailedProbes;
+
+  if (cmd === 'dashboard') {
+    const { buildImprovementDashboard } = require('../lib/heidi/self-improvement/dashboard');
+    const dash = await buildImprovementDashboard({
+      root,
+      fetchImpl,
+      frankReachable: false,
+      localCiIncidentOpen: process.argv.includes('--local-ci-open'),
+    });
+    console.log(JSON.stringify(dash, null, 2));
+    return;
+  }
+
   if (cmd === 'assess') {
     const report = await assessImprovementOpportunities({
       root,
@@ -44,6 +58,7 @@ async function main() {
       forceNew,
       gapId,
       fetchImpl,
+      simulated,
       localCiIncidentOpen: process.argv.includes('--local-ci-open'),
     });
     console.log(JSON.stringify(result, null, 2));
@@ -51,7 +66,7 @@ async function main() {
     return;
   }
 
-  console.error('Usage: heidi-self-improve.js assess|run [--owner-requested] [--demo-failed-probes]');
+  console.error('Usage: heidi-self-improve.js assess|run|dashboard [--owner-requested] [--demo-failed-probes] [--simulated]');
   process.exit(1);
 }
 
