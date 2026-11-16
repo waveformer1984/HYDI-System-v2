@@ -277,7 +277,10 @@ describe('GET /api/phone/observe', () => {
   beforeEach(() => resetRateLimit());
 
   it('serves the snapshot to the read token only', async () => {
-    const handler = createPhoneObserveHandler({ env, build: () => ({ device: 'frank', level: 'OK' }) });
+    // Empty root: the evidence summaries read .runtime/ files, and on Frank
+    // those exist live — without an isolated root the assertion sees real
+    // observer output instead of the null-shaped empty case.
+    const handler = createPhoneObserveHandler({ env, root: repo(), build: () => ({ device: 'frank', level: 'OK' }) });
     expect((await call(handler)).code).toBe(401);
     expect((await call(handler, { auth: 'Bearer wrong' })).code).toBe(401);
     expect((await call(handler, { method: 'POST', auth: 'Bearer read-test' })).code).toBe(405);
