@@ -325,15 +325,22 @@ const realFs = Object.freeze({
  * build, and left Frank at 0.2-0.5 GB free: most likely out of memory in
  * `next build`. The last hand build that finished started with 1.9 GB free.
  */
-const DEFAULT_MIN_FREE_RAM_GB = 1.5;
+const DEFAULT_BLOCK_FREE_RAM_GB = 1.0;
+const DEFAULT_WARN_FREE_RAM_GB = 1.5;
 
 function memoryPreflight(env = process.env, freemem = os.freemem) {
-  const n = Number(env.HYDI_DEPLOY_MIN_FREE_RAM_GB);
-  const minGb = Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN_FREE_RAM_GB;
+  const blockN = Number(env.HYDI_DEPLOY_MIN_FREE_RAM_GB);
+  const warnN = Number(env.HYDI_DEPLOY_WARN_FREE_RAM_GB);
+  const blockGb = Number.isFinite(blockN) && blockN > 0 ? blockN : DEFAULT_BLOCK_FREE_RAM_GB;
+  const warnGb = Number.isFinite(warnN) && warnN > blockGb ? warnN : DEFAULT_WARN_FREE_RAM_GB;
   const freeGb = Math.round((freemem() / GIB) * 100) / 100;
-  return freeGb >= minGb
-    ? { ok: true, freeGb, reason: 'ok' }
-    : { ok: false, freeGb, reason: `only ${freeGb} GB RAM free, needs ${minGb} GB` };
+  if (freeGb < blockGb) {
+    return { ok: false, warn: false, freeGb, reason: `only ${freeGb} GB RAM free, needs ${blockGb} GB` };
+  }
+  if (freeGb < warnGb) {
+    return { ok: true, warn: true, freeGb, reason: `low headroom: ${freeGb} GB RAM free (< ${warnGb} GB warn threshold)` };
+  }
+  return { ok: true, warn: false, freeGb, reason: 'ok' };
 }
 
 /**
@@ -878,6 +885,8 @@ async function runAutoDeploy(overrides = {}) {
         const reason = `low memory: ${mem.reason}`;
         await alert('low_memory', `Frank auto-deploy waiting: ${mem.reason}. Nothing changed. Close apps you aren't using on Frank; it retries every 5 minutes.`);
         result = { status: 'blocked', reason };
+      } else if (mem.warn) {
+        await alert('low_memory_warn', `Frank auto-deploy proceeding with low headroom: ${mem.reason}. Consider closing unused apps.`);
       }
     }
 
