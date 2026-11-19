@@ -6,6 +6,7 @@ const path = require('path');
 const samples = require('../fixtures/job-scout/gmail-samples.json');
 const {
   classifyInbound,
+  isTrustedPlatformSender,
   leadFromJobEmail,
   processInboundMessages,
   runGmailIngest,
@@ -17,6 +18,21 @@ describe('job scout Gmail ingest (fixtures)', () => {
 
   test.each(cases)('classifies $id as $expectType', ({ id, expectType, ...msg }) => {
     expect(classifyInbound(msg).type).toBe(expectType);
+  });
+
+  test('real freelancer on-site alert: job, onsite, $175 budget', () => {
+    const row = cases.find((m) => m.id === 'gmsg_freelancer_onsite_real');
+    expect(classifyInbound(row).type).toBe('job');
+    const lead = leadFromJobEmail(row);
+    expect(lead.onsite).toBe(true);
+    expect(lead.budget.min).toBe(175);
+    expect(lead.parse_failed).toBe(false);
+    expect(lead.description).toMatch(/HEALTHCARE DEVICE INSPECTION/i);
+  });
+
+  test('rejects lookalike sender domains', () => {
+    expect(isTrustedPlatformSender('alert@fiverr.com.phishing.example')).toBe(false);
+    expect(isTrustedPlatformSender('noreply@updates.freelancer.com')).toBe(true);
   });
 
   test('unparsed job alert keeps lead with parse_failed', () => {
@@ -34,12 +50,19 @@ describe('job scout Gmail ingest (fixtures)', () => {
     expect(result.leads.length).toBe(jobMsgs.length);
     expect(result.summary.jobs).toBe(jobMsgs.length);
     expect(result.summary.parse_failed).toBe(1);
-    expect(result.summary.ignored).toBeGreaterThanOrEqual(1);
+    expect(result.summary.ignored).toBeGreaterThanOrEqual(2);
+    expect(result.summary.review).toBeGreaterThanOrEqual(1);
+    expect(result.summary.skippedLog.length).toBeGreaterThanOrEqual(3);
     expect(result.summary.wins).toBe(3);
     expect(result.summary.payments).toBe(2);
+    expect(result.summary.paymentsUnverified).toBe(2);
     const ws = workspaceDir(env);
     expect(loadProjects(ws).projects.length).toBe(3);
-    expect(loadPlatformLedger(ws).entries.length).toBe(2);
+    const ledger = loadPlatformLedger(ws);
+    expect(ledger.entries.length).toBe(2);
+    expect(ledger.entries.every((e) => e.verified === false)).toBe(true);
+    expect(ledger.reserveEligibleUsd).toBe(0);
+    expect(ledger.unverifiedClearedUsd).toBeGreaterThan(0);
   });
 
   test('dedupe by Gmail message id on second pass', async () => {

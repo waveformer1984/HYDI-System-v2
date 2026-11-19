@@ -94,9 +94,12 @@ describe('job scout apply + workspace', () => {
     });
     expect(pay.cleared).toBe(true);
     expect(pay.amountUsd).toBe(250);
-    recordPlatformPayment(ws, pay);
+    recordPlatformPayment(ws, { ...pay, verified: true });
     const ledger = loadPlatformLedger(ws);
     expect(ledger.reserveEligibleUsd).toBe(250);
+    const unverified = { ...pay, emailId: 'other-id', verified: false };
+    recordPlatformPayment(ws, unverified);
+    expect(loadPlatformLedger(ws).reserveEligibleUsd).toBe(250);
     expect(() => recordPlatformPayment(ws, pay)).toThrow(/duplicate/);
   });
 

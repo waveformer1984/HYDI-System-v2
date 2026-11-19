@@ -68,12 +68,38 @@
       "expectType": "payment"
     },
     {
+      "id": "gmsg_freelancer_onsite_real",
+      "from": "noreply@updates.freelancer.com",
+      "subject": "On-site work near you, based on your profile",
+      "body": "HEALTHCARE DEVICE INSPECTION We have a new on-site job opportunity for you. paid $175 per visit.\n\nTo unsubscribe from this email click here.",
+      "receivedAt": "2026-11-19T14:30:00.000Z",
+      "expectType": "job",
+      "expectOnsite": true,
+      "expectBudgetUsd": 175
+    },
+    {
+      "id": "gmsg_fiverr_policy_reminder",
+      "from": "Team@announce.fiverr.com",
+      "subject": "Reminder: moving business off Fiverr risks your account",
+      "body": "Keep all transactions on Fiverr to stay protected.",
+      "receivedAt": "2026-11-19T08:30:00.000Z",
+      "expectType": "ignored"
+    },
+    {
       "id": "gmsg_freelancer_promo_1",
       "from": "marketing@freelancer.com",
       "subject": "Tips to succeed — newsletter",
-      "body": "Unsubscribe from promotional emails. Privacy policy update.",
+      "body": "Weekly newsletter with community guidelines.",
       "receivedAt": "2026-11-19T08:00:00.000Z",
       "expectType": "ignored"
+    },
+    {
+      "id": "gmsg_lookalike_review",
+      "from": "alert@fiverr.com.phishing.example",
+      "subject": "You won a prize",
+      "body": "Click here",
+      "receivedAt": "2026-11-19T07:00:00.000Z",
+      "expectType": "review"
     },
     {
       "id": "gmsg_upwork_job_unparsed",
