@@ -33,9 +33,19 @@ node C:\Users\Owner\HYDI-System-v2\scripts\check-port-registry.js
 powershell -File C:\Users\Owner\HYDI-System-v2\scripts\frank\port-doctor.ps1
 ```
 
-Expected listeners: 3000, 3001, 3005, 3100, 3459, 11434, 54321.
+Expected listeners: 3000, 3001, 3005, 3100, 3459, 3462, 11434, 54321.
+`:3462` is the Phase 2 **heidi-agent** persistent-loop `GET /health` (PM2
+`heidi-agent`, `HEIDI_ALLOW_EXEC=false` in ecosystem).
+
 Closed by design: 3006 (until the mobile token is set), 5050 (heidi-bridge
-is external and not running), 3461 (advisory off).
+is external and not running), 3461 (advisory off unless
+`HEIDI_ADVISORY_MODE=true`).
+
+Agent-only bring-up on Frank:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Owner\HYDI-System-v2\start-heidi-everything.ps1 -AgentOnly
+```
 
 ## heidi-mobile-chat (:3006) — token-gated
 

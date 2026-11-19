@@ -45,4 +45,11 @@ describe('ecosystem.config.js — heidi-agent defaults', () => {
     expect(src).toMatch(/HEIDI_ALLOW_EXEC:\s*'false'/);
     expect(src).toMatch(/HEIDI_ADVISORY_ALLOWED_ORIGINS:\s*'http:\/\/127\.0\.0\.1:3100'/);
   });
+
+  it('documents Phase 2 persistent loop on :3462 without enabling exec', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'ecosystem.config.js'), 'utf8');
+    expect(src).toMatch(/HEIDI_AGENT_PERSISTENT_LOOP:\s*'true'/);
+    expect(src).toMatch(/HEIDI_AGENT_PORT:\s*'3462'/);
+    expect(src).not.toMatch(/HEIDI_ALLOW_EXEC:\s*'true'/);
+  });
 });

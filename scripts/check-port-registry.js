@@ -82,7 +82,7 @@ for (const d of declared) {
     'ursula-local': 'ursula-local',
     'protoforge-core': 'protoforge-core',
     'heidi-core': 'heidi-core',
-    'heidi-agent': 'heidi-advisory',
+    'heidi-agent': 'heidi-agent-loop',
     'rezonate-app': null, // app-specific port, not in registry — checked below
   };
   const regId = alias.hasOwnProperty(norm(d.service)) ? alias[norm(d.service)] : candidates[0];

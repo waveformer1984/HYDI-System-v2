@@ -652,8 +652,7 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
-      // Legacy Heidi agent process (heidi-core/heidi-agent.js). Previously
-      // an ad-hoc pm2 start — flagged UNDECLARED by the runtime audit.
+      // Heidi agent (heidi-core/heidi-agent.js) — Phase 2 persistent loop + optional advisory API.
       name: 'heidi-agent',
       script: 'heidi-core/heidi-agent.js',
       cwd: __dirname,
@@ -665,12 +664,23 @@ module.exports = {
         HEIDI_ALLOW_EXEC: 'false',
         HEIDI_BIND_HOST: '127.0.0.1',
         HEIDI_ADVISORY_ALLOWED_ORIGINS: 'http://127.0.0.1:3100',
+        HEIDI_AGENT_PERSISTENT_LOOP: 'true',
+        HEIDI_AGENT_PORT: '3462',
+        HEIDI_ADVISOR_MODEL: 'qwen2.5:3b-instruct-q4_K_M',
+        HEIDI_AGENT_CYCLE_MS: '30000',
+        HEIDI_AGENT_REFLECT_EVERY_N: '10',
+        // HEIDI_ADVISORY_MODE stays off unless operator enables Ursula approvals (:3461).
       },
       env_production: {
         NODE_ENV: 'production',
         HEIDI_ALLOW_EXEC: 'false',
         HEIDI_BIND_HOST: '127.0.0.1',
         HEIDI_ADVISORY_ALLOWED_ORIGINS: 'http://127.0.0.1:3100',
+        HEIDI_AGENT_PERSISTENT_LOOP: 'true',
+        HEIDI_AGENT_PORT: '3462',
+        HEIDI_ADVISOR_MODEL: 'qwen2.5:3b-instruct-q4_K_M',
+        HEIDI_AGENT_CYCLE_MS: '30000',
+        HEIDI_AGENT_REFLECT_EVERY_N: '10',
       },
       autorestart: true,
       watch: false,
