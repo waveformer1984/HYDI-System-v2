@@ -2,8 +2,8 @@
 'use strict';
 
 /**
- * Seeds 10 QUALIFIED San Antonio detailer prospects (synthetic public-style records).
- * Does not send outreach — CONTACT requires owner approval in customer-pipeline.
+ * Seeds 10 DISCOVERED San Antonio detailer placeholders (synthetic:true).
+ * They must not auto-qualify — replace with VERIFIED prospects from public listings on Frank.
  */
 
 const fs = require('fs');
@@ -13,7 +13,6 @@ const {
   loadProspects,
   saveProspects,
   addProspect,
-  transitionProspect,
 } = require('../lib/revenue-ops/customer-pipeline');
 
 const SEED = [
@@ -33,13 +32,12 @@ function main() {
   const dir = pipelineDir();
   const data = loadProspects(dir);
   for (const row of SEED) {
-    const p = addProspect(data, {
+    addProspect(data, {
       ...row,
-      evidence: [{ type: 'HYPOTHESIS', note: 'Identified via local search category; verify before contact' }],
-      nextAction: 'Confirm website and owner name from public directory',
+      synthetic: true,
+      evidence: [{ type: 'HYPOTHESIS', note: 'Seed placeholder only — not verified' }],
+      nextAction: 'Replace with Google Maps/Yelp listing and VERIFIED evidence',
     });
-    transitionProspect(data, p.id, 'RESEARCHED', { actor: 'revenue_agent', reason: 'seed' });
-    transitionProspect(data, p.id, 'QUALIFIED', { actor: 'revenue_agent', reason: 'seed' });
   }
   saveProspects(dir, data);
   // eslint-disable-next-line no-console

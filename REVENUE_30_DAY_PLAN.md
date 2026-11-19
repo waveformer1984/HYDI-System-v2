@@ -5,15 +5,18 @@
 
 **Selected offer:** San Antonio Detailer Bot Lite (`detailer_bot` stream).
 
-## Week 1 — Validate and prepare (no outbound without approval)
+## Week 1 — Real prospects only (Jordan; no outreach before VERIFIED evidence)
 
-| Day | Action | Owner |
-|-----|--------|-------|
-| 1–2 | Run `npm test` revenue suites on Frank; snapshot `REVENUE_CAPABILITY_AUDIT.md` with live connector health | Agent |
-| 2 | `node scripts/seed-revenue-prospects.js`; owner reviews 10 records | Agent + Owner |
-| 3 | Build demo: booking page stub + Stripe test checkout for `detailer_bot` | Agent |
-| 4–5 | 3–5 **approved** owner calls/interviews (not bulk email) | Owner |
-| 5 | Pick pilot candidate; document in `customer-pipeline` → CONTACT_APPROVED | Owner |
+Checklist (max 8):
+
+1. Jordan finds **10 real** San Antonio mobile detailers via **Google Maps** and/or **Yelp** (no seed auto-qualify).
+2. For each business, record **one public `source_url`** (listing permalink) in `customer-pipeline` evidence as `type: VERIFIED`, `verified_by: jordan`.
+3. Enter prospects manually (or import) — **do not** use synthetic seed rows for outreach decisions.
+4. Transition each record `DISCOVERED` → `RESEARCHED` only after the listing is opened and problem noted from public info.
+5. Transition to `QUALIFIED` only when VERIFIED evidence exists; **HYPOTHESIS-only rows stay blocked**.
+6. Run `npm test` revenue suites on Frank; refresh `REVENUE_CAPABILITY_AUDIT.md` connector health snapshot.
+7. Build **demo only** (booking stub + Stripe test checkout for `detailer_bot`); no live charges.
+8. **No calls, email, or DMs** in week 1 — outreach waits until week 2 with owner `CONTACT_APPROVED`.
 
 ## Week 2 — Pilot sale (approval gates)
 
