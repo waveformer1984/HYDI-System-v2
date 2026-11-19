@@ -14,8 +14,11 @@ describe('start-heidi-everything.ps1 — Phase 2 agent wiring', () => {
   });
 
   it('probes heidi-agent health on :3462', () => {
-    expect(ps1).toMatch(/3462\/health/);
-    expect(ps1).toMatch(/heidi-agent-loop health/);
+    expect(ps1).toMatch(/\/health/);
+    expect(ps1).toMatch(/HeidiAgentPort\s*=\s*3462/);
+    expect(ps1).toMatch(/Heidi Agent component/);
+    expect(ps1).toMatch(/ProtoForge_Ecosystem\\logs\\heidi-agent\.log/);
+    expect(ps1).toMatch(/boot summary/i);
   });
 
   it('does not set HEIDI_ALLOW_EXEC=true in the script', () => {
