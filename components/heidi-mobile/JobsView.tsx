@@ -37,7 +37,13 @@ function useJobScout(online: boolean, onAuthError: (_e: ApiError) => void): Load
   return { data, loading, error, savedAt, fromCache: false, refresh };
 }
 
-const DECISION_LABEL: Record<JobDecision, string> = { shortlisted: 'Shortlist', dismissed: 'Dismiss', applied: 'Mark applied' };
+const DECISION_LABEL: Record<JobDecision, string> = {
+  shortlisted: 'Shortlist',
+  dismissed: 'Dismiss',
+  applied: 'Sent',
+  drafted: 'Drafted',
+  skipped: 'Skip',
+};
 
 function budgetLabel(l: JobLead): string | null {
   const b = l.budget;

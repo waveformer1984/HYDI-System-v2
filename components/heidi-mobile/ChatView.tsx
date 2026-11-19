@@ -15,6 +15,7 @@ import {
   createBrowserSpeechInput, createBrowserSpeechOutput, isSpeechInputSupported, type SpeechInput, type SpeechOutput,
 } from '../../lib/heidi-mobile/client/voice';
 import { ConfirmSheet } from './ui';
+import JobApplyDigestCard from './JobApplyDigestCard';
 
 const PAGE = 40;
 const SUGGESTIONS = ['What is HYDI’s status?', 'What needs my approval?', 'Summarize recent activity'];
@@ -267,6 +268,7 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
       </div>
 
       <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
+        <JobApplyDigestCard online={online} onAuthError={onAuthError} />
         {brief && brief.lines.length > 0 && (
           <div className={styles.briefCard} role="note" aria-label="Morning brief">
             {brief.lines.map((line, i) => <div key={i} className={i === 0 ? styles.briefTitle : undefined}>{line}</div>)}
