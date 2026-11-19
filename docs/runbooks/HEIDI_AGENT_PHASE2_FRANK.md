@@ -80,3 +80,22 @@ pm2 save
 ```
 
 Revert `ecosystem.config.js` env block for `HEIDI_AGENT_PERSISTENT_LOOP` if needed.
+
+## Handoff — PR ready (Jordan / phone)
+
+| Item | Status |
+|------|--------|
+| Branch | `heidi-agent-phase2` → `clean-main` (GitHub PR open) |
+| Tip commit | verify with `git rev-parse HEAD` after pull |
+| `launch-heidi-mobile.js` | unchanged — no advisor route on mobile BFF |
+| Phone advisor | `python3 heidi_advisor.py advise "..."` only |
+
+### Supabase spot checks (read-only)
+
+```sql
+SELECT COUNT(*) FROM heidi_decision_bounds;
+SELECT COUNT(*) FROM heidi_state_snapshots WHERE created_at > now() - interval '24 hours';
+SELECT COUNT(*) FROM heidi_events WHERE event_type = 'action_refused' AND created_at > now() - interval '7 days';
+```
+
+Expect bounds ≥ 1 before unattended paths matter; snapshots grow after agent cycles; refusals are informational when exec is off.
