@@ -49,6 +49,8 @@ const {
   shouldYieldLease,
   assertAllowedAdvisorModel,
   advisorModelName,
+  confirmSnapshotLeaseAfterClaim,
+  envAllowExec,
 } = require('../lib/heidi/agent-persistent-loop');
 
 /** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
@@ -583,6 +585,39 @@ class HeidiAgent {
   /**
    * Reflect on recent decisions and store insights
    */
+  /**
+   * Persist a reflection row even when no decision events exist (persistent loop).
+   */
+  async writeMinimalReflection(cycleNumber) {
+    const reflection = {
+      cycle: cycleNumber,
+      event_range: {},
+      patterns: ['No decision events in reflection window'],
+      uncertainties: [],
+      improvements: [],
+      timestamp: new Date().toISOString(),
+    };
+    const { error: reflectError } = await this.supabase.from('heidi_reflections').insert({
+      reflection,
+      event_range: reflection.event_range,
+      cycle: cycleNumber,
+    });
+    if (reflectError) {
+      console.error('[HEIDI-AGENT] Minimal reflection storage error:', reflectError.message);
+      return;
+    }
+    console.log(`[HEIDI-AGENT] Minimal reflection cycle ${cycleNumber} stored`);
+    this.stats.reflectionsCycled++;
+  }
+
+  async reflectEveryNCycle() {
+    const before = this.stats.reflectionsCycled;
+    await this.reflect();
+    if (this.stats.reflectionsCycled === before) {
+      await this.writeMinimalReflection(this.cycleCount);
+    }
+  }
+
   async reflect() {
     if (!this.leaseClaimed) return;
 
@@ -683,9 +718,11 @@ class HeidiAgent {
         // switch and the action registry; the human replaces the advisor verdict.
         const execResult = await this.executeTask(task, {
           verdict: 'AUTO-APPROVE',
-          execEnabled: true,
+          execEnabled: envAllowExec(process.env),
           outcome: 'authorized',
           reason: 'User approved',
+          _boundsPass: true,
+          confidence: 1,
         });
         return { success: execResult.success, executed: execResult.executed, action: 'approved' };
       } else {
@@ -731,6 +768,17 @@ class HeidiAgent {
       }
       this.leaseClaimed = true;
       await this.writeAgentSnapshot({ phase: 'lease_claim' });
+      const confirm = await confirmSnapshotLeaseAfterClaim(
+        this.supabase,
+        this.leaseHolder,
+        this.instanceId,
+        interval
+      );
+      if (!confirm.ok) {
+        console.error('[HEIDI-AGENT] Lost startup lease race to peer — exiting');
+        this.leaseClaimed = false;
+        process.exit(1);
+      }
       return true;
     } catch (error) {
       console.error('[HEIDI-AGENT] Snapshot lease failed:', error.message);
@@ -834,7 +882,7 @@ class HeidiAgent {
 
     const every = reflectEveryNCycles();
     if (this.cycleCount > 0 && this.cycleCount % every === 0) {
-      await this.reflect();
+      await this.reflectEveryNCycle();
     }
   }
 
@@ -1199,7 +1247,9 @@ class HeidiAgent {
     }
 
     console.log('[HEIDI-AGENT] Shutdown complete');
-    process.exit(0);
+    if (!this._shutdownNoExit) {
+      process.exit(0);
+    }
   }
 
   /**
@@ -1225,16 +1275,12 @@ if (require.main === module) {
   agent.initialize().then(() => {
     agent.start();
 
-    // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      console.log('\n[HEIDI-AGENT] SIGTERM received');
+    const onGracefulSignal = async (sig) => {
+      console.log(`\n[HEIDI-AGENT] ${sig} received`);
       await agent.shutdown();
-    });
-
-    process.on('SIGINT', async () => {
-      console.log('\n[HEIDI-AGENT] SIGINT received');
-      await agent.shutdown();
-    });
+    };
+    process.on('SIGTERM', () => onGracefulSignal('SIGTERM'));
+    process.on('SIGINT', () => onGracefulSignal('SIGINT'));
 
     // Status report every 5 minutes
     setInterval(() => {
