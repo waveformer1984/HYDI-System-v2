@@ -12,7 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export const DECISIONS = ['shortlisted', 'dismissed', 'applied'] as const;
+export const DECISIONS = ['shortlisted', 'dismissed', 'applied', 'drafted', 'skipped'] as const;
 export type Decision = (typeof DECISIONS)[number];
 
 export interface ScoutLead {

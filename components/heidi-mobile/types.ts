@@ -168,7 +168,7 @@ export interface BriefSnapshot {
 
 export type Tab = 'chat' | 'status' | 'tasks' | 'jobs' | 'control';
 
-export type JobDecision = 'shortlisted' | 'dismissed' | 'applied';
+export type JobDecision = 'shortlisted' | 'dismissed' | 'applied' | 'drafted' | 'skipped';
 
 export interface JobLead {
   id: string;

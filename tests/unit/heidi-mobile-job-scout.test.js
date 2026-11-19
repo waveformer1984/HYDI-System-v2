@@ -105,20 +105,29 @@ describe('heidi-mobile job-scout route', () => {
     expect(res.body.leads.find((l) => l.id === 'hn:2').decision).toBeNull();
   });
 
-  it('POST shortlist/dismiss/applied writes decisions.json in the Ursula format', async () => {
-    for (const status of ['shortlisted', 'dismissed', 'applied']) {
+  it('POST shortlist/dismiss/drafted; applied requires confirm flow', async () => {
+    for (const status of ['shortlisted', 'dismissed', 'drafted']) {
       const id = `freelancer:${status.length}`;
       fs.writeFileSync(path.join(scoutDir, 'leads.json'), JSON.stringify({
-        leads: [{ id, title: 't', score: 80, sourceUrl: 'https://x' }],
+        leads: [{ id, title: 't', score: 80, sourceUrl: 'https://x', draft: 'hi' }],
       }));
       const res = await call({ method: 'POST', cookie: sessionCookie(), body: { id, status } });
       expect(res.statusCode).toBe(200);
       expect(res.body.ok).toBe(true);
     }
+    const appliedBlocked = await call({ method: 'POST', cookie: sessionCookie(), body: { id: 'freelancer:11', status: 'applied' } });
+    expect(appliedBlocked.statusCode).toBe(409);
+    const confirm = await call({
+      method: 'POST',
+      cookie: sessionCookie(),
+      body: { id: 'freelancer:7', action: 'confirm_sent' },
+    });
+    expect(confirm.statusCode).toBe(200);
     const decisions = JSON.parse(fs.readFileSync(path.join(scoutDir, 'decisions.json'), 'utf8'));
-    expect(Object.keys(decisions)).toHaveLength(3);
+    expect(decisions['freelancer:7'].status).toBe('applied');
     for (const [id, d] of Object.entries(decisions)) {
-      expect(d.status).toMatch(/^(shortlisted|dismissed|applied)$/);
+      if (id === 'freelancer:7') continue;
+      expect(d.status).toMatch(/^(shortlisted|dismissed|drafted)$/);
       expect(d.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     }
     // 'clear' removes the entry.

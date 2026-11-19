@@ -24,6 +24,10 @@ node_modules/
 .hydi/verification/
 .hydi/billing-verify/
 
+# Job scout Gmail OAuth (Frank)
+.hydi/job-scout-gmail-token.json
+**/*job-scout-gmail-token*.json
+
 # Heidi runtime secrets
 .vapid-keys.json
 **/.vapid-keys.json

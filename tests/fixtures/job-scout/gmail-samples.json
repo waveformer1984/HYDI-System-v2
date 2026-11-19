@@ -1,0 +1,114 @@
+{
+  "messages": [
+    {
+      "id": "gmsg_freelancer_job_1",
+      "from": "noreply@freelancer.com",
+      "subject": "New project matching your skills: Next.js dashboard",
+      "body": "A buyer posted a matching project.\nhttps://www.freelancer.com/projects/react/nextjs-dashboard-123/\nBudget $500-900",
+      "receivedAt": "2026-11-19T10:00:00.000Z",
+      "expectType": "job",
+      "expectParseFailed": false
+    },
+    {
+      "id": "gmsg_upwork_job_1",
+      "from": "notifications@upwork.com",
+      "subject": "Job alert: React developer for SaaS MVP",
+      "body": "Matches your profile.\nhttps://www.upwork.com/jobs/~01abc123",
+      "receivedAt": "2026-11-19T11:00:00.000Z",
+      "expectType": "job",
+      "expectParseFailed": false
+    },
+    {
+      "id": "gmsg_fiverr_job_1",
+      "from": "mail@fiverr.com",
+      "subject": "New buyer request: automate Stripe webhooks",
+      "body": "Brief: integration help\nhttps://www.fiverr.com/users/example/buying?req=abc",
+      "receivedAt": "2026-11-19T12:00:00.000Z",
+      "expectType": "job",
+      "expectParseFailed": false
+    },
+    {
+      "id": "gmsg_freelancer_win_1",
+      "from": "notifications@freelancer.com",
+      "subject": "You have been awarded the project",
+      "body": "Congratulations — you have been awarded Next.js dashboard.",
+      "receivedAt": "2026-11-18T09:00:00.000Z",
+      "expectType": "win"
+    },
+    {
+      "id": "gmsg_upwork_win_1",
+      "from": "notify@upwork.com",
+      "subject": "Offer accepted — contract started",
+      "body": "Your offer has been accepted. Work may now begin.",
+      "receivedAt": "2026-11-18T10:00:00.000Z",
+      "expectType": "win"
+    },
+    {
+      "id": "gmsg_fiverr_win_1",
+      "from": "noreply@fiverr.com",
+      "subject": "Your order has started",
+      "body": "The buyer placed an order for Gig: API automation.",
+      "receivedAt": "2026-11-18T11:00:00.000Z",
+      "expectType": "win"
+    },
+    {
+      "id": "gmsg_upwork_pay_1",
+      "from": "payments@upwork.com",
+      "subject": "Funds are available",
+      "body": "Your payment of $320.00 is cleared to your account.",
+      "receivedAt": "2026-11-17T15:00:00.000Z",
+      "expectType": "payment"
+    },
+    {
+      "id": "gmsg_fiverr_pay_1",
+      "from": "billing@fiverr.com",
+      "subject": "Payment cleared",
+      "body": "Funds are available for withdrawal. Amount $150.00",
+      "receivedAt": "2026-11-17T16:00:00.000Z",
+      "expectType": "payment"
+    },
+    {
+      "id": "gmsg_freelancer_onsite_real",
+      "from": "noreply@updates.freelancer.com",
+      "subject": "On-site work near you, based on your profile",
+      "body": "HEALTHCARE DEVICE INSPECTION We have a new on-site job opportunity for you. paid $175 per visit.\n\nTo unsubscribe from this email click here.",
+      "receivedAt": "2026-11-19T14:30:00.000Z",
+      "expectType": "job",
+      "expectOnsite": true,
+      "expectBudgetUsd": 175
+    },
+    {
+      "id": "gmsg_fiverr_policy_reminder",
+      "from": "Team@announce.fiverr.com",
+      "subject": "Reminder: moving business off Fiverr risks your account",
+      "body": "Keep all transactions on Fiverr to stay protected.",
+      "receivedAt": "2026-11-19T08:30:00.000Z",
+      "expectType": "ignored"
+    },
+    {
+      "id": "gmsg_freelancer_promo_1",
+      "from": "marketing@freelancer.com",
+      "subject": "Tips to succeed — newsletter",
+      "body": "Weekly newsletter with community guidelines.",
+      "receivedAt": "2026-11-19T08:00:00.000Z",
+      "expectType": "ignored"
+    },
+    {
+      "id": "gmsg_lookalike_review",
+      "from": "alert@fiverr.com.phishing.example",
+      "subject": "You won a prize",
+      "body": "Click here",
+      "receivedAt": "2026-11-19T07:00:00.000Z",
+      "expectType": "review"
+    },
+    {
+      "id": "gmsg_upwork_job_unparsed",
+      "from": "notifications@upwork.com",
+      "subject": "Job alert: details in app only",
+      "body": "Open the Upwork app to view this job alert.",
+      "receivedAt": "2026-11-19T13:00:00.000Z",
+      "expectType": "job",
+      "expectParseFailed": true
+    }
+  ]
+}
