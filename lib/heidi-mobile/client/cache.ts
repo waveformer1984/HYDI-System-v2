@@ -33,6 +33,20 @@ export interface StoredMessage {
   model?: string | null;
   /** Tool/action notes shown under a reply (e.g. "create_task — pending approval"). */
   notes?: string[];
+  /** Inline approval cards tied to SSE `actions` events (no credentials). */
+  actionCards?: Array<{
+    key: string;
+    action: {
+      type: string | null;
+      status: string | null;
+      actionId: string | null;
+      missionId: number | null;
+      error: string | null;
+    };
+    outcomeText?: string;
+    outcomeOk?: boolean;
+    settled: boolean;
+  }>;
 }
 
 export interface Preferences {

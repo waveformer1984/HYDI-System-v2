@@ -1,5 +1,8 @@
 /** Response shapes of pages/api/heidi-mobile/* (see lib/heidi-mobile/normalize.js). */
 
+/** SSE `actions` row (see SHARED CONTRACT in docs/HEIDI_MOBILE.md). */
+export type { ChatStreamAction } from '../../lib/heidi-mobile/client/taskDecision';
+
 export type ConnectionState =
   | 'online' | 'degraded' | 'offline' | 'unauthorized' | 'pending_approval' | 'forbidden' | 'unconfigured';
 
