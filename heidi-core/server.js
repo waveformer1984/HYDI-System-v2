@@ -62,6 +62,7 @@ const { isOpsQuery, parseOpsCommand, runOpsCommand } = require('./ops/ops-comman
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
 const { isDoctorQuery, formatDoctorChat } = require('../lib/hydi/doctor');
+const { handlePoolChatCommand } = require('../lib/dev-workforce/pool-control');
 const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
 const { morningBrief, briefDue, msUntilNextBrief } = require('./status/morning-brief');
@@ -335,6 +336,12 @@ class HeidiCore {
         if (isDoctorQuery(input)) {
           send({ t: formatDoctorChat(this.root || process.cwd()) });
           send({ done: true, model: 'hydi-doctor', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        const poolReply = handlePoolChatCommand(input, this.root || process.cwd());
+        if (poolReply) {
+          send({ t: poolReply });
+          send({ done: true, model: 'heidi-pool', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (isJobsQuery(input)) {
@@ -882,6 +889,12 @@ class HeidiCore {
         if (isDoctorQuery(input)) {
           send({ t: formatDoctorChat(this.root || process.cwd()) });
           send({ done: true, model: 'hydi-doctor', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic');
+        }
+        const poolReplyStream = handlePoolChatCommand(input, this.root || process.cwd());
+        if (poolReplyStream) {
+          send({ t: poolReplyStream });
+          send({ done: true, model: 'heidi-pool', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return done('deterministic');
         }
         if (isJobsQuery(input)) {
