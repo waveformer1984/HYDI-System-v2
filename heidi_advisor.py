@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-heidi.py — Termux phone action advisor (thin client).
+heidi_advisor.py — Termux phone action advisor (thin client).
+
+Named heidi_advisor.py so it does not overwrite ~/hydi/heidi.py on device.
 
 Uses FRANK_IP / FRANK_HOSTS → Frank Ollama (qwen2.5:3b-instruct-q4_K_M), else
-local llama.cpp :8080 (≤3s). Returns AUTO-APPROVE | REVIEW | BLOCK only; never
+local llama.cpp :8080. Returns AUTO-APPROVE | REVIEW | BLOCK only; never
 executes actions.
 
 Usage:
-    python heidi.py advise "Restart heidi-core after deploy"
-    echo '{"action":"payout"}' | python heidi.py advise
+    python heidi_advisor.py advise "Restart heidi-core after deploy"
+    echo '{"action":"payout"}' | python heidi_advisor.py advise
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ import hydi  # noqa: E402
 def main(argv=None):
     args = argv if argv is not None else sys.argv[1:]
     if not args or args[0] != "advise":
-        print("usage: python heidi.py advise <proposal text>", file=sys.stderr)
+        print("usage: python heidi_advisor.py advise <proposal text>", file=sys.stderr)
         return 2
     proposal = " ".join(args[1:]).strip()
     if not proposal and not sys.stdin.isatty():

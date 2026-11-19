@@ -52,7 +52,7 @@ The script:
    it; an explicitly exported variable still wins.
 3. Patches `~/.termux/boot/start_hydi.sh` if it exists: backs it up to
    `start_hydi.sh.bak-<timestamp>`, makes it load the env file, and replaces
-   the hardcoded `192.168.1.100` with the PC's MagicDNS name.
+   any stale hardcoded Frank host with the PC's MagicDNS name (`FRANK_IP=<FRANK_HOST>`).
 4. With `--disable-local-llm`: `sv down` plus a `down` file for any runit
    service that runs `llama-server` or `ollama serve`. Nothing is uninstalled.
 

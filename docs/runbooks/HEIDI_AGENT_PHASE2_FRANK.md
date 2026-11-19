@@ -17,13 +17,28 @@ After Frank serves `GET /api/phone/observe` with `heidiAgentLoop`, the phone das
 
 No phone change enables execution.
 
+### Phone action advisor (CLI only)
+
+- Logic lives in repo-root `hydi.py` (`advise_proposal`).
+- **Do not** run `heidi_advisor.py` over `~/hydi/heidi.py` on the phone — use the dedicated CLI:
+
+  ```bash
+  FRANK_IP=heidi-pc.tailc50af2.ts.net python3 heidi_advisor.py advise "proposal text"
+  ```
+
+- **Frank path:** `GET http://$FRANK_IP:11434/api/tags` (≤3s); if OK, `POST /api/generate` (≤30s).
+- **Fallback:** `http://127.0.0.1:8080` llama.cpp (≤90s on-device mistral-7b).
+- Any timeout, transport error, or malformed model output → `verdict: BLOCK`, `confidence: 0`, reason in JSON + `events` log — never AUTO-APPROVE/REVIEW on failure.
+- **Removed:** `POST /api/advisor/verdict` was previously on the embedded HTTP server in `hydi.py` (`HydiHandler.do_POST`, default dashboard port **3006**). It is **not** wired through `launch-heidi-mobile.js` (that file is unchanged). Verdicts are CLI-only now.
+
 ## Step 5 — Automated checks (cloud or Frank)
 
 ```bash
 npx jest tests/unit/heidi-agent-phase2.test.js tests/unit/action-advisor.test.js \
   tests/unit/start-heidi-agent-phase2-wiring.test.js tests/unit/http-server-security.test.js \
   tests/unit/heidi-agent-loop-probe.test.js tests/unit/frank-observation.test.js \
-  tests/unit/hydi-heidi-agent-phase2.test.js --runInBand --forceExit
+  tests/unit/hydi-heidi-agent-phase2.test.js tests/unit/hydi-phone-advisor.test.js --runInBand --forceExit
+python3 tests/hydi_phone_advisor_test.py
 node scripts/check-port-registry.js
 ```
 

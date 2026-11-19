@@ -9,8 +9,8 @@ function pythonBin() {
 
 const hasPython = spawnSync(pythonBin(), ['--version'], { encoding: 'utf8' }).status === 0;
 
-(hasPython ? describe : describe.skip)('hydi.py / heidi.py phone advisor', () => {
-  it('advise_proposal uses Frank Ollama then llama.cpp fallback', () => {
+(hasPython ? describe : describe.skip)('hydi phone advisor (heidi_advisor.py)', () => {
+  it('advise_proposal: Frank probe, fallback, timeout/malformed → BLOCK', () => {
     const result = spawnSync(pythonBin(), [path.join(__dirname, '../hydi_phone_advisor_test.py')], {
       encoding: 'utf8',
       env: { ...process.env },
@@ -21,10 +21,10 @@ const hasPython = spawnSync(pythonBin(), ['--version'], { encoding: 'utf8' }).st
     expect(result.stdout).toContain('ok');
   });
 
-  it('heidi.py advise CLI emits JSON verdict', () => {
+  it('heidi_advisor.py advise CLI emits JSON verdict', () => {
     const result = spawnSync(
       pythonBin(),
-      [path.join(__dirname, '../../heidi.py'), 'advise', 'test proposal'],
+      [path.join(__dirname, '../../heidi_advisor.py'), 'advise', 'test proposal'],
       {
         encoding: 'utf8',
         env: { ...process.env, FRANK_IP: '', FRANK_HOSTS: '' },

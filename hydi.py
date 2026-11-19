@@ -374,14 +374,16 @@ def llama_chat(messages):
     except Exception:
         return None
 
-# ── Phone action advisor (Termux / heidi.py) ─────────────
+# ── Phone action advisor (Termux / heidi_advisor.py CLI only) ─────────────
 # Advisory only: AUTO-APPROVE | REVIEW | BLOCK — never executes.
+# No HTTP route on :3006; use `python heidi_advisor.py advise "..."`.
 PHONE_ADVISOR_MODEL = os.environ.get(
     "HEIDI_ADVISOR_MODEL", "qwen2.5:3b-instruct-q4_K_M"
 )
 ADVISOR_VERDICTS = frozenset({"AUTO-APPROVE", "REVIEW", "BLOCK"})
-FRANK_OLLAMA_ADVISOR_TIMEOUT = 25
-LLAMA_ADVISOR_FALLBACK_TIMEOUT = 3
+FRANK_OLLAMA_TAGS_TIMEOUT = 3
+FRANK_OLLAMA_GENERATE_TIMEOUT = 30
+LLAMA_ADVISOR_FALLBACK_TIMEOUT = 90
 
 def frank_ollama_host_for_advisor():
     """FRANK_IP (or FRANK_HOSTS) first, then frank_resolve()."""
@@ -452,6 +454,25 @@ def _ollama_generate_prompt(base, model, prompt, timeout):
         data = json.loads(r.read())
     return (data.get("response") or "").strip()
 
+def _advisor_block(reason, backend="none"):
+    reason = str(reason or "advisor blocked")[:500]
+    log_event(f"phone advisor BLOCK: {reason}", "warn")
+    return {
+        "verdict": "BLOCK",
+        "confidence": 0.0,
+        "reason": reason,
+        "backend": backend,
+        "executed": False,
+    }
+
+def _frank_ollama_tags_ok(base):
+    try:
+        with urlopen(f"{base.rstrip('/')}/api/tags", timeout=FRANK_OLLAMA_TAGS_TIMEOUT) as r:
+            return r.status < 500
+    except Exception as exc:
+        log_event(f"Frank Ollama tags probe failed: {exc.__class__.__name__}", "warn")
+        return False
+
 def _llama_cpp_advisor_generate(prompt, timeout):
     if not LLAMA_MODEL:
         detect_llama()
@@ -479,20 +500,24 @@ def advise_proposal(proposal, context=None):
     host = frank_ollama_host_for_advisor()
     if host:
         base = f"http://{host}:11434"
-        if _probe(f"{base}/api/tags"):
+        if _frank_ollama_tags_ok(base):
             try:
                 raw = _ollama_generate_prompt(
-                    base, PHONE_ADVISOR_MODEL, prompt, FRANK_OLLAMA_ADVISOR_TIMEOUT
+                    base, PHONE_ADVISOR_MODEL, prompt, FRANK_OLLAMA_GENERATE_TIMEOUT
                 )
                 parsed = parse_phone_advisor_verdict(raw)
                 if parsed:
                     parsed["backend"] = "frank-ollama"
                     parsed["executed"] = False
                     return parsed
-            except Exception:
-                log_event("Frank Ollama advisor call failed", "warn")
+                return _advisor_block("malformed Frank advisor output", "frank-ollama")
+            except Exception as exc:
+                return _advisor_block(
+                    f"Frank advisor transport error: {exc.__class__.__name__}",
+                    "frank-ollama",
+                )
         else:
-            log_event(f"Frank Ollama :11434 unreachable at {host}", "warn")
+            log_event(f"Frank Ollama tags unreachable at {host}", "warn")
 
     log_event(
         "phone advisor: falling back to local llama.cpp http://127.0.0.1:8080",
@@ -505,15 +530,12 @@ def advise_proposal(proposal, context=None):
             parsed["backend"] = "llama-cpp"
             parsed["executed"] = False
             return parsed
-    except Exception:
-        pass
-    return {
-        "verdict": "BLOCK",
-        "confidence": 0.0,
-        "reason": "advisor unreachable",
-        "backend": "none",
-        "executed": False,
-    }
+        return _advisor_block("malformed llama.cpp advisor output", "llama-cpp")
+    except Exception as exc:
+        return _advisor_block(
+            f"llama.cpp advisor timeout or error: {exc.__class__.__name__}",
+            "llama-cpp",
+        )
 
 def refresh_backends():
     """Groq, else Ollama, else the local llama.cpp server."""
@@ -1722,11 +1744,6 @@ class HydiHandler(BaseHTTPRequestHandler):
         elif p == "/api/ollama/reload":
             refresh_backends()
             self._json(models_payload())
-
-        elif p == "/api/advisor/verdict":
-            proposal = body.get("proposal") or body.get("message") or ""
-            result = advise_proposal(proposal, body.get("context"))
-            self._json(result)
 
         else:
             self.send_response(404); self.end_headers()
