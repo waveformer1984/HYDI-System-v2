@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import styles from '../../styles/heidi-mobile.module.css';
-import { heidiRequest, type ApiError } from '../../lib/heidi-mobile/client/api';
+import { type ApiError } from '../../lib/heidi-mobile/client/api';
+import { formatTaskDecisionOutcome, postTaskDecision, type TaskDecision } from '../../lib/heidi-mobile/client/taskDecision';
 import { relativeTime } from '../../lib/heidi-mobile/client/format';
 import type { Loadable } from './hooks';
 import type { Approval, MissionApproval, TasksSnapshot } from './types';
@@ -13,8 +14,6 @@ interface Props {
   onAuthError: (_error: ApiError) => void;
 }
 
-type Decision = 'approve' | 'reject';
-
 interface Outcome {
   id: string;
   ok: boolean;
@@ -24,7 +23,7 @@ interface Outcome {
 interface PendingDecision {
   approval?: Approval;
   mission?: MissionApproval;
-  decision: Decision;
+  decision: TaskDecision;
 }
 
 export default function TasksView({ tasks, online, now, onAuthError }: Props) {
@@ -40,34 +39,16 @@ export default function TasksView({ tasks, online, now, onAuthError }: Props) {
     if (!pending) return;
     const key = outcomeKey(pending);
     setBusy(true);
-    const body = pending.mission
-      ? { mission_id: pending.mission.id, decision: pending.decision }
-      : { id: pending.approval!.id, decision: pending.decision };
-    const result = await heidiRequest<{ ok: boolean; status: string | null; error: string | null }>('/tasks', {
-      method: 'POST',
-      body,
-      timeoutMs: 40000,
-    });
+    const target = pending.mission
+      ? { missionId: pending.mission.id, actionId: null }
+      : { missionId: null, actionId: pending.approval!.id };
+    const result = await postTaskDecision(target, pending.decision);
     setBusy(false);
     setPending(null);
-    if (result.ok) {
-      const executedFailed = pending.decision === 'approve' && result.data.status === 'failed';
-      setOutcomes((o) => ({
-        ...o,
-        [key]: {
-          id: key,
-          ok: !executedFailed,
-          text: pending.decision === 'reject' ? 'Rejected — it will not run.'
-            : executedFailed ? `Approved, but the action failed: ${result.data.error || 'no detail from HYDI'}`
-              : pending.mission ? 'Decision recorded — Heidi will run it if the safety gates pass.' : 'Approved and executed.',
-        },
-      }));
-      void tasks.refresh();
-    } else {
-      // Nothing is removed from the list on failure — the task is still pending.
-      setOutcomes((o) => ({ ...o, [key]: { id: key, ok: false, text: `Not ${pending.decision === 'approve' ? 'approved' : 'rejected'}: ${result.error.message}` } }));
-      if (['not_paired', 'unauthorized'].includes(result.error.kind)) onAuthError(result.error);
-    }
+    const formatted = formatTaskDecisionOutcome(pending.decision, result, { viaMission: Boolean(pending.mission) });
+    setOutcomes((o) => ({ ...o, [key]: { id: key, ok: formatted.ok, text: formatted.text } }));
+    if (result.ok) void tasks.refresh();
+    else if (formatted.authError) onAuthError(formatted.authError);
   };
 
   const approvals = snap?.approvals;

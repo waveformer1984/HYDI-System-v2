@@ -227,6 +227,20 @@ describe('heidiRequest', () => {
 });
 
 describe('streamChat', () => {
+  it('delivers actions events with missionId on the SHARED CONTRACT shape', async () => {
+    globalThis.fetch = jest.fn(async () => sseStreamResponse([
+      'data: {"type":"actions","actions":[{"type":"t","status":"pending_approval","actionId":null,"missionId":7,"error":null}]}\n\n',
+      'data: {"type":"done"}\n\n',
+    ])) as unknown as typeof fetch;
+    const events: ChatEvent[] = [];
+    const r = await streamChat({ message: 'x', sessionId: 'abcdefgh12' }, (e) => events.push(e));
+    expect(r).toEqual({ ok: true });
+    expect(events[0]).toEqual({
+      type: 'actions',
+      actions: [{ type: 't', status: 'pending_approval', actionId: null, missionId: 7, error: null }],
+    });
+  });
+
   it('delivers validated events and resolves ok on done', async () => {
     globalThis.fetch = jest.fn(async () => sseStreamResponse([
       'data: {"type":"delta","text":"Hi"}\n\n', 'data: {"type":"bogus"}\n\n', 'data: {"type":"done"}\n\n',

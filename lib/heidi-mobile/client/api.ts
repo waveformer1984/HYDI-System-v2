@@ -137,7 +137,16 @@ export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'meta'; model: string | null }
   | { type: 'tool'; name: string | null; status: string | null; error?: string | null }
-  | { type: 'actions'; actions: Array<{ type: string | null; status: string | null; actionId: string | null; error: string | null }> }
+  | {
+      type: 'actions';
+      actions: Array<{
+        type: string | null;
+        status: string | null;
+        actionId: string | null;
+        missionId: number | null;
+        error: string | null;
+      }>;
+    }
   | { type: 'error'; message: string; kind?: string }
   | { type: 'done' };
 
@@ -150,7 +159,13 @@ function isChatEvent(v: unknown): v is ChatEvent {
     case 'delta': return typeof e.text === 'string';
     case 'error': return typeof e.message === 'string';
     case 'meta': case 'tool': case 'done': return true;
-    case 'actions': return Array.isArray(e.actions);
+    case 'actions':
+      return Array.isArray(e.actions) && (e.actions as unknown[]).every((a) => {
+        if (!a || typeof a !== 'object') return false;
+        const row = a as Record<string, unknown>;
+        const mid = row.missionId;
+        return mid === null || mid === undefined || typeof mid === 'number';
+      });
     default: return false;
   }
 }

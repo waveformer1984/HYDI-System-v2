@@ -2,6 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Keyboar
 import styles from '../../styles/heidi-mobile.module.css';
 import { streamChat, type ApiError, type ChatEvent } from '../../lib/heidi-mobile/client/api';
 import {
+  actionCardKey,
+  describeChatActionNote,
+  isChatActionDecidable,
+} from '../../lib/heidi-mobile/client/taskDecision';
+import ActionApprovalCard, { type ActionCardSnapshot } from './ActionApprovalCard';
+import {
   loadMessages, saveMessages, loadChatSessionId, resetChatSession, loadDraft, saveDraft, type StoredMessage,
 } from '../../lib/heidi-mobile/client/cache';
 import { clockTime, newId } from '../../lib/heidi-mobile/client/format';
@@ -22,13 +28,29 @@ interface Props {
   brief?: { generated_at: string; ct_date: string; lines: string[]; failures: string[] } | null;
 }
 
+function normalizeAction(a: Extract<ChatEvent, { type: 'actions' }>['actions'][number]) {
+  return {
+    type: a.type,
+    status: a.status,
+    actionId: a.actionId,
+    missionId: a.missionId ?? null,
+    error: a.error,
+  };
+}
+
 function describeActions(event: Extract<ChatEvent, { type: 'actions' }>): string[] {
-  return event.actions.map((a) => {
-    const name = a.type || 'action';
-    if (a.status === 'pending_approval') return `${name} — needs your approval (see Tasks)`;
-    if (a.status === 'failed') return `${name} — failed${a.error ? `: ${a.error}` : ''}`;
-    return `${name} — ${a.status || 'unknown'}`;
-  });
+  return event.actions
+    .map((a) => describeChatActionNote(normalizeAction(a)))
+    .filter((n): n is string => Boolean(n));
+}
+
+function buildActionCards(event: Extract<ChatEvent, { type: 'actions' }>): ActionCardSnapshot[] {
+  return event.actions
+    .filter((a) => isChatActionDecidable(normalizeAction(a)))
+    .map((a) => {
+      const action = normalizeAction(a);
+      return { key: actionCardKey(action), action, settled: false };
+    });
 }
 
 export default function ChatView({ online, speakReplies, onAuthError, onUpstreamFailure, onTasksChanged, brief }: Props) {
@@ -154,7 +176,12 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
       } else if (event.type === 'actions') {
         if (event.actions.some((a) => a.status === 'pending_approval')) sawApproval = true;
         const notes = describeActions(event);
-        if (notes.length) patch(assistantId, (m) => ({ ...m, notes: [...(m.notes || []), ...notes] }));
+        const cards = buildActionCards(event);
+        patch(assistantId, (m) => ({
+          ...m,
+          notes: notes.length ? [...(m.notes || []), ...notes] : m.notes,
+          actionCards: cards.length ? [...(m.actionCards || []), ...cards] : m.actionCards,
+        }));
       }
     });
 
@@ -283,6 +310,25 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
                     : m.role === 'assistant' && failed ? null
                       : m.status === 'cancelled' ? <span className={styles.muted}>(no reply — cancelled)</span> : null}
                 {(m.notes || []).map((n, i) => <div key={i} className={styles.toolLine}>⚙ {n}</div>)}
+                {(m.actionCards || []).map((c) => (
+                  <ActionApprovalCard
+                    key={c.key}
+                    card={c}
+                    online={online}
+                    onTasksChanged={onTasksChanged}
+                    onAuthError={onAuthError}
+                    onSettled={(update) => {
+                      patch(m.id, (msg) => ({
+                        ...msg,
+                        actionCards: (msg.actionCards || []).map((row) => (
+                          row.key === c.key
+                            ? { ...row, ...update, settled: true }
+                            : row
+                        )),
+                      }));
+                    }}
+                  />
+                ))}
                 {failed && (
                   <div className={styles.errorText} role="alert" style={{ marginTop: m.text ? 8 : 0 }}>
                     {m.status === 'interrupted' ? 'Reply cut off: ' : 'Not sent to HYDI: '}{m.error || 'request failed'}
