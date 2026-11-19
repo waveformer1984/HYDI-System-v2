@@ -156,7 +156,7 @@ console.log('tailnet address checks:', fails.length ? `FAIL ${JSON.stringify(fai
 
 // 11) model URL must stay private (the digest prompt carries personal data)
 const { isPrivateModelUrl } = await import('../src/llm.js');
-const urls = { 'http://127.0.0.1:11434': true, 'http://localhost:11434': true, 'http://192.168.1.100:11434': true, 'http://frank:11434': true,
+const urls = { 'http://127.0.0.1:11434': true, 'http://localhost:11434': true, 'http://heidi-pc.tailc50af2.ts.net:11434': true, 'http://frank:11434': true,
   'http://heidi-pc.tailc50af2.ts.net:11434': true, 'http://100.88.1.2:11434': true, 'https://api.example.com': false, 'http://8.8.8.8:11434': false, 'file:///etc/passwd': false, 'nonsense': false };
 const ubad = Object.entries(urls).filter(([u, want]) => isPrivateModelUrl(u) !== want);
 console.log('model URL checks:', ubad.length ? `FAIL ${JSON.stringify(ubad)}` : `all ${Object.keys(urls).length} pass`);

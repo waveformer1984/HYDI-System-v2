@@ -13,7 +13,6 @@ BOOT="$HOME/.termux/boot/start_hydi.sh"
 SVDIR="${PREFIX:-/data/data/com.termux/files/usr}/var/service"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 MARK="# hydi-thin-client: load tailnet settings"
-OLD_IP="192.168.1.100"
 DISABLE_LLM=0
 FORCE=0
 DRY=0
@@ -134,10 +133,9 @@ PREV_HOST=""
 if [ -f "$ENV_FILE" ]; then
   PREV_HOST="$(sed -n 's/^FRANK_IP=//p' "$ENV_FILE" | tail -1)"
 fi
-OLD_VALUES="$OLD_IP"
+OLD_VALUES=""
 if [ -n "$PREV_HOST" ] && [ "$PREV_HOST" != "$FRANK_IP" ]; then
-  OLD_VALUES="$OLD_IP
-$PREV_HOST"
+  OLD_VALUES="$PREV_HOST"
 fi
 
 say "== Writing $ENV_FILE"

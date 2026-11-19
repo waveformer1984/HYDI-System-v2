@@ -3,7 +3,7 @@
 #   bash install-phone.sh http://<FRANK_LAN_IP>:3470 <TOKEN>
 # Prereqs (install as apps, from F-Droid/GitHub — same source as your Termux): Termux:API, Termux:Boot.
 set -euo pipefail
-FRANK_URL="${1:?Frank URL, e.g. http://192.168.1.100:3470}"
+FRANK_URL="${1:?Frank URL, e.g. http://<FRANK_HOST>:3470 or set FRANK_IP in Termux}"
 TOKEN="${2:?token from Frank config.json}"
 
 pkg install -y termux-api jq curl termux-services coreutils

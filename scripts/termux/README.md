@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/waveformer1984/HYDI-System-v2/clean
 ## Configuration
 
 1. **Tailnet (preferred):** Tailscale connected; Frank serves Ollama on `:11434` (see repo `docs/TAILSCALE.md`).
-2. **LAN fallback:** create `~/.hydi.env` with `FRANK_IP=<host or IP>` — **required for LAN**; the script does not assume `192.168.1.100`.
+2. **LAN fallback:** create `~/.hydi.env` with `FRANK_IP=<FRANK_HOST>` (e.g. `heidi-pc.tailc50af2.ts.net` or your LAN IP).
 3. **Local fallback:** hydi/llama-server on port **8080**.
 
 Remote model default: `qwen2.5:3b-instruct-q4_K_M`.

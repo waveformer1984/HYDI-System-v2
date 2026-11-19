@@ -280,7 +280,13 @@ describe('GET /api/phone/observe', () => {
     // Empty root: the evidence summaries read .runtime/ files, and on Frank
     // those exist live — without an isolated root the assertion sees real
     // observer output instead of the null-shaped empty case.
-    const handler = createPhoneObserveHandler({ env, root: repo(), build: () => ({ device: 'frank', level: 'OK' }) });
+    const loopProbe = { reachable: true, lease_held: false, cycles: 0, allow_exec: false };
+    const handler = createPhoneObserveHandler({
+      env,
+      root: repo(),
+      build: () => ({ device: 'frank', level: 'OK' }),
+      probeHeidiAgentLoop: async () => loopProbe,
+    });
     expect((await call(handler)).code).toBe(401);
     expect((await call(handler, { auth: 'Bearer wrong' })).code).toBe(401);
     expect((await call(handler, { method: 'POST', auth: 'Bearer read-test' })).code).toBe(405);
@@ -289,6 +295,7 @@ describe('GET /api/phone/observe', () => {
     expect(ok.body).toEqual({
       ok: true,
       snapshot: { device: 'frank', level: 'OK' },
+      heidiAgentLoop: loopProbe,
       fixList: null,
       frontDoor: null,
       billingOps: { alert: null, lastReconcileErrors: null, ts: null },

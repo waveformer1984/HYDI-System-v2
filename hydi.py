@@ -166,7 +166,11 @@ PREFERRED_MODELS = [
 
 # When Ollama is the HYDI PC (thin client over the tailnet), prefer the model
 # that host is tuned for; small local models stay the fallback order.
-REMOTE_PREFERRED_MODELS = ["qwen2.5:3b-instruct", "qwen2.5"]
+REMOTE_PREFERRED_MODELS = [
+    "qwen2.5:3b-instruct-q4_k_m",
+    "qwen2.5:3b-instruct",
+    "qwen2.5",
+]
 
 # ── Frank host resolution (multi-link thin client) ───────
 # FRANK_HOSTS is a comma list like "192.168.86.178,100.118.182.126" so the
@@ -370,6 +374,169 @@ def llama_chat(messages):
     except Exception:
         return None
 
+# ── Phone action advisor (Termux / heidi_advisor.py CLI only) ─────────────
+# Advisory only: AUTO-APPROVE | REVIEW | BLOCK — never executes.
+# No HTTP route on :3006; use `python heidi_advisor.py advise "..."`.
+PHONE_ADVISOR_MODEL = os.environ.get(
+    "HEIDI_ADVISOR_MODEL", "qwen2.5:3b-instruct-q4_K_M"
+)
+ADVISOR_VERDICTS = frozenset({"AUTO-APPROVE", "REVIEW", "BLOCK"})
+FRANK_OLLAMA_TAGS_TIMEOUT = 3
+FRANK_OLLAMA_GENERATE_TIMEOUT = 30
+LLAMA_ADVISOR_FALLBACK_TIMEOUT = 90
+
+def frank_ollama_host_for_advisor():
+    """FRANK_IP (or FRANK_HOSTS) first, then frank_resolve()."""
+    raw = (os.environ.get("FRANK_HOSTS") or os.environ.get("FRANK_IP") or "").strip()
+    if raw:
+        first = raw.split(",")[0].strip()
+        if first:
+            return urlparse("http://" + first).hostname or first
+    return frank_resolve()
+
+def _extract_json_object(text):
+    if not text:
+        return None
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    match = re.search(
+        r'\{[^{}]*"verdict"\s*:\s*"(?:AUTO-APPROVE|REVIEW|BLOCK)"[^{}]*\}',
+        text,
+        re.S,
+    )
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except ValueError:
+            pass
+    return None
+
+def parse_phone_advisor_verdict(text):
+    obj = _extract_json_object(text)
+    if not isinstance(obj, dict):
+        return None
+    verdict = obj.get("verdict")
+    if verdict not in ADVISOR_VERDICTS:
+        return None
+    conf = obj.get("confidence")
+    if not isinstance(conf, (int, float)) or conf < 0 or conf > 1:
+        return None
+    reason = obj.get("reason")
+    if not isinstance(reason, str):
+        reason = str(reason or "")
+    return {"verdict": verdict, "confidence": float(conf), "reason": reason[:500]}
+
+def build_phone_advisor_prompt(proposal):
+    body = proposal if isinstance(proposal, str) else json.dumps(proposal)
+    return (
+        "You are the Heidi phone action advisor (read-only). "
+        "Reply with ONLY JSON: "
+        '{"verdict":"AUTO-APPROVE"|"REVIEW"|"BLOCK","confidence":0.0-1.0,"reason":"..."}. '
+        "You never execute actions.\nProposal:\n" + body[:4000]
+    )
+
+def _ollama_generate_prompt(base, model, prompt, timeout):
+    payload = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2, "num_predict": 256},
+    }).encode()
+    req = Request(
+        f"{base.rstrip('/')}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+    return (data.get("response") or "").strip()
+
+def _advisor_block(reason, backend="none"):
+    reason = str(reason or "advisor blocked")[:500]
+    log_event(f"phone advisor BLOCK: {reason}", "warn")
+    return {
+        "verdict": "BLOCK",
+        "confidence": 0.0,
+        "reason": reason,
+        "backend": backend,
+        "executed": False,
+    }
+
+def _frank_ollama_tags_ok(base):
+    try:
+        with urlopen(f"{base.rstrip('/')}/api/tags", timeout=FRANK_OLLAMA_TAGS_TIMEOUT) as r:
+            return r.status < 500
+    except Exception as exc:
+        log_event(f"Frank Ollama tags probe failed: {exc.__class__.__name__}", "warn")
+        return False
+
+def _llama_cpp_advisor_generate(prompt, timeout):
+    if not LLAMA_MODEL:
+        detect_llama()
+    model = LLAMA_MODEL or "llama.cpp"
+    payload = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+        "max_tokens": 256,
+    }).encode()
+    req = Request(
+        f"{LLAMA_URL}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+    content = data["choices"][0]["message"]["content"]
+    return content.strip() if isinstance(content, str) else ""
+
+def advise_proposal(proposal, context=None):
+    """Advisory verdict only — executed is always False."""
+    _ = context
+    prompt = build_phone_advisor_prompt(proposal)
+    host = frank_ollama_host_for_advisor()
+    if host:
+        base = f"http://{host}:11434"
+        if _frank_ollama_tags_ok(base):
+            try:
+                raw = _ollama_generate_prompt(
+                    base, PHONE_ADVISOR_MODEL, prompt, FRANK_OLLAMA_GENERATE_TIMEOUT
+                )
+                parsed = parse_phone_advisor_verdict(raw)
+                if parsed:
+                    parsed["backend"] = "frank-ollama"
+                    parsed["executed"] = False
+                    return parsed
+                return _advisor_block("malformed Frank advisor output", "frank-ollama")
+            except Exception as exc:
+                return _advisor_block(
+                    f"Frank advisor transport error: {exc.__class__.__name__}",
+                    "frank-ollama",
+                )
+        else:
+            log_event(f"Frank Ollama tags unreachable at {host}", "warn")
+
+    log_event(
+        "phone advisor: falling back to local llama.cpp http://127.0.0.1:8080",
+        "warn",
+    )
+    try:
+        raw = _llama_cpp_advisor_generate(prompt, LLAMA_ADVISOR_FALLBACK_TIMEOUT)
+        parsed = parse_phone_advisor_verdict(raw)
+        if parsed:
+            parsed["backend"] = "llama-cpp"
+            parsed["executed"] = False
+            return parsed
+        return _advisor_block("malformed llama.cpp advisor output", "llama-cpp")
+    except Exception as exc:
+        return _advisor_block(
+            f"llama.cpp advisor timeout or error: {exc.__class__.__name__}",
+            "llama-cpp",
+        )
+
 def refresh_backends():
     """Groq, else Ollama, else the local llama.cpp server."""
     global OLLAMA_MODEL, LLAMA_MODEL
@@ -434,6 +601,10 @@ def _frank_observe(host, token):
     snap = data.get("snapshot") if isinstance(data, dict) else None
     if not isinstance(snap, dict) or snap.get("device") != "frank":
         return None, "Frank returned no snapshot"
+    loop = data.get("heidiAgentLoop") if isinstance(data, dict) else None
+    if isinstance(loop, dict):
+        snap = dict(snap)
+        snap["heidiAgentLoop"] = loop
     return snap, None
 
 def frank_observation(host, force=False):
@@ -460,6 +631,38 @@ def _frank_vitals(snap):
     if h.get("uptimeHours") is not None:
         parts.append(f"up {h['uptimeHours']}h")
     return ", ".join(parts)
+
+def frank_heidi_agent_card(host):
+    """Phase 2 heidi-agent loop — evidence from Frank observe (loopback :3462 probe)."""
+    snap, reason = frank_observation(host)
+    card = {
+        "id": "heidi-agent",
+        "name": "Heidi agent",
+        "icon": "🤖",
+        "role": "Phase 2 persistent loop (:3462)",
+        "fleet": True,
+    }
+    if snap is None:
+        card.update(
+            status="idle",
+            detail=f"not observed ({reason})" if reason else "not observed",
+        )
+        return card
+    loop = snap.get("heidiAgentLoop")
+    if not isinstance(loop, dict):
+        card.update(status="idle", detail="observe has no agent loop probe")
+        return card
+    if not loop.get("reachable"):
+        card.update(status="error", detail=loop.get("reason", "health down"))
+        return card
+    if loop.get("allow_exec"):
+        card.update(status="error", detail="allow_exec true on Frank — fix PM2 env")
+        return card
+    lease = loop.get("lease_held")
+    cycles = loop.get("cycles")
+    card["status"] = "running" if lease else "idle"
+    card["detail"] = f"exec off, lease {'held' if lease else 'open'}, cycles={cycles}"
+    return card
 
 def frank_health_card(host):
     snap, reason = frank_observation(host)
@@ -502,6 +705,17 @@ def tool_frank():
     storage = snap.get("storage") or {}
     if storage:
         lines.append(f"Storage: {storage.get('level')}, {storage.get('freeGb')} GB free")
+    loop = snap.get("heidiAgentLoop") or {}
+    if loop:
+        if loop.get("reachable"):
+            lines.append(
+                "Heidi agent: "
+                + ("exec OFF" if not loop.get("allow_exec") else "exec ON")
+                + f", lease {'held' if loop.get('lease_held') else 'open'}"
+                + f", cycles={loop.get('cycles')}"
+            )
+        else:
+            lines.append("Heidi agent: " + str(loop.get("reason", "down")))
     lines.append(f"Read {snap.get('at')}. Source: Frank's own monitors; nothing was changed.")
     return "\n".join(lines)
 
@@ -650,6 +864,7 @@ def fleet_status():
 
     if frank:
         items.append(frank_health_card(frank))
+        items.append(frank_heidi_agent_card(frank))
 
     if OLLAMA_MODEL:
         where = "remote" if ollama_is_remote() else "local"
