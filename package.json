@@ -63,6 +63,7 @@
     "hydi:operator": "node scripts/hydi-diagnose.js --operator",
     "hydi:governed": "node scripts/hydi-recover.js --governed",
     "hydi:dry-run": "node scripts/hydi-recover.js --dry-run",
+    "doctor": "node scripts/hydi-doctor.js",
     "hydi:doctor": "node scripts/hydi-doctor.js",
     "hydi:qualify": "node scripts/hydi-qualify.js",
     "hydi:qualify:json": "node scripts/hydi-qualify.js --json",

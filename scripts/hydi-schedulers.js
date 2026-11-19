@@ -35,6 +35,7 @@ const JOBS = [
   { name: 'hydi-stuck-job-scheduler',    script: 'scripts/stuck-job-scheduler.js',              intervalMs: envMs('STUCK_JOB_INTERVAL_MS', 3600000),  timeoutMs: envMs('STUCK_JOB_TIMEOUT_MS', 120000) },
   { name: 'hydi-revenue-reconciliation', script: 'scripts/revenue-reconciliation-scheduler.js', intervalMs: envMs('RECONCILIATION_INTERVAL_MS', 86400000), timeoutMs: envMs('RECONCILIATION_TIMEOUT_MS', 180000) },
   { name: 'heidi-job-scout',             script: 'scripts/job-scout.js',                        intervalMs: envMs('JOB_SCOUT_INTERVAL_MS', 10800000), timeoutMs: envMs('JOB_SCOUT_TIMEOUT_MS', 240000) },
+  { name: 'hydi-doctor',                 script: 'scripts/hydi-doctor.js',                      intervalMs: envMs('HYDI_DOCTOR_INTERVAL_MS', 21600000), timeoutMs: envMs('HYDI_DOCTOR_TIMEOUT_MS', 120000), noOnce: true, argsExtra: ['--scheduled', '--notify'] },
   { name: 'hydi-failed-webhook-retry',   script: 'scripts/failed-webhook-scheduler.js',         intervalMs: envMs('WEBHOOK_RETRY_INTERVAL_MS', 1800000), timeoutMs: envMs('WEBHOOK_RETRY_TIMEOUT_MS', 120000) },
   // Resource discovery: no-ops unless HYDI_ENABLE_WEEKLY_RESOURCE_DISCOVERY=1
   { name: 'hydi-resource-discovery',     script: 'scripts/resource-discovery-scheduler.js',     intervalMs: envMs('HYDI_RESOURCE_DISCOVERY_INTERVAL_MS', 604800000), timeoutMs: envMs('HYDI_RESOURCE_DISCOVERY_TIMEOUT_MS', 300000) },
@@ -72,7 +73,9 @@ function writeStatus() {
 function spawnOnce(job) {
   return new Promise((resolve) => {
     const cmd = job.tsx ? 'npx' : 'node';
-    const args = job.tsx ? ['tsx', job.script, '--once'] : [job.script, '--once'];
+    const once = job.noOnce ? [] : ['--once'];
+    const args = job.tsx ? ['tsx', job.script, ...once] : [job.script, ...once];
+    if (job.argsExtra && job.argsExtra.length) args.push(...job.argsExtra);
     const t0 = Date.now();
     let out = '';
     let settled = false;
