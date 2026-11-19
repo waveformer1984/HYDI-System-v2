@@ -166,7 +166,11 @@ PREFERRED_MODELS = [
 
 # When Ollama is the HYDI PC (thin client over the tailnet), prefer the model
 # that host is tuned for; small local models stay the fallback order.
-REMOTE_PREFERRED_MODELS = ["qwen2.5:3b-instruct", "qwen2.5"]
+REMOTE_PREFERRED_MODELS = [
+    "qwen2.5:3b-instruct-q4_k_m",
+    "qwen2.5:3b-instruct",
+    "qwen2.5",
+]
 
 # ── Frank host resolution (multi-link thin client) ───────
 # FRANK_HOSTS is a comma list like "192.168.86.178,100.118.182.126" so the
@@ -369,6 +373,147 @@ def llama_chat(messages):
         return content.strip() if isinstance(content, str) else None
     except Exception:
         return None
+
+# ── Phone action advisor (Termux / heidi.py) ─────────────
+# Advisory only: AUTO-APPROVE | REVIEW | BLOCK — never executes.
+PHONE_ADVISOR_MODEL = os.environ.get(
+    "HEIDI_ADVISOR_MODEL", "qwen2.5:3b-instruct-q4_K_M"
+)
+ADVISOR_VERDICTS = frozenset({"AUTO-APPROVE", "REVIEW", "BLOCK"})
+FRANK_OLLAMA_ADVISOR_TIMEOUT = 25
+LLAMA_ADVISOR_FALLBACK_TIMEOUT = 3
+
+def frank_ollama_host_for_advisor():
+    """FRANK_IP (or FRANK_HOSTS) first, then frank_resolve()."""
+    raw = (os.environ.get("FRANK_HOSTS") or os.environ.get("FRANK_IP") or "").strip()
+    if raw:
+        first = raw.split(",")[0].strip()
+        if first:
+            return urlparse("http://" + first).hostname or first
+    return frank_resolve()
+
+def _extract_json_object(text):
+    if not text:
+        return None
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    match = re.search(
+        r'\{[^{}]*"verdict"\s*:\s*"(?:AUTO-APPROVE|REVIEW|BLOCK)"[^{}]*\}',
+        text,
+        re.S,
+    )
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except ValueError:
+            pass
+    return None
+
+def parse_phone_advisor_verdict(text):
+    obj = _extract_json_object(text)
+    if not isinstance(obj, dict):
+        return None
+    verdict = obj.get("verdict")
+    if verdict not in ADVISOR_VERDICTS:
+        return None
+    conf = obj.get("confidence")
+    if not isinstance(conf, (int, float)) or conf < 0 or conf > 1:
+        return None
+    reason = obj.get("reason")
+    if not isinstance(reason, str):
+        reason = str(reason or "")
+    return {"verdict": verdict, "confidence": float(conf), "reason": reason[:500]}
+
+def build_phone_advisor_prompt(proposal):
+    body = proposal if isinstance(proposal, str) else json.dumps(proposal)
+    return (
+        "You are the Heidi phone action advisor (read-only). "
+        "Reply with ONLY JSON: "
+        '{"verdict":"AUTO-APPROVE"|"REVIEW"|"BLOCK","confidence":0.0-1.0,"reason":"..."}. '
+        "You never execute actions.\nProposal:\n" + body[:4000]
+    )
+
+def _ollama_generate_prompt(base, model, prompt, timeout):
+    payload = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2, "num_predict": 256},
+    }).encode()
+    req = Request(
+        f"{base.rstrip('/')}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+    return (data.get("response") or "").strip()
+
+def _llama_cpp_advisor_generate(prompt, timeout):
+    if not LLAMA_MODEL:
+        detect_llama()
+    model = LLAMA_MODEL or "llama.cpp"
+    payload = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+        "max_tokens": 256,
+    }).encode()
+    req = Request(
+        f"{LLAMA_URL}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+    content = data["choices"][0]["message"]["content"]
+    return content.strip() if isinstance(content, str) else ""
+
+def advise_proposal(proposal, context=None):
+    """Advisory verdict only — executed is always False."""
+    _ = context
+    prompt = build_phone_advisor_prompt(proposal)
+    host = frank_ollama_host_for_advisor()
+    if host:
+        base = f"http://{host}:11434"
+        if _probe(f"{base}/api/tags"):
+            try:
+                raw = _ollama_generate_prompt(
+                    base, PHONE_ADVISOR_MODEL, prompt, FRANK_OLLAMA_ADVISOR_TIMEOUT
+                )
+                parsed = parse_phone_advisor_verdict(raw)
+                if parsed:
+                    parsed["backend"] = "frank-ollama"
+                    parsed["executed"] = False
+                    return parsed
+            except Exception:
+                log_event("Frank Ollama advisor call failed", "warn")
+        else:
+            log_event(f"Frank Ollama :11434 unreachable at {host}", "warn")
+
+    log_event(
+        "phone advisor: falling back to local llama.cpp http://127.0.0.1:8080",
+        "warn",
+    )
+    try:
+        raw = _llama_cpp_advisor_generate(prompt, LLAMA_ADVISOR_FALLBACK_TIMEOUT)
+        parsed = parse_phone_advisor_verdict(raw)
+        if parsed:
+            parsed["backend"] = "llama-cpp"
+            parsed["executed"] = False
+            return parsed
+    except Exception:
+        pass
+    return {
+        "verdict": "BLOCK",
+        "confidence": 0.0,
+        "reason": "advisor unreachable",
+        "backend": "none",
+        "executed": False,
+    }
 
 def refresh_backends():
     """Groq, else Ollama, else the local llama.cpp server."""
@@ -1577,6 +1722,11 @@ class HydiHandler(BaseHTTPRequestHandler):
         elif p == "/api/ollama/reload":
             refresh_backends()
             self._json(models_payload())
+
+        elif p == "/api/advisor/verdict":
+            proposal = body.get("proposal") or body.get("message") or ""
+            result = advise_proposal(proposal, body.get("context"))
+            self._json(result)
 
         else:
             self.send_response(404); self.end_headers()
