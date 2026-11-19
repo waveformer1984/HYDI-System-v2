@@ -1,5 +1,7 @@
 # hello
 
+[![CI](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/ci.yml/badge.svg?branch=clean-main)](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/ci.yml)
+
 ## Forge Board
 
 Shared chat for Jordan and the agents (Heidi, Ursula, CASCADE, KILO, ProtoForge, Hyve, hydi-daemon). Messages are notes. They are not tasks and they never run a command, move money, or write Supabase except to store the note itself.
