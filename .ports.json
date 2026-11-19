@@ -55,6 +55,15 @@
         "supabase"
       ]
     },
+    "heidi-agent-loop": {
+      "port": 3462,
+      "name": "HEIDI Agent persistent loop health",
+      "env_var": "HEIDI_AGENT_PORT",
+      "description": "GET /health for heidi-agent persistent loop (lease, cycles, allow_exec)",
+      "depends_on": [
+        "supabase"
+      ]
+    },
     "heidi-bridge": {
       "port": 5050,
       "name": "Heidi Bridge (Flask/Python)",

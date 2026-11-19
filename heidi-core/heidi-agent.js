@@ -28,6 +28,7 @@ const { createClient } = require('@supabase/supabase-js');
 const HeidiGoalEngine = require('../evolution/heidi-goals');
 const GoalExecutor = require('../evolution/goal-executor');
 const ActionExecutor = require('./actions/action-executor');
+const { randomUUID } = require('crypto');
 const { adviseProposal } = require('../lib/governance/action-advisor');
 const {
   checkAdvisoryAuth,
@@ -35,6 +36,20 @@ const {
   bindHost,
   authorizeHumanApproval,
 } = require('../lib/governance/advisory-auth');
+const {
+  evaluateExecTripleGate,
+  advisorAutoApprove,
+  cycleIntervalMs,
+  reflectEveryNCycles,
+  boundsRowUsable,
+  buildHeartbeatPayload,
+  fetchLatestAgentSnapshot,
+  insertAgentSnapshot,
+  createAgentHealthServer,
+  shouldYieldLease,
+  assertAllowedAdvisorModel,
+  advisorModelName,
+} = require('../lib/heidi/agent-persistent-loop');
 
 /** Strip CR/LF and other control characters so request-derived values can't forge log lines. */
 function logSafe(value) {
@@ -86,6 +101,14 @@ class HeidiAgent {
     this.goalExecutor = null;
     this.goalExecutionInterval = 60000; // check for goals every minute
     this.goalTimer = null;
+
+    // Phase 2 persistent loop (Frank deploy)
+    this.persistentLoop = process.env.HEIDI_AGENT_PERSISTENT_LOOP === 'true';
+    this.instanceId = randomUUID();
+    this.cycleCount = 0;
+    this.lastCycleAt = null;
+    this.cycleTimer = null;
+    this.healthServerApi = null;
   }
 
   /**
@@ -277,6 +300,7 @@ class HeidiAgent {
         execEnabled: gate.execEnabled === true,
         outcome: gate.outcome,
         confidence: gate.confidence,
+        _boundsPass: gate.gates.bounds.pass === true,
         reason: `${gate.gates.advisor.reason || gate.gates.bounds.reason || 'gate decision'} [advisor:${gate.gates.advisor.status} bounds:${gate.gates.bounds.pass ? 'pass' : 'fail'}]`,
         memory_ids: memoryIds,
       };
@@ -291,9 +315,18 @@ class HeidiAgent {
    */
   async executeTask(task, decision) {
     try {
-      // Exec stays closed unless HEIDI_ALLOW_EXEC=true AND the gate outcome
-      // is 'authorized'. 'would have executed' is evidence, not a run.
-      if (decision.verdict !== 'AUTO-APPROVE' || decision.execEnabled !== true || decision.outcome !== 'authorized') {
+      const triple = evaluateExecTripleGate({
+        allowExec: decision.execEnabled === true,
+        advisorAutoApprove: advisorAutoApprove(decision.verdict, decision.confidence),
+        withinBounds: decision._boundsPass === true,
+      });
+      // Exec stays closed unless all three gates pass AND outcome is authorized.
+      if (
+        decision.verdict !== 'AUTO-APPROVE' ||
+        !triple.mayExecute ||
+        decision.outcome !== 'authorized'
+      ) {
+        await this.logProposedOnly(task, decision, triple.failedGates);
         const note = decision.outcome === 'would have executed'
           ? 'would have executed (HEIDI_ALLOW_EXEC off)'
           : decision.verdict;
@@ -368,6 +401,29 @@ class HeidiAgent {
   /**
    * Log decision event to heidi_events
    */
+  async logProposedOnly(task, decision, failedGates = []) {
+    try {
+      const { error } = await this.supabase.from('heidi_events').insert({
+        event_type: 'agent_proposal',
+        division: task.division,
+        verdict: decision.verdict,
+        payload: {
+          status: 'proposed_only',
+          task_id: task.id,
+          task_type: task.type,
+          outcome: decision.outcome,
+          reason: decision.reason,
+          failed_gates: failedGates,
+        },
+        context_snapshot: { lease_holder: this.leaseHolder, instance_id: this.instanceId },
+        memory_ids: decision.memory_ids || [],
+      });
+      if (error) console.error('[HEIDI-AGENT] proposed_only log error:', error.message);
+    } catch (error) {
+      console.error('[HEIDI-AGENT] proposed_only log failed:', error.message);
+    }
+  }
+
   async logEvent(task, verdict, reason, memoryIds = []) {
     try {
       const { error } = await this.supabase
@@ -652,24 +708,157 @@ class HeidiAgent {
   /**
    * Initialize agent
    */
+  async ensureSnapshotLease() {
+    try {
+      assertAllowedAdvisorModel(advisorModelName());
+    } catch (e) {
+      console.error('[HEIDI-AGENT]', e.message);
+      return false;
+    }
+    try {
+      const latest = await fetchLatestAgentSnapshot(this.supabase);
+      const interval = cycleIntervalMs();
+      if (
+        shouldYieldLease({
+          latestRow: latest,
+          holder: this.leaseHolder,
+          instanceId: this.instanceId,
+          intervalMs: interval,
+        })
+      ) {
+        console.error('[HEIDI-AGENT] Snapshot lease held by another instance — exiting');
+        process.exit(1);
+      }
+      this.leaseClaimed = true;
+      await this.writeAgentSnapshot({ phase: 'lease_claim' });
+      return true;
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Snapshot lease failed:', error.message);
+      return false;
+    }
+  }
+
+  async writeAgentSnapshot(extra = {}) {
+    const payload = buildHeartbeatPayload({
+      holder: this.leaseHolder,
+      instanceId: this.instanceId,
+      cycle: this.cycleCount,
+      leaseHeld: this.leaseClaimed,
+      divisionStatus: {
+        tasks_processed: this.stats.tasksProcessed,
+        advisory_mode: this.advisoryMode,
+      },
+      extra,
+    });
+    await insertAgentSnapshot(this.supabase, payload, this.instanceId);
+  }
+
+  async releaseSnapshotLease() {
+    try {
+      await insertAgentSnapshot(
+        this.supabase,
+        buildHeartbeatPayload({
+          holder: this.leaseHolder,
+          instanceId: this.instanceId,
+          cycle: this.cycleCount,
+          leaseHeld: false,
+          divisionStatus: {},
+          extra: { lease_released: true, phase: 'shutdown' },
+        }),
+        this.instanceId
+      );
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Snapshot lease release error:', error.message);
+    }
+    this.leaseClaimed = false;
+  }
+
+  healthPayload() {
+    return {
+      lease_held: this.leaseClaimed,
+      last_cycle_at: this.lastCycleAt,
+      cycles: this.cycleCount,
+      allow_exec:
+        process.env.HEIDI_ALLOW_EXEC === 'true' || process.env.HEIDI_ALLOW_EXEC === '1',
+    };
+  }
+
+  startHealthServer() {
+    if (this.healthServerApi) return;
+    this.healthServerApi = createAgentHealthServer(() => this.healthPayload(), process.env);
+    this.healthServerApi.listen().then(({ host, port }) => {
+      console.log(`[HEIDI-AGENT] Health server http://${host}:${port}/health`);
+    }).catch((error) => {
+      console.error('[HEIDI-AGENT] Health server failed:', error.message);
+      this.onFatal(error);
+    });
+  }
+
+  async runPersistentCycle() {
+    if (!this.leaseClaimed) return;
+
+    const interval = cycleIntervalMs();
+    try {
+      const latest = await fetchLatestAgentSnapshot(this.supabase);
+      if (
+        shouldYieldLease({
+          latestRow: latest,
+          holder: this.leaseHolder,
+          instanceId: this.instanceId,
+          intervalMs: interval,
+        })
+      ) {
+        console.error('[HEIDI-AGENT] Lost snapshot lease to peer — exiting');
+        process.exit(1);
+      }
+    } catch (error) {
+      console.warn('[HEIDI-AGENT] Lease check skipped:', error.message);
+    }
+
+    const boundsOk = await this.loadDecisionBounds();
+    if (!boundsOk || !boundsRowUsable(this.decisionBounds)) {
+      console.log('[HEIDI-AGENT] BLOCK — heidi_decision_bounds missing or empty');
+      this.cycleCount += 1;
+      this.lastCycleAt = new Date().toISOString();
+      await this.writeAgentSnapshot({ blocked: 'missing_bounds' });
+      return;
+    }
+
+    if (!this.isPaused()) {
+      await this.processTaskCycle();
+    }
+
+    this.cycleCount += 1;
+    this.lastCycleAt = new Date().toISOString();
+    await this.writeAgentSnapshot({ cycle_complete: true });
+
+    const every = reflectEveryNCycles();
+    if (this.cycleCount > 0 && this.cycleCount % every === 0) {
+      await this.reflect();
+    }
+  }
+
   async initialize() {
     console.log('[HEIDI-AGENT] Initializing...');
 
-    // Try to claim lease
-    let leaseAttempts = 0;
-    while (!this.leaseClaimed && leaseAttempts < 3) {
-      const claimed = await this.claimLease();
-      if (claimed) break;
-      leaseAttempts++;
-      await new Promise(r => setTimeout(r, 2000));
+    if (this.persistentLoop) {
+      console.log('[HEIDI-AGENT] Persistent loop mode');
+      if (!(await this.ensureSnapshotLease())) {
+        console.error('[HEIDI-AGENT] Failed snapshot lease');
+      }
+    } else {
+      let leaseAttempts = 0;
+      while (!this.leaseClaimed && leaseAttempts < 3) {
+        const claimed = await this.claimLease();
+        if (claimed) break;
+        leaseAttempts++;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      if (!this.leaseClaimed) {
+        console.error('[HEIDI-AGENT] Failed to claim lease after 3 attempts. Running in advisory mode.');
+      }
     }
 
-    if (!this.leaseClaimed) {
-      console.error('[HEIDI-AGENT] Failed to claim lease after 3 attempts. Running in advisory mode.');
-      // Can still run in advisory mode (REVIEW everything)
-    }
-
-    // Load decision bounds
     await this.loadDecisionBounds();
 
     this.isRunning = true;
@@ -685,22 +874,32 @@ class HeidiAgent {
     // Initialize goal execution system
     this.initializeGoalSystem();
 
-    // Lease renewal (every 90s)
-    this.leaseTimer = setInterval(async () => {
-      if (this.leaseClaimed) {
-        await this.claimLease();
-      }
-    }, this.leaseRenewalInterval * 1000);
+    if (this.persistentLoop) {
+      this.startHealthServer();
+      const interval = cycleIntervalMs();
+      this.cycleTimer = setInterval(async () => {
+        try {
+          await this.runPersistentCycle();
+        } catch (error) {
+          console.error('[HEIDI-AGENT] Cycle error:', error.message);
+        }
+      }, interval);
+      console.log(`[HEIDI-AGENT] Persistent cycle every ${interval}ms`);
+    } else {
+      this.leaseTimer = setInterval(async () => {
+        if (this.leaseClaimed) {
+          await this.claimLease();
+        }
+      }, this.leaseRenewalInterval * 1000);
 
-    // Task processing (every 30s)
-    this.pollTimer = setInterval(async () => {
-      await this.processTaskCycle();
-    }, this.taskPollInterval);
+      this.pollTimer = setInterval(async () => {
+        await this.processTaskCycle();
+      }, this.taskPollInterval);
 
-    // Reflection (every hour)
-    this.reflectionTimer = setInterval(async () => {
-      await this.reflect();
-    }, this.reflectionInterval);
+      this.reflectionTimer = setInterval(async () => {
+        await this.reflect();
+      }, this.reflectionInterval);
+    }
 
     // Goal execution (every minute)
     this.goalTimer = setInterval(async () => {
@@ -968,25 +1167,31 @@ class HeidiAgent {
   async shutdown() {
     console.log('[HEIDI-AGENT] Shutting down...');
 
-    // Clear timers
     clearInterval(this.leaseTimer);
     clearInterval(this.pollTimer);
     clearInterval(this.reflectionTimer);
+    clearInterval(this.cycleTimer);
 
-    // Close HTTP server
+    if (this.healthServerApi) {
+      await this.healthServerApi.close();
+      this.healthServerApi = null;
+    }
+
     if (this.httpServer) {
       this.httpServer.close();
       console.log('[HEIDI-AGENT] Advisory server closed');
     }
 
-    // Release lease
-    if (this.leaseClaimed) {
+    if (this.persistentLoop && this.leaseClaimed) {
+      await this.writeAgentSnapshot({ phase: 'shutdown_final' });
+      await this.releaseSnapshotLease();
+      console.log('[HEIDI-AGENT] Snapshot lease released');
+    } else if (this.leaseClaimed) {
       try {
         await this.supabase
           .from('heidi_decision_bounds')
           .update({ lease_holder: null })
           .eq('lease_holder', this.leaseHolder);
-
         console.log('[HEIDI-AGENT] Lease released');
       } catch (error) {
         console.error('[HEIDI-AGENT] Lease release error:', error.message);
