@@ -61,6 +61,7 @@ const OpsAgent = require('./ops/ops-agent');
 const { isOpsQuery, parseOpsCommand, runOpsCommand } = require('./ops/ops-commands');
 const { MemoryRuntime } = require('./memory/memory-runtime');
 const { checkSystem, formatSystemStatus, isSystemReportQuery, isFixListQuery, formatFixList, matchSystemReportParaphrase } = require('./status/system-status');
+const { isDoctorQuery, formatDoctorChat } = require('../lib/hydi/doctor');
 const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
 const { morningBrief, briefDue, msUntilNextBrief } = require('./status/morning-brief');
@@ -329,6 +330,11 @@ class HeidiCore {
           try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
           send({ t: formatFixList(list) });
           send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return res.end();
+        }
+        if (isDoctorQuery(input)) {
+          send({ t: formatDoctorChat(this.root || process.cwd()) });
+          send({ done: true, model: 'hydi-doctor', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return res.end();
         }
         if (isJobsQuery(input)) {
@@ -871,6 +877,11 @@ class HeidiCore {
           try { list = JSON.parse(fs.readFileSync(path.join(this.root || process.cwd(), '.runtime', 'fixlist', 'current.json'), 'utf8')); } catch { /* not produced yet */ }
           send({ t: formatFixList(list) });
           send({ done: true, model: 'fix-list', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
+          return done('deterministic');
+        }
+        if (isDoctorQuery(input)) {
+          send({ t: formatDoctorChat(this.root || process.cwd()) });
+          send({ done: true, model: 'hydi-doctor', conversation_id: req.body.conversation_id || null, latency_ms: Date.now() - startTime });
           return done('deterministic');
         }
         if (isJobsQuery(input)) {
