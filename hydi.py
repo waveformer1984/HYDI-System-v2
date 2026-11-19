@@ -434,6 +434,10 @@ def _frank_observe(host, token):
     snap = data.get("snapshot") if isinstance(data, dict) else None
     if not isinstance(snap, dict) or snap.get("device") != "frank":
         return None, "Frank returned no snapshot"
+    loop = data.get("heidiAgentLoop") if isinstance(data, dict) else None
+    if isinstance(loop, dict):
+        snap = dict(snap)
+        snap["heidiAgentLoop"] = loop
     return snap, None
 
 def frank_observation(host, force=False):
@@ -460,6 +464,38 @@ def _frank_vitals(snap):
     if h.get("uptimeHours") is not None:
         parts.append(f"up {h['uptimeHours']}h")
     return ", ".join(parts)
+
+def frank_heidi_agent_card(host):
+    """Phase 2 heidi-agent loop — evidence from Frank observe (loopback :3462 probe)."""
+    snap, reason = frank_observation(host)
+    card = {
+        "id": "heidi-agent",
+        "name": "Heidi agent",
+        "icon": "🤖",
+        "role": "Phase 2 persistent loop (:3462)",
+        "fleet": True,
+    }
+    if snap is None:
+        card.update(
+            status="idle",
+            detail=f"not observed ({reason})" if reason else "not observed",
+        )
+        return card
+    loop = snap.get("heidiAgentLoop")
+    if not isinstance(loop, dict):
+        card.update(status="idle", detail="observe has no agent loop probe")
+        return card
+    if not loop.get("reachable"):
+        card.update(status="error", detail=loop.get("reason", "health down"))
+        return card
+    if loop.get("allow_exec"):
+        card.update(status="error", detail="allow_exec true on Frank — fix PM2 env")
+        return card
+    lease = loop.get("lease_held")
+    cycles = loop.get("cycles")
+    card["status"] = "running" if lease else "idle"
+    card["detail"] = f"exec off, lease {'held' if lease else 'open'}, cycles={cycles}"
+    return card
 
 def frank_health_card(host):
     snap, reason = frank_observation(host)
@@ -502,6 +538,17 @@ def tool_frank():
     storage = snap.get("storage") or {}
     if storage:
         lines.append(f"Storage: {storage.get('level')}, {storage.get('freeGb')} GB free")
+    loop = snap.get("heidiAgentLoop") or {}
+    if loop:
+        if loop.get("reachable"):
+            lines.append(
+                "Heidi agent: "
+                + ("exec OFF" if not loop.get("allow_exec") else "exec ON")
+                + f", lease {'held' if loop.get('lease_held') else 'open'}"
+                + f", cycles={loop.get('cycles')}"
+            )
+        else:
+            lines.append("Heidi agent: " + str(loop.get("reason", "down")))
     lines.append(f"Read {snap.get('at')}. Source: Frank's own monitors; nothing was changed.")
     return "\n".join(lines)
 
@@ -650,6 +697,7 @@ def fleet_status():
 
     if frank:
         items.append(frank_health_card(frank))
+        items.append(frank_heidi_agent_card(frank))
 
     if OLLAMA_MODEL:
         where = "remote" if ollama_is_remote() else "local"

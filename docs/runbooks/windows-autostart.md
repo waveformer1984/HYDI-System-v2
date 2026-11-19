@@ -47,6 +47,8 @@ Agent-only bring-up on Frank:
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Owner\HYDI-System-v2\start-heidi-everything.ps1 -AgentOnly
 ```
 
+Full Phase 2 acceptance checklist: [HEIDI_AGENT_PHASE2_FRANK.md](./HEIDI_AGENT_PHASE2_FRANK.md).
+
 ## heidi-mobile-chat (:3006) — token-gated
 
 `launch-heidi-mobile.js` exits 78 without `HEIDI_MOBILE_TOKEN`
