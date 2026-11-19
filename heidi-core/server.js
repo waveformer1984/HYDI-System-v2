@@ -45,7 +45,7 @@ const store = getStore();
 // Ollama embedding configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
-const EMBEDDING_DIMENSION = 1536;
+const EMBEDDING_DIMENSION = 768;
 
 const { expressAllowedCorsMiddleware, attachListenErrorHandler } = require('../lib/governance/http-listen-guard');
 const { bindHost: defaultBindHost } = require('../lib/governance/advisory-auth');
@@ -1250,7 +1250,7 @@ class HeidiCore {
 
   /**
    * Generate embedding for text via Ollama
-   * Returns a 1536-dimensional vector (nomic-embed-text output)
+   * Returns a 768-dimensional vector (nomic-embed-text output)
    */
   async generateEmbedding(text) {
     try {
