@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [clean-main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      # Warnings are allowed; only ESLint errors fail the job.
+      - run: npm run lint -- --max-warnings 100000
+
+  jest:
+    name: Jest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (Tier 1, hermetic)
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports/junit
+          JEST_JUNIT_OUTPUT_NAME: junit-unit.xml
+          JEST_JUNIT_CLASSNAME_PREFIX: unit.
+          CI: true
+        run: |
+          mkdir -p reports/junit
+          npm test -- --ci --forceExit \
+            --reporters=default --reporters=jest-junit \
+            --json --outputFile=reports/jest-unit.json
+      - name: Integration tests (hermetic)
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports/junit
+          JEST_JUNIT_OUTPUT_NAME: junit-integration.xml
+          JEST_JUNIT_CLASSNAME_PREFIX: integration.
+          CI: true
+        run: |
+          npm run test:integration:jest -- --ci --forceExit \
+            --reporters=default --reporters=jest-junit \
+            --json --outputFile=reports/jest-integration.json
+      - name: Jest job summary
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+          const paths = [
+            ['Unit (Tier 1)', 'reports/jest-unit.json'],
+            ['Integration', 'reports/jest-integration.json'],
+          ];
+          let lines = ['## Jest results', ''];
+          let totalPass = 0;
+          let totalFail = 0;
+          for (const [label, file] of paths) {
+            if (!fs.existsSync(file)) {
+              lines.push(`- **${label}:** no report (step did not run)`);
+              continue;
+            }
+            const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const pass = j.numPassedTests ?? 0;
+            const fail = j.numFailedTests ?? 0;
+            const suites = j.numTotalTestSuites ?? 0;
+            totalPass += pass;
+            totalFail += fail;
+            lines.push(`- **${label}:** ${suites} suites, ${pass} passed, ${fail} failed`);
+          }
+          lines.push('', `**Total:** ${totalPass} passed, ${totalFail} failed`);
+          fs.appendFileSync(summaryPath, lines.join('\n') + '\n');
+          NODE
+      - name: Upload Jest JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-junit
+          path: reports/junit/
+          if-no-files-found: warn
+          retention-days: 14
+
+  python-tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run tests/*_test.py
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          count=0
+          for f in tests/*_test.py; do
+            echo "Running $f"
+            python3 "$f"
+            count=$((count + 1))
+          done
+          echo "Python tests completed: $count file(s)"
+          echo "### Python tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Files run:** $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Result:** pass" >> "$GITHUB_STEP_SUMMARY"
+
+  ci-gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, jest, python-tests]
+    if: always()
+    steps:
+      - name: Aggregate gate
+        run: |
+          echo "## CI gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Typecheck | ${{ needs.typecheck.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Lint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Jest | ${{ needs.jest.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Python | ${{ needs.python-tests.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.typecheck.result }}" != success ] \
+            || [ "${{ needs.lint.result }}" != success ] \
+            || [ "${{ needs.jest.result }}" != success ] \
+            || [ "${{ needs.python-tests.result }}" != success ]; then
+            echo "One or more CI jobs failed."
+            exit 1
+          fi
