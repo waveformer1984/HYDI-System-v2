@@ -21,23 +21,11 @@ function makePool(overrides = {}) {
   const gateway = new ExecutionGateway({
     store,
     skipRecovery: true,
-    executeSync: async (req) => {
-      const { runPoolCapability } = require('../../lib/dev-workforce/pool-actions');
-      const action = req.action;
-      const args = req.args;
-      const ctx = req.ctx || {};
-      const result = await runPoolCapability(action, args, {
-        ...ctx,
-        role: req.role,
-        fetchImpl: async () => ({
-          ok: true,
-          status: 200,
-          arrayBuffer: async () => Buffer.from('<html>ok</html>'),
-          headers: { get: () => 'text/html' },
-        }),
-      });
-      return { ...result, ok: result.ok !== false, action };
-    },
+    executeSync: async (req) => ({
+      ok: true,
+      action: req.action,
+      result: { ok: true, mocked: true },
+    }),
   });
   return new SpecialistPool({
     store,

@@ -17,6 +17,21 @@ describe('execution-fabric recovery', () => {
     expect(updated.failure_class).toBe('unsafe_replay');
   });
 
+  it('skips pool-owned tasks', async () => {
+    const store = new MemoryTaskStore({ now: () => 1000, randomBytes: () => Buffer.alloc(12, 7) });
+    const { task } = await store.createTask({
+      capability_id: 'pool.http_fetch',
+      role: 'agent',
+      input: { pool_subtask: true, pool_mission_id: 'm9' },
+    });
+    await store.transition(task.id, 'PLANNING');
+    await store.transition(task.id, 'RUNNING');
+    await store.claimLease(task.id, 'clone:x', 1);
+    const rec = await recoverInterruptedTasks(store, { now: () => 5000 });
+    expect(rec.actions).toEqual([]);
+    expect((await store.get(task.id)).state).toBe('RUNNING');
+  });
+
   it('marks idempotent tasks as RECOVERING', async () => {
     const store = new MemoryTaskStore({ now: () => 1000, randomBytes: () => Buffer.alloc(12, 9) });
     const { task } = await store.createTask({ capability_id: 'health.check', role: 'operator' });
