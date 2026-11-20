@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: 0 0% 100%;
+  --surface-muted: 210 20% 98%;
+  --foreground: 222 47% 11%;
+}
+
+.dark {
+  --surface: 222 47% 11%;
+  --surface-muted: 217 33% 17%;
+  --foreground: 210 40% 98%;
+}
+
+body {
+  @apply bg-[hsl(var(--surface-muted))] text-[hsl(var(--foreground))] antialiased;
+}
