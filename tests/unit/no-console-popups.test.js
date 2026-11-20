@@ -134,7 +134,7 @@ describe('background processes never open console windows on Windows', () => {
 
   it('covers the PM2 loops that launch programs on a timer', () => {
     const rel = files.map((f) => path.relative(ROOT, f).split(path.sep).join('/'));
-    for (const expected of ['scripts/local-ci.js', 'scripts/frank-auto-deploy.js', 'scripts/frank-observer.js', 'scripts/watchdog.js', 'lib/observation/strays.js']) {
+    for (const expected of ['scripts/local-ci.js', 'scripts/frank-auto-deploy.js', 'scripts/frank-observer.js', 'scripts/hydi-schedulers.js', 'lib/observation/strays.js']) {
       expect(rel).toContain(expected);
     }
   });

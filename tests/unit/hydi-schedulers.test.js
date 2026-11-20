@@ -32,7 +32,23 @@ function makePump(jobs, timeoutMs = 400) {
   const state = {};
   for (const j of jobs) state[j.name] = { inFlight: false, queued: false, runs: 0, failures: 0 };
   function treeKill(pid) {
-    try { require('child_process').execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }) } catch {}
+    try {
+      if (process.platform === 'win32') {
+        require('child_process').execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+      } else {
+        // Process group when detached; fall back to single pid.
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          process.kill(pid, 'SIGKILL');
+        }
+      }
+    } catch {
+      /* already dead */
+    }
   }
   function spawnOnce(job) {
     return new Promise((resolve) => {
