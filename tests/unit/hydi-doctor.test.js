@@ -11,6 +11,9 @@ const {
   isDoctorQuery,
   formatDoctorChat,
   saveDoctorLatest,
+  assessOllamaMemoryEnv,
+  parseOllamaPs,
+  OLLAMA_MEMORY_ENV_TARGET,
 } = require('../../lib/hydi/doctor');
 
 function mockFetch(routes) {
@@ -23,6 +26,32 @@ function mockFetch(routes) {
     return routes[hit](key, init);
   };
 }
+
+describe('hydi-doctor headroom', () => {
+  it('assessOllamaMemoryEnv PASS when all targets set', () => {
+    const env = { ...OLLAMA_MEMORY_ENV_TARGET };
+    const r = assessOllamaMemoryEnv(env);
+    expect(r.status).toBe('PASS');
+  });
+
+  it('assessOllamaMemoryEnv WARN lists mismatches', () => {
+    const r = assessOllamaMemoryEnv({ OLLAMA_KEEP_ALIVE: '2m' });
+    expect(r.status).toBe('WARN');
+    expect(r.evidence).toMatch(/OLLAMA_KEEP_ALIVE/);
+    expect(r.evidence).toMatch(/OLLAMA_FLASH_ATTENTION=unset/);
+  });
+
+  it('parseOllamaPs extracts size and context', () => {
+    const sample = [
+      'NAME                          ID              SIZE      PROCESSOR    CONTEXT    UNTIL',
+      'qwen2.5:3b-instruct-q4_K_M    abc             2.0 GB    100% CPU     4096       10 minutes from now',
+    ].join('\n');
+    const p = parseOllamaPs(sample);
+    expect(p.loaded).toBe(true);
+    expect(p.summary).toMatch(/size=2\.0 GB/);
+    expect(p.summary).toMatch(/ctx=4096/);
+  });
+});
 
 describe('hydi-doctor', () => {
   it('isDoctorQuery matches chat command', () => {
