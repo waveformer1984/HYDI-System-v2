@@ -472,6 +472,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 |-----------|----------------|-------------------|
 | `20261120180000_makeready_leads` | New `public.makeready_leads`: `lead_id`, contact fields, optional `company_name`/`phone`/`message`, `source` default `makeready-bot-offer`, `created_at`. Indexes on `lead_id` and `created_at`. RLS on; single `service_role`-only `FOR ALL` policy with `DO $$ duplicate_object` guard. No anon/authenticated policies. | “Book a demo” form on `/makeready-bot` only; rate-limited public API insert via service role. Not part of `hydi_runs`; no `STATE_MACHINE_APPROVED`. |
 
+### MakeReady Crew tablet (2026-11-20)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261120210000_makeready_crew` | Extends existing `public.makeready_requests` (from `20261120120000`): adds `crew_status` TEXT `CHECK (crew_status IN ('new','scheduled','in_progress','done'))` default `'new'`, plus `scheduled_at`, `crew_label`, `crew_notes`, `completion_photos` JSONB, `completed_at`, `status_updated_at`. New index `makeready_requests_crew_status_idx` on `(company_slug, crew_status, created_at DESC)`. **No new RLS policies** — existing `makeready_requests_service_role` policy unchanged. Crew transitions enforced in app (`lib/makeready-crew/status.js`), not in SQL. Transformer: `tests/migrations/20261120210000_makeready_crew.test.js`. | Owner-PIN `/makeready-crew` API (tailnet only) via service role; not public ingress. Not `hydi_runs` / `hydi_allowed_transitions`; no `STATE_MACHINE_APPROVED` required. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
