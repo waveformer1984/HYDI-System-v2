@@ -7,7 +7,7 @@
 
     preflight (node / pm2 / repo / env present)
       -> pm2 resurrect        (restore the saved process list, if any)
-      -> pm2 start ecosystem.config.js   (fill gaps; idempotent)
+      -> node scripts/pm2-start-declared.js   (fill gaps; skips autostart: false)
       -> health probe         (key service ports from .ports.json)
       -> summary
 
@@ -175,7 +175,7 @@ if ($AgentOnly) {
 Push-Location $Root
 try {
     & pm2 resurrect 2>&1 | ForEach-Object { Log "resurrect: $_" }
-    & pm2 start $Ecosystem 2>&1 | ForEach-Object { Log "pm2 start: $_" }
+    & node (Join-Path $Root "scripts/pm2-start-declared.js") 2>&1 | ForEach-Object { Log "pm2-start-declared: $_" }
 } finally { Pop-Location }
 
 Start-Sleep -Seconds 10
