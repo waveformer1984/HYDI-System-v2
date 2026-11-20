@@ -1,0 +1,39 @@
+{
+  "slug": "demo-makeready-co",
+  "display_name": "Demo MakeReady Co. (FICTIONAL DEMO)",
+  "demo": true,
+  "owner_email": "owner@example.invalid",
+  "service_area": "Greater San Antonio new-build communities (demo only)",
+  "lead_time": "Typically 3–5 business days after lot walk (demo config)",
+  "insurance_statement": "Demo MakeReady Co. carries general liability and workers' comp per owner records (fictional).",
+  "services": [
+    "Rough clean (post-framing / pre-drywall debris)",
+    "Final clean (pre-closing detail)",
+    "Touch-up / sparkle before buyer walk",
+    "Interior window cleaning",
+    "Exterior pressure wash (driveway & walks)",
+    "Debris haul-off"
+  ],
+  "policies": [
+    "Estimates are non-binding until the owner confirms scope on site.",
+    "Access instructions must be shared by phone — never in chat.",
+    "Weekend work available by approval only."
+  ],
+  "stripe_payment_link": "",
+  "price_points": {
+    "minimum_charge": 425,
+    "story_multipliers": { "1": 1, "2": 1.12, "3": 1.22, "default": 1 },
+    "phases": {
+      "rough_clean": { "per_sqft": 0.18 },
+      "final_clean": { "per_sqft": 0.32 },
+      "touch_up": { "per_sqft": 0.12 },
+      "window": { "per_sqft": 0.05 },
+      "pressure_wash": { "per_sqft": 0.04 },
+      "debris_haul_off": { "per_sqft": 0.07 }
+    },
+    "add_ons": [
+      { "id": "garage_sweep", "label": "Garage sweep & blow-out", "price": 85 },
+      { "id": "blinds_wipe", "label": "Blinds wipe-down", "price": 65 }
+    ]
+  }
+}
