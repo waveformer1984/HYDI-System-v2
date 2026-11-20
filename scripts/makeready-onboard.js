@@ -1,63 +1,110 @@
 #!/usr/bin/env node
 'use strict';
+
 const fs = require('fs');
-const path = require('path');
 const readline = require('readline');
+const {
+  buildConfigFromAnswers,
+  writeCustomerConfig,
+  embedScriptSnippet,
+  configPath,
+} = require('../lib/makeready-bot/onboard');
+const { SLUG_RE } = require('../lib/makeready-bot');
 
-const CONFIG_DIR = path.join(process.cwd(), 'config', 'makeready');
-const SLUG_RE = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
-
-function ask(rl, q) {
-  return new Promise((resolve) => rl.question(q, resolve));
+function ask(rl, question) {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => resolve(answer));
+  });
 }
 
-async function main() {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+async function askMultiline(rl, header) {
+  process.stderr.write(`${header}\n(empty line to finish)\n`);
+  const lines = [];
+  for (;;) {
+    const line = await ask(rl, '> ');
+    if (!line.trim()) break;
+    lines.push(line);
+  }
+  return lines;
+}
+
+async function runInteractive(argv) {
+  const args = argv.slice(2);
+  const force = args.includes('--force');
+  const slug = args.find((a) => !a.startsWith('-'));
+  if (!slug || !SLUG_RE.test(slug)) {
+    process.stderr.write('Usage: node scripts/makeready-onboard.js <slug> [--force]\n');
+    process.exit(1);
+  }
+  if (fsExists(slug) && !force) {
+    process.stderr.write(`Refusing to overwrite existing config: ${configPath(slug)}\n`);
+    process.stderr.write('Re-run with --force to replace.\n');
+    process.exit(1);
+  }
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+
   try {
-    console.log('MakeReady onboard — rates must come from the owner (not invented here).\n');
-    const slug = (await ask(rl, 'Company slug (e.g. jenny-makeready): ')).trim().toLowerCase();
-    if (!SLUG_RE.test(slug)) {
-      console.error('Invalid slug.');
-      process.exit(1);
-    }
-    const displayName = (await ask(rl, 'Display name: ')).trim();
-    const ownerEmail = (await ask(rl, 'Owner email: ')).trim();
-    const serviceArea = (await ask(rl, 'Service area (e.g. Austin metro): ')).trim();
-    const pricePath = (await ask(rl, 'Path to price_points JSON file: ')).trim();
-    if (!fs.existsSync(pricePath)) {
-      console.error('Price file not found.');
-      process.exit(1);
-    }
-    const pricePoints = JSON.parse(fs.readFileSync(pricePath, 'utf8'));
-    if (!pricePoints.phases) {
-      console.error('price_points.phases required.');
-      process.exit(1);
-    }
-    const config = {
-      slug,
-      display_name: displayName,
+    const display_name = await ask(rl, 'Company display name: ');
+    const service_area = await ask(rl, 'Service-area ZIPs (as you want them shown): ');
+    const owner_email = await ask(rl, 'Owner email (job notifications): ');
+    const lead_time = await ask(rl, 'Lead time statement: ');
+    const insurance_statement = await ask(rl, 'Insurance / bonding statement: ');
+    const minimum_charge = await ask(rl, 'Minimum charge (USD, e.g. 425): ');
+    const story_multiplier_1 = await ask(rl, 'Story multiplier — 1 story (default 1): ') || '1';
+    const story_multiplier_2 = await ask(rl, 'Story multiplier — 2 story (default 1.12): ') || '1.12';
+    const story_multiplier_3 = await ask(rl, 'Story multiplier — 3 story (default 1.22): ') || '1.22';
+    const stripe_payment_link = await ask(rl, 'Stripe Payment Link URL (optional, Enter to skip): ');
+
+    const phase_lines = await askMultiline(
+      rl,
+      'Phases — one per line: <phase_id> <per_sqft_rate>  (e.g. final_clean 0.32)',
+    );
+    const addon_lines = await askMultiline(
+      rl,
+      'Add-ons — optional, one per line: <id>|<label> <price>  or  id Label words 85',
+    );
+
+    const built = buildConfigFromAnswers(slug, {
+      display_name,
+      service_area,
+      owner_email,
+      lead_time,
+      insurance_statement,
+      minimum_charge,
+      story_multiplier_1,
+      story_multiplier_2,
+      story_multiplier_3,
+      stripe_payment_link,
+      phase_lines,
+      addon_lines,
       demo: false,
-      owner_email: ownerEmail,
-      service_area: serviceArea,
-      lead_time: 'Owner confirms on site',
-      insurance_statement: 'Update after legal review.',
-      services: [],
-      policies: ['Access codes confirmed by phone only.'],
-      stripe_payment_link: '',
-      price_points: pricePoints,
-    };
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    const out = path.join(CONFIG_DIR, `${slug}.json`);
-    fs.writeFileSync(out, JSON.stringify(config, null, 2) + '\n', 'utf8');
-    console.log('Wrote', out);
-    console.log('Set MAKEREADY_CREW_COMPANY_SLUG=' + slug);
-    console.log('Set MAKEREADY_CREW_PIN and MAKEREADY_CREW_SESSION_SECRET on Frank.');
+    });
+    if (!built.ok) {
+      process.stderr.write(`Validation failed: ${JSON.stringify(built)}\n`);
+      process.exit(1);
+    }
+
+    const written = writeCustomerConfig(slug, built.config, { force });
+    if (!written.ok) {
+      process.stderr.write(`${written.error}: ${written.path || ''}\n`);
+      process.exit(1);
+    }
+
+    process.stdout.write(`\nWrote ${written.path}\n\nEmbed snippet:\n\n`);
+    process.stdout.write(`${embedScriptSnippet(slug)}\n`);
   } finally {
     rl.close();
   }
 }
 
-main().catch((e) => {
-  console.error(e instanceof Error ? e.message : e);
-  process.exit(1);
-});
+function fsExists(slug) {
+  return fs.existsSync(configPath(slug));
+}
+
+if (require.main === module) {
+  runInteractive(process.argv).catch((e) => {
+    process.stderr.write(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  });
+}

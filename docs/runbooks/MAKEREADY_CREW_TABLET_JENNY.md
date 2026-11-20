@@ -8,8 +8,10 @@
 2. Onboard Jenny’s company config (owner-supplied rates only):
 
    ```bash
-   node scripts/makeready-onboard.js
+   node scripts/makeready-onboard.js jenny-makeready
    ```
+
+   (Same interactive onboard as MakeReady Bot — owner enters rates; see `docs/runbooks/MAKEREADY_BOT.md`.)
 
 3. Set on **heidi-pc** `.env.local` (never commit):
 

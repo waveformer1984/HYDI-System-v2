@@ -7,22 +7,24 @@
  * dependency ordering, health gating, preflight, and graceful shutdown.
  *
  * PM2 wraps that single boot process and provides auto-restart if the boot
- * agent itself crashes. A second PM2 process (hydi-watchdog) runs the
- * watchdog continuously, which calls RecoveryEngine on unhealthy endpoints
- * when HYDI_DELEGATE_RECOVERY is enabled.
+ * agent itself crashes. Seven former per-tick PM2 apps (watchdog, schedulers,
+ * etc.) are supervised by a single `hydi-schedulers` process — see
+ * scripts/hydi-schedulers.js.
  *
  * Supervision model (see SUPERVISION_MODEL.md):
  *   PM2 → watches hydi-boot (restarts if boot-agent crashes)
  *   boot-agent → spawns protoforge-core, heidi-web, heidi-mobile-chat
- *   watchdog → polls health endpoints every 2 min, calls RecoveryEngine
+ *   hydi-schedulers → spawns each hydi-* tick script on its own cadence
  *   RecoveryEngine → policy-governed restart (R1, max 2 attempts, circuit breaker)
  *
+ * Custom field `autostart: false` — declared for drift audit / `pm2 --only`, but
+ * skipped by `scripts/pm2-start-declared.js` (used from start-heidi-everything.ps1).
+ *
  * Usage:
- *   pm2 start ecosystem.config.js          # start both hydi-boot + hydi-watchdog
+ *   node scripts/pm2-start-declared.js     # start every app with autostart !== false
  *   pm2 logs hydi-boot                     # tail boot logs
- *   pm2 logs hydi-watchdog                 # tail watchdog logs
+ *   pm2 logs hydi-schedulers               # tail scheduler supervisor
  *   pm2 restart hydi-boot                  # restart boot only
- *   pm2 stop hydi-watchdog                 # stop watchdog only
  *   pm2 delete all                         # remove all PM2 processes
  *
  * To make it survive a reboot:
@@ -106,39 +108,6 @@ module.exports = {
       // stand-down is not a crash, so it does not immediately respawn the
       // instance that just correctly removed itself.
       stop_exit_codes: [75],
-    },
-    {
-      // Watchdog: continuously polls health endpoints and calls RecoveryEngine
-      // when a component is unhealthy-but-alive (the case boot-agent can't see).
-      // In DELEGATE mode, this is the trigger for RecoveryEngine.
-      name: 'hydi-watchdog',
-      script: 'scripts/watchdog.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        HYDI_DELEGATE_RECOVERY: 'true',
-        WATCHDOG_INTERVAL_MS: '30000',  // 30 seconds — fast enough to catch outages before users notice
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        HYDI_DELEGATE_RECOVERY: 'true',
-        WATCHDOG_INTERVAL_MS: '120000',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '500M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-hydi-watchdog.err.log',
-      out_file: './logs/pm2-hydi-watchdog.out.log',
-      merge_logs: true,
-      kill_timeout: 5000,
     },
     {
       // HEIDI Cognitive-Loop Daemon: continuously runs the governed cognitive
@@ -225,157 +194,6 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-system-health.err.log',
       out_file: './logs/pm2-system-health.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
-    },
-    {
-      // HYDI Mission Runner v1 -- protoforge.daily_opportunity_scan.
-      // Gives Heidi one concrete daily operational job: find real public
-      // signals relevant to Rezonate, score them deterministically,
-      // persist them, and produce a briefing -- see lib/missions/README.md.
-      // R0/R1 only: read-only outbound HTTP, local persistence, no
-      // external contact, no spending. Human approval required for
-      // anything past "recommend" (there is no execution step in v1 at
-      // all -- see lib/missions/approval.js).
-      //
-      // NOT started automatically by this config change alone -- added so
-      // the app definition exists and is reviewable; an operator runs
-      // `pm2 start ecosystem.config.js --only hydi-protoforge-scout` (or
-      // `pm2 reload`) to actually activate it.
-      name: 'hydi-protoforge-scout',
-      script: 'scripts/protoforge-opportunity-scheduler.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        PROTOFORGE_SCOUT_INTERVAL_MS: '86400000',
-        PROTOFORGE_SCOUT_TIMEOUT_MS: '60000',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        PROTOFORGE_SCOUT_INTERVAL_MS: '86400000',
-        PROTOFORGE_SCOUT_TIMEOUT_MS: '60000',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-protoforge-scout.err.log',
-      out_file: './logs/pm2-protoforge-scout.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
-    },
-    {
-      // Stuck Job Scheduler: continuously runs the StuckJobDetector on an
-      // hourly interval to autonomously detect and recover stuck jobs.
-      // This is the first real autonomous operations goal — it runs on a
-      // real recurring trigger, not a one-off script.
-      // See lib/operational/StuckJobDetector.ts for the bounded recovery
-      // actions (retry once for executing, escalate for awaiting_review).
-      name: 'hydi-stuck-job-scheduler',
-      script: 'scripts/stuck-job-scheduler.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        STUCK_JOB_INTERVAL_MS: '3600000',  // 1 hour
-        STUCK_JOB_EXECUTING_HOURS: '4',
-        STUCK_JOB_REVIEW_HOURS: '48',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        STUCK_JOB_INTERVAL_MS: '3600000',
-        STUCK_JOB_EXECUTING_HOURS: '4',
-        STUCK_JOB_REVIEW_HOURS: '48',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-stuck-job-scheduler.err.log',
-      out_file: './logs/pm2-stuck-job-scheduler.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
-    },
-    {
-      // Revenue Reconciliation Scheduler: runs the
-      // RevenueReconciliationDetector on a daily schedule.
-      // STRICTLY READ-ONLY — never modifies financial state.
-      // Discrepancies are escalated through EscalationNotifier.
-      name: 'hydi-revenue-reconciliation',
-      script: 'scripts/revenue-reconciliation-scheduler.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        RECONCILIATION_INTERVAL_MS: '86400000',  // 24 hours
-        RECONCILIATION_OBSERVE_ONLY: 'false',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        RECONCILIATION_INTERVAL_MS: '86400000',
-        RECONCILIATION_OBSERVE_ONLY: 'false',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-revenue-reconciliation.err.log',
-      out_file: './logs/pm2-revenue-reconciliation.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
-    },
-    {
-      // Failed Webhook Retry Scheduler: runs the FailedWebhookDetector
-      // every 30 minutes. Retries failed webhooks ONCE (bounded),
-      // then escalates persistent failures. Stale 'processing' webhooks
-      // are escalated (not auto-reset) to avoid duplicate processing.
-      name: 'hydi-failed-webhook-retry',
-      script: 'scripts/failed-webhook-scheduler.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        WEBHOOK_RETRY_INTERVAL_MS: '1800000',  // 30 minutes
-        WEBHOOK_STALE_THRESHOLD_MS: '3600000', // 1 hour
-        WEBHOOK_RETRY_OBSERVE_ONLY: 'false',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        WEBHOOK_RETRY_INTERVAL_MS: '1800000',
-        WEBHOOK_STALE_THRESHOLD_MS: '3600000',
-        WEBHOOK_RETRY_OBSERVE_ONLY: 'false',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-failed-webhook-retry.err.log',
-      out_file: './logs/pm2-failed-webhook-retry.out.log',
       merge_logs: true,
       kill_timeout: 10000,
     },
@@ -503,39 +321,6 @@ module.exports = {
       kill_timeout: 15000,     // Next dev needs time to close watchers/sockets
     },
     {
-      // Model Prep Executor: drains customer_jobs 'queued' into the
-      // artifact pipeline (generate -> verify -> awaiting_review).
-      // Never touches payment, approval, or delivery — those remain
-      // webhook/human gated. Single instance; the claim SQL is
-      // FOR UPDATE SKIP LOCKED so the queued->executing grab is atomic.
-      name: 'hydi-model-prep-executor',
-      script: 'scripts/model-prep-executor-scheduler.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: {
-        NODE_ENV: 'development',
-        MODEL_PREP_INTERVAL_MS: '30000',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-        MODEL_PREP_INTERVAL_MS: '30000',
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-model-prep-executor.err.log',
-      out_file: './logs/pm2-model-prep-executor.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
-    },
-    {
       // Revenue autopilot tick. boot.config.json also starts this as
       // `npx tsx scripts/revenue-autopilot-tick.ts`. PM2 on Windows cannot
       // run the .bin/tsx shim, so this entry uses the tsx CLI directly —
@@ -626,30 +411,6 @@ module.exports = {
       error_file: './logs/pm2-public-tunnel.err.log',
       out_file: './logs/pm2-public-tunnel.out.log',
       merge_logs: true,
-    },
-    {
-      // Daily cognitive loop (scripts/heidi-daily-loop.js). Previously an
-      // ad-hoc pm2 start — flagged UNDECLARED by the runtime audit.
-      name: 'hydi-daily-loop',
-      script: 'scripts/heidi-daily-loop.js',
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: 'fork',
-      args: '',
-      env: { NODE_ENV: 'development' },
-      env_production: { NODE_ENV: 'production' },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M',
-      min_uptime: '10s',
-      max_restarts: 10,
-      restart_delay: 5000,
-      exp_backoff_restart_delay: 1000,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: './logs/pm2-daily-loop.err.log',
-      out_file: './logs/pm2-daily-loop.out.log',
-      merge_logs: true,
-      kill_timeout: 10000,
     },
     {
       // Heidi agent (heidi-core/heidi-agent.js) — Phase 2 persistent loop + optional advisory API.
@@ -817,7 +578,9 @@ module.exports = {
       //   pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch --include-main --interval 10
       // Posts local-ci/* commit statuses. Stop it on a machine that should
       // not watch GitHub; the audit will then report MISSING.
+      // autostart: false — Frank starts this manually when GitHub runners are down.
       name: 'hydi-local-ci',
+      autostart: false,
       script: 'scripts/local-ci.js',
       args: '--watch --include-main --interval 10',
       cwd: __dirname,
@@ -847,7 +610,9 @@ module.exports = {
       // Long-lived 60s loop: guarantees a fresh observatory sample, writes
       // the combined snapshot to .runtime/observation/frank.json, and posts
       // #alerts when a critical issue holds for two passes. Read-only.
+      // autostart: false — optional demo app; start with pm2 --only proto-yi.
       name: 'proto-yi',
+      autostart: false,
       script: 'src/index.js',
       cwd: 'protoforge-applications/proto-yi',
       instances: 1,
@@ -945,6 +710,9 @@ module.exports = {
       kill_timeout: 15000,
     },
     {
+      // Supervises hydi-watchdog, model-prep, daily loop, protoforge scout,
+      // stuck-job, revenue reconciliation, failed-webhook retry (and more).
+      // Those scripts stay in scripts/ — they are not duplicated as PM2 apps.
       name: 'hydi-schedulers',
       script: 'scripts/hydi-schedulers.js',
       cwd: __dirname,
