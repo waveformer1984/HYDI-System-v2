@@ -113,4 +113,9 @@ describe('getClientIp', () => {
   it('falls back to "unknown" when neither is present', () => {
     expect(getClientIp({ headers: {}, socket: {} })).toBe('unknown');
   });
+
+  it('clientIpFrom last-hop uses the rightmost x-forwarded-for entry', () => {
+    const req = fakeReq({ ip: '9.9.9.9', xff: '1.2.3.4, 5.6.7.8' });
+    expect(getClientIp(req, { clientIpFrom: 'last-hop' })).toBe('5.6.7.8');
+  });
 });

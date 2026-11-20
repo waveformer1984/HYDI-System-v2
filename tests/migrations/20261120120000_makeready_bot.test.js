@@ -10,6 +10,7 @@ describe('Migration 20261120120000 — makeready_bot', () => {
     expect(SQL).toMatch(/request_id TEXT NOT NULL/);
     expect(SQL).toMatch(/ENABLE ROW LEVEL SECURITY/);
     expect(SQL).toMatch(/TO service_role/);
+    expect(SQL).toMatch(/DO \$\$ BEGIN[\s\S]*CREATE POLICY makeready_requests_service_role[\s\S]*EXCEPTION WHEN duplicate_object/);
   });
 
   it('indexes request_id and slug timeline', () => {

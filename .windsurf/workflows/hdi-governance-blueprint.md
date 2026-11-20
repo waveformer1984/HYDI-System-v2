@@ -460,6 +460,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 |-----------|----------------|-------------------|
 | `20261107180000_agent_bus_rls_write_service_role` | Replaces prior `agent_bus_service_role` `FOR ALL` policy with four `service_role`-only policies: `INSERT`, `UPDATE`, `DELETE`, and `SELECT` each scoped `TO service_role` (`DO $$ … EXCEPTION WHEN duplicate_object` guards). Drops legacy `agent_bus_service_role` policy first. No anon/authenticated/public policies added. | Closes REST/anon JWT forgery of pending agent_bus tasks. No enum / `hydi_runs` transition change — RLS-only hardening. Not part of the hydi_runs state machine; no new `STATE_MACHINE_APPROVED` transitions. |
 
+### MakeReady Bot intake (2026-11-20)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261120120000_makeready_bot` | New `public.makeready_requests`: builder intake columns (`request_id`, `company_slug`, contact fields, lot/address, `phases` JSONB, sq ft/stories, dates, `notes`, `access_redacted`, estimate fields), two indexes (`request_id`, `company_slug` + `created_at`). RLS enabled; single `service_role`-only `FOR ALL` policy with `DO $$ … EXCEPTION WHEN duplicate_object` guard after `DROP POLICY IF EXISTS`. No anon/authenticated policies. API redacts access codes before insert. | Public widget/API intake only via server-side service role; no direct client table access. Not part of the `hydi_runs` state machine; no transitions; no `STATE_MACHINE_APPROVED` required. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
