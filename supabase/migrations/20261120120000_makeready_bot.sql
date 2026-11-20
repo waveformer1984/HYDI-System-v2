@@ -30,8 +30,11 @@ CREATE INDEX IF NOT EXISTS makeready_requests_slug_created_idx ON public.makerea
 ALTER TABLE public.makeready_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS makeready_requests_service_role ON public.makeready_requests;
-CREATE POLICY makeready_requests_service_role ON public.makeready_requests
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
+
+DO $$ BEGIN
+  CREATE POLICY makeready_requests_service_role ON public.makeready_requests
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

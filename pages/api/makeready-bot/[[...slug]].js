@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '../../../lib/rate-limit';
+import { classify } from '../../../lib/security/ingressGate';
 import {
   loadConfig,
   publicConfig,
@@ -46,14 +47,11 @@ export default async function handler(req, res) {
     health: { windowMs: 60_000, max: 30 },
   };
   const lim = limits[segment] || limits.health;
-  if (!rateLimit(req, res, { name: routeName(segment), ...lim })) return;
-
-  const companySlug = (req.query.slug || req.body?.slug || '').toString().trim()
-    || (segment === 'health' ? 'demo-makeready-co' : '');
+  if (!rateLimit(req, res, { name: routeName(segment), ...lim, clientIpFrom: 'last-hop' })) return;
 
   try {
     if (segment === 'health' && req.method === 'GET') {
-      const slug = (req.query.company || companySlug || 'demo-makeready-co').toString();
+      const slug = (req.query.company || 'demo-makeready-co').toString();
       let configOk = false;
       try {
         loadConfig(slug);
@@ -72,14 +70,17 @@ export default async function handler(req, res) {
           .gte('created_at', since);
         requests7d = error ? null : count;
       }
-      return res.status(200).json({
+      const payload = {
         ok: true,
         service: 'makeready-bot',
         slug,
         config_loaded: configOk,
-        requests_last_7d: requests7d,
         ts: new Date().toISOString(),
-      });
+      };
+      if (classify(req.headers).internal) {
+        payload.requests_last_7d = requests7d;
+      }
+      return res.status(200).json(payload);
     }
 
     if (segment === 'config' && req.method === 'GET') {
@@ -132,7 +133,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'insert_failed' });
       }
 
-      let email = { sent: false };
+      let email;
       try {
         email = await sendOwnerEmail(config, requestId, built.rows);
       } catch {
