@@ -466,6 +466,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 |-----------|----------------|-------------------|
 | `20261120120000_makeready_bot` | New `public.makeready_requests`: builder intake columns (`request_id`, `company_slug`, contact fields, lot/address, `phases` JSONB, sq ft/stories, dates, `notes`, `access_redacted`, estimate fields), two indexes (`request_id`, `company_slug` + `created_at`). RLS enabled; single `service_role`-only `FOR ALL` policy with `DO $$ … EXCEPTION WHEN duplicate_object` guard after `DROP POLICY IF EXISTS`. No anon/authenticated policies. API redacts access codes before insert. | Public widget/API intake only via server-side service role; no direct client table access. Not part of the `hydi_runs` state machine; no transitions; no `STATE_MACHINE_APPROVED` required. |
 
+### MakeReady Bot offer leads (2026-11-20)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261120180000_makeready_leads` | New `public.makeready_leads`: `lead_id`, contact fields, optional `company_name`/`phone`/`message`, `source` default `makeready-bot-offer`, `created_at`. Indexes on `lead_id` and `created_at`. RLS on; single `service_role`-only `FOR ALL` policy with `DO $$ duplicate_object` guard. No anon/authenticated policies. | “Book a demo” form on `/makeready-bot` only; rate-limited public API insert via service role. Not part of `hydi_runs`; no `STATE_MACHINE_APPROVED`. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |

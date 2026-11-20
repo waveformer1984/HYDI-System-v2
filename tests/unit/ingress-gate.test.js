@@ -75,7 +75,7 @@ describe('isPublicPath', () => {
     '/services/checkpoint-audit', '/services/model-prep/success', '/pricing', '/billing',
     '/api/galactic-bytes/checkout', '/galactic-bytes', '/galactic-bytes/success', '/galactic-bytes/cancel',
     '/_next/static/chunks/main.js', '/_next/data/abc/services/model-prep.json',
-    '/makeready-bot/widget.js', '/api/makeready-bot/health',
+    '/makeready-bot', '/makeready-bot/widget.js', '/api/makeready-bot/health', '/api/makeready-bot/lead',
   ])('%s is public', (p) => expect(isPublicPath(p, env)).toBe(true));
 
   test('legacy /public/makeready-bot/ prefix is not allowlisted', () => {
