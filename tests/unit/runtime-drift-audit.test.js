@@ -397,7 +397,7 @@ describe('ecosystem declarations for the long-running processes', () => {
     // complete and auditable.
     for (const expected of [
       'hydi-public-tunnel',
-      'hydi-daily-loop',
+      'hydi-schedulers',
       'heidi-agent',
       'frank-auto-deploy',
       'rezonate-app',
