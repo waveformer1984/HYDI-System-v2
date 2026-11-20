@@ -105,6 +105,12 @@ Ephemeral nodes disappear from the tailnet shortly after the VM is gone.
   `tailscale serve --bg --https=11434 http://127.0.0.1:11434`.
   The phone then uses `https://heidi-pc.tailc50af2.ts.net:11434`.
 
+## Laptop primary + desktop compute (topology B)
+
+If you operate from a **laptop** but HYDI/PM2/Ollama run on the **big desktop**,
+see `docs/runbooks/LAPTOP_DESKTOP_TOPOLOGY.md`. Tailnet URLs always target the
+desktop (`tag:hydi-host`); the laptop is `autogroup:member`, not a second Frank.
+
 ## 5. Shell access to heidi-pc
 
 Tailscale SSH's server side doesn't run on Windows. For remote shell on heidi-pc,
