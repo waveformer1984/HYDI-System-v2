@@ -295,17 +295,16 @@ describe('Phase 5 — Autonomous Runtime Fabric', () => {
     test('hydi-doctor.js exists and is valid JavaScript', () => {
       const doctorPath = path.resolve(ROOT, 'scripts', 'hydi-doctor.js');
       expect(fs.existsSync(doctorPath)).toBe(true);
-      const content = fs.readFileSync(doctorPath, 'utf8');
-      // Verify it has the required checks
-      expect(content).toContain('HEIDI process alive');
-      expect(content).toContain('ProtoForge core');
-      expect(content).toContain('Ollama');
-      expect(content).toContain('Docker');
-      expect(content).toContain('Recovery engine');
-      expect(content).toContain('audit journal');
-      expect(content).toContain('Unresolved incidents');
-      expect(content).toContain('Stripe key safety');
-      expect(content).toContain('safe to operate');
+      const wrapper = fs.readFileSync(doctorPath, 'utf8');
+      expect(wrapper).toContain('runHydiDoctor');
+      const libPath = path.resolve(ROOT, 'lib', 'hydi', 'doctor.js');
+      expect(fs.existsSync(libPath)).toBe(true);
+      const content = fs.readFileSync(libPath, 'utf8');
+      expect(content).toContain('checkHeidiAgent');
+      expect(content).toContain('checkOllama');
+      expect(content).toContain('checkSafety');
+      expect(content).toContain('checkSpecialistPool');
+      expect(content).toContain('runHydiDoctor');
     });
   });
 

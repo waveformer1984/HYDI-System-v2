@@ -127,6 +127,7 @@ describe('hydi-schedulers pump semantics', () => {
 
   it('status file is atomic and truthful', () => {
     const { status } = require('../../scripts/hydi-schedulers');
-    expect(Object.keys(status)).toHaveLength(9);
+    expect(Object.keys(status)).toHaveLength(10);
+    expect(Object.keys(status)).toContain('hydi-resource-discovery');
   });
 });
