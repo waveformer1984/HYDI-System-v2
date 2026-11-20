@@ -42,6 +42,47 @@ next to that entry.
 
 **Do not merge topology docs or run “confirm desktop” curls until this table is filled.**
 
+## Tower: check remotely before login or reset
+
+**Do not reset the tower** until you know what is on it. A Windows reset removes apps and
+services (PM2, Docker, Ollama) and may destroy unverified HYDI data. **You do not need the
+tower for daily HYDI today** — production may run on the laptop; the tower is the
+**upgrade path**, not an emergency.
+
+### 1. From the phone (~2 min, no tower login)
+
+1. **Tailscale admin** ([login.tailscale.com](https://login.tailscale.com) → **Machines**):
+   find the tower (not the laptop). Note name, **online/offline**, and **last seen**.
+   Online ⇒ something on the machine is up and on the tailnet.
+2. If online, try (MagicDNS): `https://<tower-hostname>.tailc50af2.ts.net/api/health` or
+   `http://<tower-name>:3000/api/health` in the phone browser **with Tailscale on**. Any
+   HTTP response suggests HYDI or another web stack on that box.
+
+### 2. Regain access (official paths before reset)
+
+At the tower lock screen:
+
+| What you see | Action |
+|--------------|--------|
+| **Email address** on sign-in | Microsoft account — reset at [account.live.com/password/reset](https://account.live.com/password/reset), then sign in on the tower |
+| **PIN** | “I forgot my PIN” → Microsoft account flow |
+| **Local account** (name only, no email) | “Reset password” under the box (security questions if configured) |
+
+Also: [account.microsoft.com/devices](https://account.microsoft.com/devices) — if the tower is
+listed, save any **BitLocker recovery key** before recovery or reset.
+
+### 3. Reset (last resort only)
+
+Only if Tailscale shows **nothing important** on the tower and you accept wiping services:
+
+Sign-in screen → hold **Shift** → Power → **Restart** → Troubleshoot → **Reset this PC**.
+Even **Keep my files** removes installed apps (PM2, Docker, Ollama). If BitLocker asks for a
+key you do not have, **stop** — do not proceed.
+
+A **clean tower** after verified wipe is acceptable: install HYDI host role from scratch (PM2,
+Ollama with GPU, Supabase, Tailscale as `heidi-pc`) and **restore laptop data from a backup**
+— preferable to untangling unknown legacy nodes.
+
 ## Role split
 
 | Concern | Laptop (primary) | Desktop (compute / Frank) |
