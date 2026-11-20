@@ -44,7 +44,7 @@ proxy that sets `X-Forwarded-For`, such as ngrok or Cloudflare Tunnel.
 - Customer pages: `/services/*`, `/pricing`, `/billing`, `/success`,
   `/cancel`, `/signup`
 - `/api/ping`, `/_next/*` build assets, `/favicon.ico`, `/robots.txt`
-- MakeReady embed: `/makeready-bot/widget.js` (static widget), `/api/makeready-bot/*` (intake API)
+- MakeReady embed: `/makeready-bot` (offer/demo page), `/makeready-bot/widget.js`, `/api/makeready-bot/*` (intake API)
 
 Everything else is blocked from the outside, including `/`, `/heidi`,
 `/api/chat`, `/api/health`, status, devices, approvals, proposals, the

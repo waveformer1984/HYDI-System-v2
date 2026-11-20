@@ -11,6 +11,7 @@ import {
   newRequestId,
   sendOwnerEmail,
 } from '../../../lib/makeready-bot';
+import { validateDemoLead } from '../../../lib/makeready-bot/offer';
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -44,6 +45,7 @@ export default async function handler(req, res) {
     chat: { windowMs: 60_000, max: 20 },
     estimate: { windowMs: 60_000, max: 40 },
     submit: { windowMs: 60_000, max: 10 },
+    lead: { windowMs: 60_000, max: 5 },
     health: { windowMs: 60_000, max: 30 },
   };
   const lim = limits[segment] || limits.health;
@@ -149,6 +151,24 @@ export default async function handler(req, res) {
         access_note: accessNote,
         owner_email: email,
       });
+    }
+
+    if (segment === 'lead' && req.method === 'POST') {
+      const checked = validateDemoLead(req.body || {});
+      if (!checked.ok) return res.status(400).json(checked);
+
+      const sb = getSupabase();
+      if (!sb) {
+        return res.status(503).json({ error: 'persistence_unavailable' });
+      }
+
+      const leadId = newRequestId().replace(/^mr_/, 'mrl_');
+      const row = { lead_id: leadId, ...checked.row };
+      const { error } = await sb.from('makeready_leads').insert(row);
+      if (error) {
+        return res.status(500).json({ error: 'insert_failed' });
+      }
+      return res.status(201).json({ ok: true, lead_id: leadId });
     }
 
     res.setHeader('Allow', ['GET', 'POST', 'OPTIONS']);
