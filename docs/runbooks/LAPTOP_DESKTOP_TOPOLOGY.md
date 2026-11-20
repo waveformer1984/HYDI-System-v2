@@ -1,8 +1,46 @@
 # Laptop (primary) + desktop (GPU / HYDI host) — topology B
 
-**Operator model:** You live on the **laptop** day to day. The **big desktop** is the compute host: Ollama (GPU), Docker/Supabase, PM2 fleet, and the canonical `HYDI-System-v2` tree in production.
+> **Ground truth (2026-11-20, operator-reported):** Windows name **`DESKTOP-I719OIN`** may
+> be a **laptop** (built-in display, battery, ~15.7 GB RAM, no dGPU) — not the GPU tower.
+> PM2, Devin, and `C:\Users\Owner\HYDI-System-v2` may therefore run on the **weaker**
+> machine today. Tailscale name **`heidi-pc`** might still point at that laptop until
+> you re-home it. **Verify before acting on any step below.**
 
-Physical docking or KVM does **not** replace network control plane. “Connected” means **Tailscale + explicit roles**, not only a cable.
+This runbook describes the **target** layout: laptop = control plane; **GPU tower** =
+compute host. It is **not** a claim about current production until the discovery
+checklist passes.
+
+**Operator model (target):** You live on the **laptop** day to day. The **GPU tower** is
+the compute host: Ollama, Docker/Supabase, PM2 fleet, and the canonical tree.
+
+Physical docking or KVM does **not** replace network control plane. “Connected” means
+**Tailscale + explicit roles**, not only a cable.
+
+## Discovery checklist (run first on every machine)
+
+Run on **each** Windows box (laptop and tower). Paste results into a note; do not trust
+the `DESKTOP-*` hostname alone.
+
+```powershell
+$env:COMPUTERNAME
+systeminfo | findstr /B /C:"OS Name" /C:"System Model" /C:"Total Physical Memory"
+Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object EstimatedChargeRemaining, BatteryStatus
+Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM
+pm2 jlist 2>$null | ConvertFrom-Json | Select-Object name, pm2_env | Format-Table
+Test-Path C:\Users\Owner\HYDI-System-v2
+```
+
+**Tailscale admin / app:** which device is named **`heidi-pc`**? Note the machine model
+next to that entry.
+
+| Question | Laptop expected | Tower expected (target host) |
+|----------|-----------------|------------------------------|
+| Battery API present? | Often yes | Usually no |
+| dGPU in `Win32_VideoController`? | Often iGPU only | Discrete NVIDIA/AMD |
+| PM2 `hydi-boot` running? | **Today: possibly yes** | Target: **yes after migration** |
+| `heidi-pc` MagicDNS | Today: may be laptop | Target: tower |
+
+**Do not merge topology docs or run “confirm desktop” curls until this table is filled.**
 
 ## Role split
 
@@ -105,6 +143,20 @@ See `docs/CURSOR_CLOUD_AGENT.md` and `/opt/cursor/artifacts/REMOTE_TUNNEL_STRATE
 - **Tier A (now):** `TS_AUTHKEY` + `PROTOFORGE_MCP_TOKEN` → live read-only Frank state on **desktop**.
 - **Tier C (mission E2E):** Self-hosted Cursor worker installed on **desktop**, not laptop — matches where PM2 runs.
 
+## Planned migration (tower becomes host — not a quick switch)
+
+Only after discovery confirms the tower has **more RAM + GPU** and you have a **DB backup**:
+
+1. **Backup** Supabase/Docker volume and `heidi-core/data/*.db` from the current host.
+2. **Freeze** merges/auto-deploy on the current host until cutover plan is written.
+3. **Install** stack on tower: Node 22, PM2, Docker, repo at same path if possible.
+4. **Restore** database; run `supabase db` / migration parity check.
+5. **Retarget** Tailscale: rename nodes so **`heidi-pc`** = tower; run `serve-mcp.ps1` / `serve-heidi-web.ps1` on tower only.
+6. **Stop** PM2 fleet on old laptop host (after tower health green).
+7. **Re-run** `npm run runtime:audit` and production-truth collector on **new** host.
+
+Repo has no recent automated “clone host” script — treat as an operator RFC before execution.
+
 ## Anti-patterns (topology B)
 
 | Mistake | Risk |
@@ -123,7 +175,7 @@ When Claude or Devin is stuck on **desktop** (Task Manager on desktop, or KVM to
 2. Reopen Claude on **laptop** if that is your control surface.
 3. Continue via tailnet to desktop HYDI — not by starting a second stack on the laptop.
 
-For Frank RAM steps and merge discipline, see `docs/runbooks/FRANK_OPERATOR_CARD.md`.
+For Frank handoff and merge discipline, see `docs/reports/FRANK_CLOUD_TO_PRODUCTION_HANDOFF.md` and `artifacts/proof-of-value/OPERATIONAL_BLOCKERS.md`.
 
 ## Related docs
 
