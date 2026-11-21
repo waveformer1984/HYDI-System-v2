@@ -77,7 +77,14 @@ async function main() {
 
   if (ONCE) {
     await runCycle();
-    process.exit(0);
+    // Hard process.exit() races closing libuv async handles (undici /
+    // supabase-js keep-alive sockets) on Windows → 0xC0000409 fail-fast.
+    // Drain instead: drop the global dispatcher, let the loop empty, and
+    // keep an unref'd 5s fallback so a stray handle cannot hang the child.
+    process.exitCode = 0;
+    try { require('undici').getGlobalDispatcher().destroy(); } catch (_) {}
+    setTimeout(() => process.exit(0), 5000).unref();
+    return;
   }
 
   // Run immediately, then on interval
