@@ -105,8 +105,9 @@ async function pump() {
   running = true;
   while (queue.length) {
     const job = queue.shift();
-    job.queued = false;
     const s = status[job.name];
+    s.queued = false;
+    s.inFlight = true;
     const r = await spawnOnce(job);
     s.inFlight = false; s.lastRun = new Date().toISOString(); s.lastOutcome = r.outcome; s.runs++;
     if (r.outcome !== 'ok') { s.failures++; console.log(`[hydi-schedulers] ${job.name}: ${r.outcome} ${r.ms}ms ${r.tail.trim().split('\n').slice(-2).join(' | ')}`) }
@@ -155,4 +156,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error('[hydi-schedulers] fatal', e); process.exit(1) });
-module.exports = { JOBS, status };
+module.exports = { JOBS, status, schedule, _timers: timers };
