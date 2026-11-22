@@ -1491,8 +1491,9 @@ class HeidiCore {
         );
 
         const withEmbedding = factsWithEmbeddings.filter(f => f.embedding).length;
+        const db = this.supabase || supabase;
 
-        if (!supabase) {
+        if (!db) {
           for (const f of factsWithEmbeddings) {
             await this.memory.storeFactWithEmbedding(f.content, f.division, f.confidence, f.embedding);
           }
@@ -1500,7 +1501,7 @@ class HeidiCore {
           return;
         }
 
-        const { error } = await supabase
+        const { error } = await db
           .from('hydi_facts')
           .upsert(factsWithEmbeddings, { onConflict: 'content_key' });
 

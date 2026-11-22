@@ -4,27 +4,11 @@
 // whole upsert with "Could not find the 'source' column of 'hydi_facts' in the
 // schema cache" (seen in heidi-core logs). This test pins the insert payload
 // to the real column set so the regression cannot return.
-
-process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
-process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-key';
-
-const mockUpserts = [];
-// heidi-core has its own nested node_modules, so server.js resolves a
-// different @supabase/supabase-js copy than the repo root — mock that path.
-jest.mock('../../heidi-core/node_modules/@supabase/supabase-js', () => ({
-  createClient: () => ({
-    from: (table) => ({
-      upsert: (rows, opts) => {
-        mockUpserts.push({ table, rows, opts });
-        return Promise.resolve({ data: rows, error: null });
-      },
-      select: () => ({
-        eq: () => ({ single: async () => ({ data: null, error: null }) }),
-      }),
-    }),
-    rpc: async () => ({ data: [], error: null }),
-  }),
-}));
+//
+// No module mock: heidi-core has a nested node_modules on some machines and
+// not others, so the supabase-js specifier resolves differently per machine.
+// Instead we inject a fake client on the instance (server.js now prefers
+// this.supabase over the module-level client in extractAndStoreFacts).
 
 const HeidiCore = require('../../heidi-core/server.js');
 
@@ -37,7 +21,16 @@ const REAL_COLUMNS = new Set([
 ]);
 
 test('extractAndStoreFacts upserts only real hydi_facts columns', async () => {
-  const heidi = new HeidiCore({ brain: {} });
+  const upserts = [];
+  const heidi = Object.create(HeidiCore.prototype);
+  heidi.supabase = {
+    from: (table) => ({
+      upsert: (rows, opts) => {
+        upserts.push({ table, rows, opts });
+        return Promise.resolve({ data: rows, error: null });
+      },
+    }),
+  };
   heidi.generateEmbedding = async () => [0.1, 0.2, 0.3];
   heidi.memory = { storeFactWithEmbedding: async () => {} };
 
@@ -46,7 +39,7 @@ test('extractAndStoreFacts upserts only real hydi_facts columns', async () => {
     'Approved — the budget is granted.'
   );
 
-  const factUpserts = mockUpserts.filter((u) => u.table === 'hydi_facts');
+  const factUpserts = upserts.filter((u) => u.table === 'hydi_facts');
   expect(factUpserts.length).toBeGreaterThan(0);
 
   for (const upsert of factUpserts) {
