@@ -598,8 +598,11 @@ class HeidiAgent {
       timestamp: new Date().toISOString(),
     };
     const { error: reflectError } = await this.supabase.from('heidi_reflections').insert({
-      reflection,
-      event_range: reflection.event_range,
+      task_id: 'minimal-reflection',
+      theme: 'no-decision-events',
+      confidence: 0,
+      was_correct: false,
+      evaluations: reflection,
       cycle: cycleNumber,
     });
     if (reflectError) {
@@ -659,8 +662,11 @@ class HeidiAgent {
       const { error: reflectError } = await this.supabase
         .from('heidi_reflections')
         .insert({
-          reflection,
-          event_range: reflection.event_range,
+          task_id: 'agent-reflection',
+          theme: reflection.patterns[0] || 'decision-window-analysis',
+          confidence: Math.min(1, events.length / 20),
+          was_correct: false,
+          evaluations: reflection,
           cycle: reflection.cycle
         });
 

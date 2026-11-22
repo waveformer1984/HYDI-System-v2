@@ -51,23 +51,15 @@ jobs:
         fi
         echo "✅ No stuck queued runs"
 
+    # DB-backed health check removed: GitHub-hosted runners cannot reach the
+    # local Supabase on Frank (127.0.0.1:54321/54322 IS production). The live
+    # monitor is frank-observer on the host, which watches /api/health and the
+    # real database directly. The remaining steps (stuck-run detection, Vercel
+    # env check, failure alerting) still work from GitHub runners.
     - name: Setup Node.js
       uses: actions/setup-node@v7
       with:
         node-version: '22'
-
-    - name: Run health check
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      run: |
-        echo "🏥 Running scheduled health check"
-        if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-          echo "::notice::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY repo secrets not set; skipping DB check (Frank's /api/health is the live monitor)"
-          exit 0
-        fi
-        npm install --no-save --no-audit --no-fund --ignore-scripts dotenv @supabase/supabase-js
-        node test-critical-path.js
 
     # Retired once Cloudflare cutover is verified: set repo variable
     # VERCEL_RETIRED=true (Settings → Secrets and variables → Actions →

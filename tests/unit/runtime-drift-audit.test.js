@@ -407,6 +407,45 @@ describe('ecosystem declarations for the long-running processes', () => {
     expect(names).not.toContain('job-executor-poller');
   });
 
+  it('orphan_pm2_app_check: a fake orphan in jlist is flagged ORPHAN', () => {
+    // A stopped/errored undeclared entry never reaches the online-only loop —
+    // this is the resurrected-dump.pm2 shape (ollama-serve was stopped).
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-boot', { script: 'scripts/boot-agent.js' })],
+      running: [
+        running('hydi-boot', { script: '/repo/scripts/boot-agent.js' }),
+        running('fake-orphan-app', { status: 'stopped', script: '/repo/scripts/fake-orphan-app.js' }),
+        running('fake-online-orphan', { script: '/repo/scripts/fake-online-orphan.js' }),
+      ],
+      provenance: { 'hydi-boot': { gitSha: HEAD, gitDirty: false } },
+    });
+    const stopped = result.rows.find((row) => row.name === 'fake-orphan-app');
+    expect(stopped.verdict).toBe('ORPHAN');
+    expect(stopped.verdicts).toEqual(['ORPHAN']);
+    expect(stopped.detail).toContain('stopped');
+    expect(stopped.suggestion).toContain('pm2 delete fake-orphan-app');
+    const online = result.rows.find((row) => row.name === 'fake-online-orphan');
+    expect(online.verdicts).toContain('ORPHAN');
+    expect(online.verdict).toBe('UNDECLARED');
+    expect(result.overall).toBe('DRIFT');
+    expect(result.degradesHealth).toBe(true);
+  });
+
+  it('orphan_pm2_app_check: a clean jlist/ecosystem state reports 0 orphans', () => {
+    const result = auditDrift({
+      pm2Readable: true,
+      repoHead: HEAD,
+      declared: [declared('hydi-boot', { script: 'scripts/boot-agent.js' })],
+      running: [running('hydi-boot', { script: '/repo/scripts/boot-agent.js' })],
+      provenance: { 'hydi-boot': { gitSha: HEAD, gitDirty: false } },
+    });
+    expect(result.rows.every((row) => !(row.verdicts || []).includes('ORPHAN'))).toBe(true);
+    expect(result.counts.ORPHAN || 0).toBe(0);
+    expect(result.overall).toBe('OK');
+  });
+
   it('does not treat PM2 modules as undeclared apps', () => {
     const running = normalizePm2List([{
       name: 'pm2-logrotate',

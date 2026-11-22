@@ -147,3 +147,42 @@ describe('hydi-schedulers pump semantics', () => {
     expect(Object.keys(status)).toContain('hydi-resource-discovery');
   });
 });
+
+describe('hydi-schedulers cadence (real module)', () => {
+  // Regression 2026-11-21: pump() cleared `queued` on the job object while
+  // tick() set it on the status object — every job ran exactly once per
+  // boot and never refired. This drives the real schedule()/pump() with a
+  // fast fixture child and asserts the job runs repeatedly.
+  let sched;
+  let statusDir;
+
+  beforeAll(() => {
+    statusDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydi-schedulers-live-'));
+    process.env.HYDI_SCHEDULERS_STATUS = path.join(statusDir, 'status.json');
+    jest.resetModules();
+    sched = require('../../scripts/hydi-schedulers');
+  });
+
+  afterAll(() => {
+    for (const t of sched._timers) clearTimeout(t);
+    sched._timers.length = 0;
+    fs.rmSync(statusDir, { recursive: true, force: true });
+    delete process.env.HYDI_SCHEDULERS_STATUS;
+  });
+
+  it('a short-interval job runs at least twice and queued resets', async () => {
+    const name = 'test-fast-job';
+    sched.status[name] = { lastRun: null, lastOutcome: null, runs: 0, failures: 0, inFlight: false, queued: false };
+    sched.schedule({
+      name,
+      script: 'tests/fixtures/schedulers-ok-child.js',
+      intervalMs: 400,
+      timeoutMs: 10000,
+    });
+    // First tick fires ~1.5s+jitter after schedule(); allow ~2 intervals.
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    expect(sched.status[name].runs).toBeGreaterThanOrEqual(2);
+    expect(sched.status[name].lastOutcome).toBe('ok');
+    expect(sched.status[name].queued).toBe(false);
+  }, 20000);
+});
