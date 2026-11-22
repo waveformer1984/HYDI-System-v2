@@ -1444,7 +1444,6 @@ class HeidiCore {
         numberMatches.slice(0, 2).forEach(num => {
           facts.push({
             content: `Financial/operational metric: ${num}`,
-            source: 'heidi_inference',
             confidence: 0.68,
             division: contextDivision
           });
@@ -1463,7 +1462,6 @@ class HeidiCore {
         // Only store if it's a clear approval, not conditional
         facts.push({
           content: 'Decision outcome: approval granted',
-          source: 'heidi_inference',
           confidence: 0.75,
           division: contextDivision
         });
@@ -1473,7 +1471,6 @@ class HeidiCore {
         // Only store if it's a clear block, not conditional
         facts.push({
           content: 'Decision outcome: action blocked or rejected',
-          source: 'heidi_inference',
           confidence: 0.75,
           division: contextDivision
         });
