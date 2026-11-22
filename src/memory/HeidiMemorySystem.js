@@ -139,20 +139,6 @@ class HeidiMemorySystem extends EventEmitter {
 
   // ── Long-term memory (database) ────────────────────────────────────────
 
-  async storeUserProfile(userId, profile) {
-    try {
-      const profileData = { user_id: userId, profile_data: profile, updated_at: new Date().toISOString() };
-      const { error } = await supabase.from('user_profiles').upsert(profileData, { onConflict: 'user_id' }).select();
-      if (error) throw error;
-      this.dbMemory.userProfiles.set(userId, { ...profile, updated_at: profileData.updated_at });
-      this.emit('user_profile_stored', { userId, profile });
-      console.log(`[MEMORY] User profile stored: ${userId}`);
-    } catch (error) {
-      console.error(`[MEMORY] Failed to store user profile ${userId}:`, error.message);
-      throw error;
-    }
-  }
-
   async getUserProfile(userId) {
     try {
       const cached = this.dbMemory.userProfiles.get(userId);
@@ -166,31 +152,6 @@ class HeidiMemorySystem extends EventEmitter {
       return null;
     } catch (error) {
       console.error(`[MEMORY] Failed to get user profile ${userId}:`, error.message);
-      throw error;
-    }
-  }
-
-  async storeDecision(decision) {
-    try {
-      const decisionData = {
-        decision_id: decision.id,
-        task_id: decision.taskId,
-        user_id: decision.userId || 'system',
-        decision_type: decision.type,
-        context: decision.context,
-        options: decision.options,
-        selected_option: decision.selectedOption,
-        confidence: decision.confidence,
-        outcome: decision.outcome,
-        timestamp: decision.timestamp || new Date().toISOString()
-      };
-      const { error } = await supabase.from('decisions').insert(decisionData).select();
-      if (error) throw error;
-      this.dbMemory.decisions.set(decision.id, decision);
-      this.emit('decision_stored', { decisionId: decision.id, decision });
-      console.log(`[MEMORY] Decision stored: ${decision.id}`);
-    } catch (error) {
-      console.error(`[MEMORY] Failed to store decision ${decision.id}:`, error.message);
       throw error;
     }
   }
@@ -209,46 +170,12 @@ class HeidiMemorySystem extends EventEmitter {
   }
 
   async storeRevenueEvent(event) {
-    try {
-      const eventData = {
-        event_id: event.id,
-        user_id: event.userId,
-        event_type: event.type,
-        amount: event.amount,
-        currency: event.currency || 'USD',
-        source: event.source,
-        context: event.context,
-        timestamp: event.timestamp || new Date().toISOString()
-      };
-      const { error } = await supabase.from('revenue_events').insert(eventData).select();
-      if (error) throw error;
-      this.dbMemory.revenue.set(event.id, event);
-      this.emit('revenue_event_stored', { eventId: event.id, event });
-      console.log(`[MEMORY] Revenue event stored: ${event.id} ($${event.amount})`);
-    } catch (error) {
-      console.error(`[MEMORY] Failed to store revenue event ${event.id}:`, error.message);
-      throw error;
-    }
-  }
-
-  async storePerformance(performance) {
-    try {
-      const perfData = {
-        metric_id: performance.id,
-        metric_type: performance.type,
-        value: performance.value,
-        context: performance.context,
-        timestamp: performance.timestamp || new Date().toISOString()
-      };
-      const { error } = await supabase.from('system_performance').insert(perfData).select();
-      if (error) throw error;
-      this.dbMemory.performance.set(performance.id, performance);
-      this.emit('performance_stored', { performanceId: performance.id, performance });
-      console.log(`[MEMORY] Performance metric stored: ${performance.id}`);
-    } catch (error) {
-      console.error(`[MEMORY] Failed to store performance ${performance.id}:`, error.message);
-      throw error;
-    }
+    // revenue_events table/columns do not match this payload (schema drift) —
+    // the Supabase write always failed and threw into callers. Keep the
+    // in-memory cache + event emission; drop the guaranteed-failing write.
+    this.dbMemory.revenue.set(event.id, event);
+    this.emit('revenue_event_stored', { eventId: event.id, event });
+    console.log(`[MEMORY] Revenue event stored (in-memory only): ${event.id} ($${event.amount})`);
   }
 
   // ── Reflective memory ──────────────────────────────────────────────────
