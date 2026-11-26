@@ -198,9 +198,19 @@ describe('lifeline HTTP', () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  test('403 without Tailscale-User-Login', async () => {
-    const res = await new Promise((resolve, reject) => {
+  test('GET /health is open; /lifeline/status without login is 403', async () => {
+    const health = await new Promise((resolve, reject) => {
       http.get(`http://127.0.0.1:${port}/health`, (r) => {
+        let body = '';
+        r.on('data', (c) => { body += c; });
+        r.on('end', () => resolve({ status: r.statusCode, body }));
+      }).on('error', reject);
+    });
+    expect(health.status).toBe(200);
+    expect(JSON.parse(health.body).service).toBe('lifeline');
+
+    const res = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${port}/lifeline/status`, (r) => {
         let body = '';
         r.on('data', (c) => { body += c; });
         r.on('end', () => resolve({ status: r.statusCode, body }));
@@ -266,7 +276,7 @@ describe('lifeline HTTP', () => {
       http.get({
         host: '127.0.0.1',
         port,
-        path: '/health',
+        path: '/lifeline/status',
         headers: { 'tailscale-user-login': 'not-allowed@example.com' },
       }, (r) => {
         let body = '';
@@ -282,5 +292,93 @@ describe('lifeline HTTP', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.body).toMatch(/Heidi Lifeline/);
+  });
+
+  test('two concurrent restarts -> one pm2 call, other 429', async () => {
+    let blocked = null;
+  let resolveBlocked;
+    const blockedGate = new Promise((r) => { resolveBlocked = r; blocked = r; });
+    const execFileSlow = (file, args, opts, cb) => {
+      execCalls.push({ file, args, opts });
+      const joined = args.join(' ');
+      if (joined.includes('jlist')) {
+        cb(null, pm2List, '');
+        return;
+      }
+      if (joined.includes('restart')) {
+        blockedGate.then(() => cb(null, 'ok', ''));
+        return;
+      }
+      cb(new Error('unexpected'));
+    };
+    await new Promise((resolve) => server.close(resolve));
+    server = createLifelineServer({
+      execFile: execFileSlow,
+      platform: 'win32',
+      now: () => nowMs,
+      statePath,
+      auditPath,
+      allowedLogins: [LOGIN],
+      tcpConnect: () => {
+        const socket = {
+          on(ev, fn) {
+            if (ev === 'error') process.nextTick(() => fn(new Error('ECONNREFUSED')));
+            return socket;
+          },
+          setTimeout(_ms, fn) { if (typeof fn === 'function') process.nextTick(fn); },
+          destroy() {},
+        };
+        return socket;
+      },
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = server.address().port;
+    execCalls = [];
+
+    const headers = { 'x-lifeline': '1' };
+    const p1 = request(port, 'POST /lifeline/restart/heidi-web-standalone', headers);
+    const p2 = request(port, 'POST /lifeline/restart/heidi-web-standalone', headers);
+    await new Promise((r) => setTimeout(r, 30));
+    resolveBlocked();
+    const [r1, r2] = await Promise.all([p1, p2]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 429]);
+    expect(execCalls.filter((c) => c.args.includes('restart'))).toHaveLength(1);
+  });
+
+  test('failed pm2 restart still consumes cooldown', async () => {
+    const execFileFail = (file, args, opts, cb) => {
+      if (args.join(' ').includes('jlist')) cb(null, pm2List, '');
+      else if (args.join(' ').includes('restart')) cb(new Error('pm2 down'));
+      else cb(new Error('unexpected'));
+    };
+    await new Promise((resolve) => server.close(resolve));
+    server = createLifelineServer({
+      execFile: execFileFail,
+      platform: 'win32',
+      now: () => nowMs,
+      statePath,
+      auditPath,
+      allowedLogins: [LOGIN],
+      tcpConnect: () => ({
+        on(ev, fn) {
+          if (ev === 'error') process.nextTick(() => fn(new Error('ECONNREFUSED')));
+          return this;
+        },
+        setTimeout(_ms, fn) { if (typeof fn === 'function') process.nextTick(fn); },
+        destroy() {},
+      }),
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = server.address().port;
+
+    const headers = { 'x-lifeline': '1' };
+    const first = await request(port, 'POST /lifeline/restart/heidi-core', headers);
+    expect(first.status).toBe(502);
+    const audit = fs.readFileSync(auditPath, 'utf8');
+    expect(audit).toMatch(/pm2_failed/);
+
+    const retry = await request(port, 'POST /lifeline/restart/heidi-core', headers);
+    expect(retry.status).toBe(429);
   });
 });

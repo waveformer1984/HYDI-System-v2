@@ -251,14 +251,24 @@ function buildHtmlPage() {
     var html = '';
     var apps = (data && data.apps) || [];
     var ports = (data && data.ports) || {};
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   ALLOWED.forEach(function (name) {
       var row = apps.find(function (a) { return a.name === name; }) || { name: name, status: 'unknown' };
-      html += '<div class="card"><div class="row"><div><strong>' + name + '</strong><br><span class="sub">PM2: <span class="pill ' + pillClass(row.status) + '">' + row.status + '</span></span></div>';
+      var statusLabel = escapeHtml(row.status);
+      html += '<div class="card"><div class="row"><div><strong>' + name + '</strong><br><span class="sub">PM2: <span class="pill ' + pillClass(row.status) + '">' + statusLabel + '</span></span></div>';
       html += '<button type="button" class="primary" data-app="' + name + '">Restart</button></div></div>';
     });
     html += '<div class="card"><strong>Ports</strong><div class="ports">';
     Object.keys(ports).sort().forEach(function (p) {
-      html += '<span class="port">:' + p + ' <span class="pill ' + pillClass(ports[p]) + '">' + ports[p] + '</span></span>';
+      var portState = escapeHtml(ports[p]);
+      html += '<span class="port">:' + p + ' <span class="pill ' + pillClass(ports[p]) + '">' + portState + '</span></span>';
     });
     html += '</div></div>';
     cards.innerHTML = html;
@@ -329,7 +339,21 @@ function createDefaultDeps(overrides = {}) {
     writeFile: overrides.writeFile,
     appendFile: overrides.appendFile,
     mkdirSync: overrides.mkdirSync,
+    restartLocks: overrides.restartLocks || new Map(),
   };
+}
+
+/**
+ * Serializes restart handling per app so rate-limit state and PM2 calls cannot race.
+ * @returns {Promise<() => void>} release function
+ */
+async function acquireRestartLock(locks, app) {
+  const tail = locks.get(app) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  locks.set(app, tail.then(() => gate));
+  await tail;
+  return release;
 }
 
 function createLifelineHandler(depsIn = {}) {
@@ -360,13 +384,15 @@ function createLifelineHandler(depsIn = {}) {
       }
     };
 
-    if (!login) {
+    const isOpenHealth = method === 'GET' && pathname === '/health';
+
+    if (!isOpenHealth && !login) {
       audit('forbidden');
       return jsonResponse(res, 403, { ok: false, message: 'Tailscale identity required.' });
     }
 
     try {
-      if (method === 'GET' && pathname === '/health') {
+      if (isOpenHealth) {
         const pm2 = await readPm2List(deps);
         audit(pm2.ok ? 'ok' : 'degraded');
         return jsonResponse(res, 200, {
@@ -409,33 +435,39 @@ function createLifelineHandler(depsIn = {}) {
           return jsonResponse(res, 403, { ok: false, message: 'X-Lifeline: 1 header required.' });
         }
 
-        const readFile = deps.readFile || fs.readFileSync;
-        const writeFile = deps.writeFile || fs.writeFileSync;
-        let state = loadState(deps.statePath, readFile);
-        const now = deps.now();
-        const limit = rateLimitCheck(state, app, now);
-        if (!limit.allowed) {
-          audit('rate_limited');
-          return jsonResponse(res, 429, { ok: false, wait_s: limit.wait_s, message: `Rate limited (${limit.reason}).` });
+        const release = await acquireRestartLock(deps.restartLocks, app);
+        try {
+          const readFile = deps.readFile || fs.readFileSync;
+          const writeFile = deps.writeFile || fs.writeFileSync;
+          let state = loadState(deps.statePath, readFile);
+          const now = deps.now();
+          const limit = rateLimitCheck(state, app, now);
+          if (!limit.allowed) {
+            audit('rate_limited');
+            return jsonResponse(res, 429, { ok: false, wait_s: limit.wait_s, message: `Rate limited (${limit.reason}).` });
+          }
+
+          state = recordRestart(state, app, now);
+          saveState(deps.statePath, state, writeFile, deps.mkdirSync || fs.mkdirSync);
+
+          const cmd = pm2RestartCommand(deps.platform, app);
+          const out = await execText(deps.execFile, cmd.file, cmd.args, {
+            cwd: deps.repoRoot,
+            timeout: PM2_JLIST_TIMEOUT_MS,
+            windowsHide: true,
+            maxBuffer: 4 * 1024 * 1024,
+          });
+
+          if (!out.ok) {
+            audit('pm2_failed');
+            return jsonResponse(res, 502, { ok: false, message: 'PM2 restart failed.', detail: (out.error || '').slice(0, 200) });
+          }
+
+          audit('restarted');
+          return jsonResponse(res, 200, { ok: true, message: `Restarted ${app}.`, app });
+        } finally {
+          release();
         }
-
-        const cmd = pm2RestartCommand(deps.platform, app);
-        const out = await execText(deps.execFile, cmd.file, cmd.args, {
-          cwd: deps.repoRoot,
-          timeout: PM2_JLIST_TIMEOUT_MS,
-          windowsHide: true,
-          maxBuffer: 4 * 1024 * 1024,
-        });
-
-        if (!out.ok) {
-          audit('pm2_failed');
-          return jsonResponse(res, 502, { ok: false, message: 'PM2 restart failed.', detail: (out.error || '').slice(0, 200) });
-        }
-
-        state = recordRestart(state, app, now);
-        saveState(deps.statePath, state, writeFile, deps.mkdirSync || fs.mkdirSync);
-        audit('restarted');
-        return jsonResponse(res, 200, { ok: true, message: `Restarted ${app}.`, app });
       }
 
       audit('not_found');
@@ -499,4 +531,5 @@ module.exports = {
   readPm2List,
   probePorts,
   tcpProbe,
+  acquireRestartLock,
 };
