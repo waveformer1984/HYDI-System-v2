@@ -1,0 +1,14 @@
+{
+  "timezone": "America/Chicago",
+  "run_at": "06:30",
+  "target_market": "San Antonio new-home-build make-ready / construction cleanup / final clean",
+  "sources": [
+    {
+      "id": "placeholder-public-rss",
+      "type": "fixture",
+      "enabled": true,
+      "note": "TODO Jordan: replace with real public RSS/HTML sources that allow automated fetch",
+      "fixture": "tests/fixtures/heidi-leads/sample-listing.json"
+    }
+  ]
+}
