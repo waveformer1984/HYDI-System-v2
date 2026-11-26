@@ -16,6 +16,15 @@ import {
 } from '../../lib/heidi-mobile/client/voice';
 import { ConfirmSheet } from './ui';
 import JobApplyDigestCard from './JobApplyDigestCard';
+import ChatStatusStrip from './ChatStatusStrip';
+import {
+  messageForChatError,
+  noteBffFailure,
+  shouldShowLifelineCard,
+  DEFAULT_LIFELINE_URL,
+} from './chatErrors';
+import type { Loadable } from './hooks';
+import type { StatusSnapshot } from './types';
 
 const PAGE = 40;
 const SUGGESTIONS = ['What is HYDI’s status?', 'What needs my approval?', 'Summarize recent activity'];
@@ -27,6 +36,8 @@ interface Props {
   onUpstreamFailure?: (_error: ApiError) => void;
   onTasksChanged: () => void;
   brief?: { generated_at: string; ct_date: string; lines: string[]; failures: string[] } | null;
+  status: Loadable<StatusSnapshot>;
+  lifelineUrl?: string;
 }
 
 function normalizeAction(a: Extract<ChatEvent, { type: 'actions' }>['actions'][number]) {
@@ -54,7 +65,16 @@ function buildActionCards(event: Extract<ChatEvent, { type: 'actions' }>): Actio
     });
 }
 
-export default function ChatView({ online, speakReplies, onAuthError, onUpstreamFailure, onTasksChanged, brief }: Props) {
+export default function ChatView({
+  online,
+  speakReplies,
+  onAuthError,
+  onUpstreamFailure,
+  onTasksChanged,
+  brief,
+  status,
+  lifelineUrl = DEFAULT_LIFELINE_URL,
+}: Props) {
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState('');
   const [interim, setInterim] = useState('');
@@ -75,6 +95,10 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
   const speechOut = useRef<SpeechOutput | null>(null);
   const pendingText = useRef<{ id: string; text: string } | null>(null);
   const flushHandle = useRef<number | null>(null);
+  const bffFailures = useRef(0);
+  const [showLifeline, setShowLifeline] = useState(false);
+  const [backOnlineFlash, setBackOnlineFlash] = useState(false);
+  const wasOffline = useRef(!online);
 
   // Client-only state (localStorage, media queries) is loaded after mount so
   // server and client render the same initial HTML.
@@ -100,6 +124,17 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
     const t = setTimeout(() => saveDraft(input), 300);
     return () => clearTimeout(t);
   }, [input]);
+
+  useEffect(() => {
+    if (online && wasOffline.current) {
+      setBackOnlineFlash(true);
+      const t = setTimeout(() => setBackOnlineFlash(false), 4000);
+      wasOffline.current = false;
+      return () => clearTimeout(t);
+    }
+    if (!online) wasOffline.current = true;
+    return undefined;
+  }, [online]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -192,19 +227,26 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
     controller.current = null;
 
     if (outcome.ok) {
+      bffFailures.current = 0;
+      setShowLifeline(false);
       patch(assistantId, (m) => ({ ...m, status: 'complete' }));
       if (speakReplies && fullText) speechOut.current?.speak(fullText);
       if (sawApproval) onTasksChanged();
     } else if (outcome.error.kind === 'aborted') {
       patch(assistantId, (m) => ({ ...m, status: 'cancelled' }));
     } else {
+      const friendly = messageForChatError(outcome.error);
       patch(assistantId, (m) => ({
         ...m,
         status: outcome.partial ? 'interrupted' : 'failed',
-        error: outcome.error.message,
+        error: friendly,
       }));
       if (['not_paired', 'unauthorized'].includes(outcome.error.kind)) onAuthError(outcome.error);
-      else if (['network', 'timeout', 'server', 'malformed'].includes(outcome.error.kind)) onUpstreamFailure?.(outcome.error);
+      else if (['network', 'timeout', 'server', 'malformed'].includes(outcome.error.kind)) {
+        bffFailures.current = noteBffFailure(bffFailures.current, outcome.error);
+        setShowLifeline(shouldShowLifelineCard(bffFailures.current));
+        onUpstreamFailure?.(outcome.error);
+      }
     }
     setStreamingId(null);
   }, [flushDeltas, onAuthError, onUpstreamFailure, onTasksChanged, patch, speakReplies]);
@@ -260,6 +302,26 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
 
   return (
     <>
+      <ChatStatusStrip online={online} status={status} />
+
+      {showLifeline && online && (
+        <div className={`${styles.card} ${styles.bannerBad}`} role="alert" style={{ marginBottom: 10 }}>
+          <strong>Frank&apos;s chat server is down</strong>
+          <p className={styles.muted} style={{ margin: '6px 0 8px' }}>
+            HYDI did not answer twice. Open Lifeline on Frank to see PM2 and restart heidi-web-standalone.
+          </p>
+          <a href={lifelineUrl} className={styles.btnPrimary} style={{ display: 'inline-block', textDecoration: 'none' }}>
+            Open Lifeline
+          </a>
+        </div>
+      )}
+
+      {backOnlineFlash && (
+        <div className={`${styles.banner} ${styles.bannerInfo}`} role="status" style={{ marginBottom: 8 }}>
+          Back online — you can send again.
+        </div>
+      )}
+
       <div className={styles.chatToolbar}>
         <span>{messages.length ? `${messages.length} messages on this phone` : 'New conversation'}</span>
         <button type="button" className={styles.linkButton} onClick={() => setConfirmReset(true)} disabled={!messages.length}>
@@ -333,7 +395,7 @@ export default function ChatView({ online, speakReplies, onAuthError, onUpstream
                 ))}
                 {failed && (
                   <div className={styles.errorText} role="alert" style={{ marginTop: m.text ? 8 : 0 }}>
-                    {m.status === 'interrupted' ? 'Reply cut off: ' : 'Not sent to HYDI: '}{m.error || 'request failed'}
+                    {m.error || 'request failed'}
                   </div>
                 )}
                 <div className={styles.msgMeta}>

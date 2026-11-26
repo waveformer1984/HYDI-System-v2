@@ -39,7 +39,12 @@ export default function HeidiPage() {
         <link rel="icon" href="/heidi-icons/icon-192.png" sizes="192x192" type="image/png" />
         <link rel="apple-touch-icon" href="/heidi-icons/icon-192.png" />
       </Head>
-      <HeidiMobileApp />
+      <HeidiMobileApp
+        lifelineUrl={
+          process.env.NEXT_PUBLIC_LIFELINE_URL
+          ?? 'https://heidi-pc.tailc50af2.ts.net:8443/lifeline/'
+        }
+      />
     </>
   );
 }
