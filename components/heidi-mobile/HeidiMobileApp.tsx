@@ -24,7 +24,9 @@ const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'control', label: 'Control', icon: '🎛' },
 ];
 
-export default function HeidiMobileApp() {
+const DEFAULT_LIFELINE = 'https://heidi-pc.tailc50af2.ts.net:8443/lifeline/';
+
+export default function HeidiMobileApp({ lifelineUrl = DEFAULT_LIFELINE }: { lifelineUrl?: string }) {
   const [phase, setPhase] = useState<Phase>('checking');
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [sessionAvailable, setSessionAvailable] = useState(true);
@@ -248,6 +250,8 @@ export default function HeidiMobileApp() {
             onAuthError={onAuthError}
             onUpstreamFailure={onChatUpstreamFailure}
             onTasksChanged={() => void tasks.refresh()}
+            status={status}
+            lifelineUrl={lifelineUrl}
             brief={brief.data}
           />
         )}
