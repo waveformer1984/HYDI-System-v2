@@ -7,8 +7,13 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'phone', 'heidi-check.sh');
 
-function runAgainstPort(port) {
-  const env = { ...process.env, HEIDI_TAILNET_URL: `http://127.0.0.1:${port}` };
+function runAgainstPort(port, extraEnv = {}) {
+  const env = {
+    ...process.env,
+    HEIDI_TAILNET_URL: `http://127.0.0.1:${port}`,
+    HEIDI_LIFELINE_PORT: String(port),
+    ...extraEnv,
+  };
   return new Promise((resolve, reject) => {
     const child = spawn('sh', [SCRIPT], {
       cwd: ROOT,
@@ -70,6 +75,7 @@ describe('scripts/phone/heidi-check.sh', () => {
       '/api/health': ok,
       '/heidi': ok,
       '/api/heidi-mobile/state': ok,
+      '/health': ok,
     });
     try {
       const r = await runAgainstPort(port);
@@ -77,7 +83,8 @@ describe('scripts/phone/heidi-check.sh', () => {
       expect(r.stdout).toMatch(/health 200 .* OK/);
       expect(r.stdout).toMatch(/heidi 200 .* OK/);
       expect(r.stdout).toMatch(/state 200 .* OK/);
-      expect(r.stdout.trim().split('\n').pop()).toBe('ALL OK');
+      expect(r.stdout).toMatch(/^ALL OK$/m);
+      expect(r.stdout).toMatch(/^VERDICT: OK$/m);
     } finally {
       await closeServer(server);
     }
@@ -91,6 +98,7 @@ describe('scripts/phone/heidi-check.sh', () => {
     const { server, port } = await startStub({
       '/api/health': ok,
       '/heidi': ok,
+      '/health': ok,
       '/api/heidi-mobile/state': (res) => {
         res.writeHead(503);
         res.end();
@@ -100,7 +108,7 @@ describe('scripts/phone/heidi-check.sh', () => {
       const r = await runAgainstPort(port);
       expect(r.status).toBe(1);
       expect(r.stdout).toMatch(/state 503 .* BFF up, upstream down/);
-      expect(r.stdout).toMatch(/^DEGRADED: state$/m);
+      expect(r.stdout).toMatch(/^DEGRADED: state( lifeline_health)?$/m);
     } finally {
       await closeServer(server);
     }
