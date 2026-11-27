@@ -4,11 +4,30 @@
   "target_market": "San Antonio new-home-build make-ready / construction cleanup / final clean",
   "sources": [
     {
-      "id": "placeholder-public-rss",
-      "type": "fixture",
+      "id": "sanantonio-permits-ckan",
+      "type": "ckan_permit",
       "enabled": true,
-      "note": "TODO Jordan: replace with real public RSS/HTML sources that allow automated fetch",
-      "fixture": "tests/fixtures/heidi-leads/sample-listing.json"
+      "note": "City of San Antonio Development Services — CKAN field names from open-data export",
+      "fixture": "tests/fixtures/heidi-leads/sanantonio-permits-ckan.json"
+    },
+    {
+      "id": "bexar-permits-ckan",
+      "type": "ckan_permit",
+      "enabled": true,
+      "fixture": "tests/fixtures/heidi-leads/bexar-permits-ckan.json"
+    },
+    {
+      "id": "comal-permits-ckan",
+      "type": "ckan_permit",
+      "enabled": true,
+      "fixture": "tests/fixtures/heidi-leads/comal-permits-ckan.json"
+    },
+    {
+      "id": "sa-bid",
+      "type": "bid",
+      "enabled": true,
+      "note": "LLM-scored procurement listings only (no rules path)",
+      "fixture": "tests/fixtures/heidi-leads/sa-bid-listings.json"
     }
   ]
 }
