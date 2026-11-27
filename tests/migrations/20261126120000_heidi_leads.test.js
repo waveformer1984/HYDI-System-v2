@@ -17,3 +17,17 @@ describe('Migration 20261126120000 — heidi_leads', () => {
     expect(SQL).toMatch(/\(source, url, title_hash\)/);
   });
 });
+
+const SQL_V2 = readMigration('20261127193000_heidi_leads_scoring_v2.sql');
+
+describe('Migration 20261127193000 — heidi_leads scoring v2', () => {
+  it('adds contractor, score_reasons, scored_by', () => {
+    expect(SQL_V2).toMatch(/contractor text/);
+    expect(SQL_V2).toMatch(/score_reasons jsonb/);
+    expect(SQL_V2).toMatch(/scored_by text/);
+  });
+
+  it('documents nullable score semantics', () => {
+    expect(SQL_V2).toMatch(/Nullable: unscored leads stay NULL/);
+  });
+});

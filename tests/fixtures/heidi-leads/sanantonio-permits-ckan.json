@@ -1,0 +1,19 @@
+[
+  {
+    "permit_number": "B2025-120044",
+    "permit_type": "New Single Family",
+    "work_description": "New residential — final clean and make-ready prior to CO",
+    "contractor_name": "Alamo Ranch Builders LLC",
+    "applicant_name": "Alamo Ranch Builders LLC",
+    "site_address": "9814 Westpoint Dr, San Antonio, TX 78254",
+    "issued_date": "2026-11-20T00:00:00Z"
+  },
+  {
+    "permit_number": "B2025-119812",
+    "permit_type": "Electrical",
+    "work_description": "Service upgrade only",
+    "contractor_name": "Spark Electric",
+    "site_address": "300 E Travis St, San Antonio, TX 78205",
+    "issued_date": "2026-11-18T00:00:00Z"
+  }
+]
