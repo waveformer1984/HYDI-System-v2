@@ -67,6 +67,8 @@ const { isJobsQuery, formatJobs } = require('../lib/job-scout/chat');
 const { decisionInbox, brief } = require('./status/decision-inbox');
 const { morningBrief, briefDue, msUntilNextBrief } = require('./status/morning-brief');
 const allowlist = require('./approvals/allowlist');
+const { startOperationalHeartbeat } = require('./jobs/operational-heartbeat');
+const { startLeadSweepScheduler } = require('./jobs/lead-sweep');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -1920,6 +1922,8 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     this.startMorningBriefTimer();
     this.missionWorker.start();
     this.healthObserver.start();
+    this._stopOperationalHeartbeat = startOperationalHeartbeat({ store, log: console });
+    this._stopLeadSweep = startLeadSweepScheduler({ store, repoRoot: require('path').resolve(__dirname, '..'), log: console });
     this.opsAgent.store.ready
       .then(() => this.opsAgent.recover())
       .then(() => this.opsAgent.start())
@@ -1975,6 +1979,8 @@ async function gracefulShutdown(signal) {
   try {
     heidi.missionWorker.stop();
     heidi.healthObserver.stop();
+    if (heidi._stopOperationalHeartbeat) heidi._stopOperationalHeartbeat();
+    if (heidi._stopLeadSweep) heidi._stopLeadSweep();
     heidi.stopBrainWatchdog();
     if (heidi.server) {
       await new Promise((resolve) => heidi.server.close(resolve));

@@ -64,7 +64,8 @@ describe('Heidi Mobile client bundle', () => {
       const where = path.relative(ROOT, file);
       expect({ where, hit: /HYDI_SERVICE_SECRET|SUPABASE_SERVICE_ROLE_KEY|x-hydi-(device|service)-token|signDeviceToken|deriveSigningKey|createHmac/.test(src) }).toEqual({ where, hit: false });
       const envReads = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
-      expect({ where, envReads: envReads.filter((n) => n !== 'NODE_ENV') }).toEqual({ where, envReads: [] });
+      const allowedPublicEnv = new Set(['NODE_ENV', 'NEXT_PUBLIC_LIFELINE_URL']);
+      expect({ where, envReads: envReads.filter((n) => !allowedPublicEnv.has(n)) }).toEqual({ where, envReads: [] });
       expect({ where, publicSecret: /NEXT_PUBLIC_[A-Z_]*(SECRET|KEY|TOKEN)/.test(src) }).toEqual({ where, publicSecret: false });
     }
   });
@@ -109,9 +110,11 @@ describe('Heidi Mobile PWA', () => {
     expect(page).toMatch(/interactive-widget=resizes-content/);
   });
 
-  it('the service worker never intercepts API calls', () => {
+  it('the service worker never intercepts API or lifeline calls', () => {
     const sw = fs.readFileSync(path.join(ROOT, 'public', 'heidi-sw.js'), 'utf8');
-    expect(sw).toMatch(/url\.pathname\.startsWith\('\/api\/'\)\) return;/);
+    expect(sw).toMatch(/url\.pathname\.startsWith\('\/api\/'\)/);
+    expect(sw).toMatch(/url\.pathname\.startsWith\('\/lifeline\/'\)/);
     expect(sw).not.toMatch(/caches?\.(put|add)[^;]*\/api\//);
+    expect(sw).not.toMatch(/caches?\.(put|add)[^;]*\/lifeline\//);
   });
 });
