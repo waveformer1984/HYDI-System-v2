@@ -9,7 +9,6 @@ const { dedupeLeads, isSuppressed, loadSuppression, scoreLead } = require('../..
 const { crawlWebsite, searchGooglePlaces } = require('../../lead-forge/lib/sources');
 const { buildLeadPack } = require('../../lead-forge/lib/pack');
 const { outreachDrafts } = require('../../lead-forge/lib/delivery');
-
 const FIXTURES = path.join(__dirname, '..', 'fixtures', 'lead-forge');
 
 function response({ status = 200, text = '', location = null } = {}) {
@@ -25,7 +24,7 @@ describe('Lead Forge', () => {
   it('loads every file-defined niche without code registration', () => {
     const ids = listNiches().map((config) => config.id);
     expect(ids).toEqual(expect.arrayContaining([
-      'auto-detailing', 'hvac', 'roofing', 'med-spa', 'dental', 'real-estate', 'restaurants',
+      'agency-buyers', 'auto-detailing', 'hvac', 'roofing', 'med-spa', 'dental', 'real-estate', 'restaurants',
     ]));
     expect(loadNiche('hvac')).toMatchObject({
       search_terms: expect.any(Array),
@@ -45,6 +44,83 @@ describe('Lead Forge', () => {
     expect(leads).toHaveLength(1);
     expect(leads[0].email).toBe('hello@example.com');
     expect(leads[0].sources).toEqual(expect.arrayContaining(['osm', 'google', 'other']));
+  });
+
+  it('merges duplicate domains inside a pack build while enriching from the richer row', async () => {
+    const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-forge-dedupe-'));
+    try {
+      const pack = await buildLeadPack({
+        niche: 'hvac', city: 'San Antonio, TX', radius: 25, count: 5, id: 'dedupe-pack',
+      }, {
+        outputRoot,
+        suppressionPath: path.join(outputRoot, 'empty.csv'),
+        searchGooglePlaces: async () => [{
+          name: 'Primary AC', website: 'https://primary-ac.example', phone: '2105550111', sources: ['google'],
+        }],
+        searchOverpass: async () => [{
+          name: 'Primary AC LLC', website: 'https://www.primary-ac.example/service',
+          email: 'sales@primary-ac.example', phone: '2105550111', reviewCount: 30, rating: 4.4, sources: ['osm'],
+        }],
+        crawlWebsite: async () => ({
+          email: 'sales@primary-ac.example', text: 'emergency service', hasOnlineBooking: false, blockedByRobots: false,
+        }),
+        board: { post: async () => ({ ok: true }) },
+        googleApiKey: '',
+      });
+      expect(pack.leads).toHaveLength(1);
+      expect(pack.leads[0].email).toBe('sales@primary-ac.example');
+      expect(pack.leads[0].sources).toEqual(expect.arrayContaining(['google', 'osm']));
+    } finally {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('drops closed, no-contact, and suppressed leads from a pack build', async () => {
+    const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-forge-filter-'));
+  const suppressionFile = path.join(outputRoot, 'suppression.csv');
+    fs.writeFileSync(suppressionFile, ['domain,phone,business_name', 'blocked.example,,'].join('\n'));
+    try {
+      const pack = await buildLeadPack({
+        niche: 'hvac', city: 'San Antonio, TX', radius: 25, count: 10, id: 'filter-pack',
+      }, {
+        outputRoot,
+        suppressionPath: suppressionFile,
+        searchGooglePlaces: async () => [],
+        searchOverpass: async () => [
+          { name: 'Closed Shop', businessStatus: 'PERMANENTLY_CLOSED', website: 'https://closed.example', phone: '2105550190', sources: ['osm'] },
+          { name: 'Ghost LLC', sources: ['osm'] },
+          { name: 'Blocked Co', website: 'https://blocked.example/', phone: '2105550191', sources: ['osm'] },
+          {
+            name: 'Good HVAC', website: 'https://good-hvac.example', phone: '2105550192',
+            email: 'ops@good-hvac.example', reviewCount: 28, rating: 4.3, sources: ['osm'],
+          },
+        ],
+        crawlWebsite: async () => ({ email: '', text: 'emergency service', hasOnlineBooking: false, blockedByRobots: false }),
+        board: { post: async () => ({ ok: true }) },
+        googleApiKey: '',
+      });
+      expect(pack.leads).toHaveLength(1);
+      expect(pack.leads[0].name).toBe('Good HVAC');
+    } finally {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('scores agency-buyers fixtures within the standard bounded range', () => {
+    const scored = scoreLead({
+      name: 'Lift Local Media',
+      website: 'https://liftlocal.example',
+      email: 'hello@liftlocal.example',
+      phone: '2105550200',
+      reviewCount: 48,
+      rating: 4.6,
+      hasOnlineBooking: false,
+      websiteText: 'performance marketing and lead generation for local businesses',
+    }, loadNiche('agency-buyers'));
+    expect(scored.fitScore).toBeGreaterThan(30);
+    expect(scored.fitScore).toBeLessThanOrEqual(100);
+    expect(scored.signals).toEqual(expect.arrayContaining(['mentions_lead_generation', 'has_public_email']));
+    expect(scored.disqualifiedBy).toEqual([]);
   });
 
   it('scores from configured signals with bounded reasons', () => {
@@ -160,7 +236,73 @@ describe('Lead Forge', () => {
         null,
         { sender: 'ProtoForge' },
       );
+      const manifest = JSON.parse(fs.readFileSync(path.join(pack.dir, 'manifest.json'), 'utf8'));
+      expect(manifest.board_notified).toBe(true);
     } finally {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns the saved pack when Forge Board post fails', async () => {
+    const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-forge-board-fail-'));
+    try {
+      const pack = await buildLeadPack({
+        niche: 'hvac', city: 'San Antonio, TX', radius: 25, count: 3, id: 'board-fail-pack',
+      }, {
+        outputRoot,
+        suppressionPath: path.join(outputRoot, 'none.csv'),
+        searchGooglePlaces: async () => [],
+        searchOverpass: async () => [{
+          name: 'Board Fail HVAC', website: 'https://bf.example', phone: '2105550300',
+          email: 'x@bf.example', reviewCount: 20, rating: 4.2, sources: ['fixture'],
+        }],
+        crawlWebsite: async () => ({ email: 'x@bf.example', text: 'service', hasOnlineBooking: false, blockedByRobots: false }),
+        board: { post: async () => ({ ok: false, error: 'board unavailable' }) },
+        googleApiKey: '',
+      });
+      expect(pack.leads).toHaveLength(1);
+      expect(pack.boardWarning).toContain('board unavailable');
+      const manifest = JSON.parse(fs.readFileSync(path.join(pack.dir, 'manifest.json'), 'utf8'));
+      expect(manifest.board_notified).toBe(false);
+      expect(fs.readFileSync(pack.csvPath, 'utf8')).toContain('Board Fail HVAC');
+    } finally {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('CLI prints a board warning without setting a failure exit code', async () => {
+    const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-forge-cli-'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const priorArgv = process.argv;
+    const priorExitCode = process.exitCode;
+    process.exitCode = undefined;
+    process.argv = ['node', 'build.js', '--niche', 'hvac', '--city', 'Austin, TX', '--count', '1'];
+    try {
+      await new Promise((resolve, reject) => {
+        jest.isolateModules(() => {
+          jest.doMock('../../lead-forge/lib/pack', () => ({
+            buildLeadPack: async () => ({
+              id: 'cli-warning-pack',
+              dir: outputRoot,
+              csvPath: path.join(outputRoot, 'leads.csv'),
+              pdfPath: path.join(outputRoot, 'summary.pdf'),
+              leads: [{ name: 'CLI Co' }],
+              sourceErrors: [],
+              boardWarning: 'board unavailable',
+            }),
+          }));
+          const { main } = require('../../lead-forge/build');
+          main().then(resolve).catch(reject);
+        });
+      });
+      expect(warnSpy).toHaveBeenCalledWith('Forge Board warning: board unavailable');
+      expect(process.exitCode).toBeFalsy();
+    } finally {
+      process.argv = priorArgv;
+      process.exitCode = priorExitCode;
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
       fs.rmSync(outputRoot, { recursive: true, force: true });
     }
   });

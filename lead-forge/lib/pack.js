@@ -99,7 +99,26 @@ async function buildLeadPack(options, deps = {}) {
     angle: config.why_theyd_buy,
     sourceErrors,
   });
-  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+  let boardNotified = null;
+  let boardWarning;
+  if (deps.postBoard !== false) {
+    const boardSdk = require('../../lib/forge-board/sdk');
+    const board = deps.board || boardSdk;
+    const result = await board.post(
+      'ops',
+      `Lead pack ready: ${request.niche}, ${request.city}, ${leads.length} leads — needs Jordan's approval before delivery or outreach.`,
+      null,
+      { sender: 'ProtoForge' },
+    );
+    if (result && result.ok === true) {
+      boardNotified = true;
+    } else {
+      boardNotified = false;
+      boardWarning = boardSdk.postFailureReason(result);
+    }
+  }
+
+  const manifest = {
     id,
     created_at: (deps.now ? deps.now() : new Date()).toISOString(),
     request,
@@ -108,19 +127,14 @@ async function buildLeadPack(options, deps = {}) {
     source_errors: sourceErrors,
     outreach_drafts: !!options.outreach,
     delivery_status: 'awaiting_jordan_approval',
-  }, null, 2));
+  };
+  if (boardNotified !== null) manifest.board_notified = boardNotified;
 
-  if (deps.postBoard !== false) {
-    const board = deps.board || require('../../lib/forge-board/sdk');
-    const result = await board.post(
-      'ops',
-      `Lead pack ready: ${request.niche}, ${request.city}, ${leads.length} leads — needs Jordan's approval before delivery or outreach.`,
-      null,
-      { sender: 'ProtoForge' },
-    );
-    if (!result || result.ok !== true) throw new Error('lead pack saved, but Forge Board notification failed');
-  }
-  return { id, dir, csvPath, pdfPath, leads, sourceErrors };
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+  const output = { id, dir, csvPath, pdfPath, leads, sourceErrors };
+  if (boardWarning) output.boardWarning = boardWarning;
+  return output;
 }
 
 module.exports = { buildLeadPack, packId, validateRequest };
