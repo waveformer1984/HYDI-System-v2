@@ -3,8 +3,8 @@ import {
   getLead,
   insertActivity,
   updateLead,
-} from '../../../../../../lib/lead-forge/db';
-import { requireLeadForgeAuth } from '../../../../../../lib/lead-forge/api';
+} from '../../../../../lib/lead-forge/db';
+import { requireLeadForgeAuth } from '../../../../../lib/lead-forge/api';
 
 function domainFromWebsite(website) {
   if (!website) return '';
