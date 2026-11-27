@@ -478,6 +478,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 |-----------|----------------|-------------------|
 | `20261120210000_makeready_crew` | Extends existing `public.makeready_requests` (from `20261120120000`): adds `crew_status` TEXT `CHECK (crew_status IN ('new','scheduled','in_progress','done'))` default `'new'`, plus `scheduled_at`, `crew_label`, `crew_notes`, `completion_photos` JSONB, `completed_at`, `status_updated_at`. New index `makeready_requests_crew_status_idx` on `(company_slug, crew_status, created_at DESC)`. **No new RLS policies** — existing `makeready_requests_service_role` policy unchanged. Crew transitions enforced in app (`lib/makeready-crew/status.js`), not in SQL. Transformer: `tests/migrations/20261120210000_makeready_crew.test.js`. | Owner-PIN `/makeready-crew` API (tailnet only) via service role; not public ingress. Not `hydi_runs` / `hydi_allowed_transitions`; no `STATE_MACHINE_APPROVED` required. |
 
+### Heidi operational lead sweep (2026-11-26)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261126120000_heidi_leads` | New `public.heidi_leads`: `id` UUID PK, `source`, `title`, `url`, optional `location`, `posted_at`, `score` NUMERIC(4,3), `title_hash`, `status` TEXT `CHECK (status IN ('new','reviewed','approved','rejected','archived'))` default `'new'`, `created_at`. Unique index on `(source, url, title_hash)`; score/index for digest ranking. RLS on; `heidi_leads_service_role` `FOR ALL` with duplicate-object guard. | Daily `heidi-core/jobs/lead-sweep.js` (off by default `HEIDI_LEADS_ENABLED`); local Ollama scoring only; digest to `heidi_events`. Not `hydi_runs`; no `STATE_MACHINE_APPROVED`. Transformer: `tests/migrations/20261126120000_heidi_leads.test.js`. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
