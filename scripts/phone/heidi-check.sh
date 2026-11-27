@@ -2,7 +2,12 @@
 # Read-only Heidi tailnet probe for phone (Termux). No auth, cookies, or query strings.
 set -eu
 
-URL="${HEIDI_TAILNET_URL:-https://heidi-pc.tailc50af2.ts.net}"
+DEFAULT_TAILNET_URL='https://heidi-pc.tailc50af2.ts.net'
+tailnet_url_explicit=0
+if [ -n "${HEIDI_TAILNET_URL+x}" ] && [ -n "$HEIDI_TAILNET_URL" ]; then
+  tailnet_url_explicit=1
+fi
+URL="${HEIDI_TAILNET_URL:-$DEFAULT_TAILNET_URL}"
 URL="${URL%/}"
 
 LIFELINE_HOST="${HEIDI_LIFELINE_HOST:-heidi-pc.tailc50af2.ts.net}"
@@ -29,9 +34,13 @@ is_loopback_probe() {
 }
 
 if ! is_loopback_probe && ! have_tailscale_ip; then
-  printf '%s\n' 'PHONE NOT ON TAILSCALE: open the Tailscale app and turn it on'
-  printf '%s\n' 'VERDICT: PHONE_OFF_TAILNET'
-  exit 2
+  if [ "$tailnet_url_explicit" -eq 1 ]; then
+    printf '%s\n' 'WARN: could not detect a Tailscale IP on this device; probing HEIDI_TAILNET_URL anyway'
+  else
+    printf '%s\n' 'PHONE NOT ON TAILSCALE: open the Tailscale app and turn it on'
+    printf '%s\n' 'VERDICT: PHONE_OFF_TAILNET'
+    exit 2
+  fi
 fi
 
 verdict_for() {
