@@ -7,13 +7,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'phone', 'heidi-check.sh');
 
-function runAgainstPort(port, extraEnv = {}) {
-  const env = {
-    ...process.env,
-    HEIDI_TAILNET_URL: `http://127.0.0.1:${port}`,
-    HEIDI_LIFELINE_PORT: String(port),
-    ...extraEnv,
-  };
+function runScript(envOverrides = {}) {
+  const env = { ...process.env, ...envOverrides };
   return new Promise((resolve, reject) => {
     const child = spawn('sh', [SCRIPT], {
       cwd: ROOT,
@@ -40,6 +35,14 @@ function runAgainstPort(port, extraEnv = {}) {
       clearTimeout(timer);
       resolve({ status, stdout, stderr });
     });
+  });
+}
+
+function runAgainstPort(port, extraEnv = {}) {
+  return runScript({
+    HEIDI_TAILNET_URL: `http://127.0.0.1:${port}`,
+    HEIDI_LIFELINE_PORT: String(port),
+    ...extraEnv,
   });
 }
 
@@ -138,6 +141,32 @@ describe('scripts/phone/heidi-check.sh', () => {
       await closeServer(server);
     }
   });
+
+  test('unset HEIDI_TAILNET_URL without tailscale IP → exit 2 PHONE_OFF_TAILNET', async () => {
+    const env = { ...process.env };
+    delete env.HEIDI_TAILNET_URL;
+    const r = await runScript(env);
+    expect(r.status).toBe(2);
+    expect(r.stdout).toMatch(/PHONE NOT ON TAILSCALE/);
+    expect(r.stdout).toMatch(/^VERDICT: PHONE_OFF_TAILNET$/m);
+  });
+
+  test(
+    'explicit HEIDI_TAILNET_URL skips exit 2 when tailscale IP not detected',
+    async () => {
+      // 100.x URL is not a loopback probe; Termux often cannot see tailscale IPs via ip/ifconfig.
+      // No local stub — curls fail fast enough for CI (see heidi-check.sh --max-time).
+      const r = await runScript({
+        HEIDI_TAILNET_URL: 'http://100.127.0.1:9',
+        HEIDI_LIFELINE_HOST: '127.0.0.1',
+      });
+      expect(r.status).not.toBe(2);
+      expect(r.stdout).not.toMatch(/PHONE_OFF_TAILNET/);
+      expect(r.stdout).toMatch(/WARN: could not detect a Tailscale IP/);
+      expect(r.stdout).toMatch(/unreachable/);
+    },
+    60000,
+  );
 
   test('server down → unreachable, exit 1', async () => {
     const { server, port } = await startStub({

@@ -14,6 +14,8 @@ HEIDI_TAILNET_URL=https://heidi-pc.tailc50af2.ts.net scripts/phone/heidi-check.s
 
 `HEIDI_TAILNET_URL` defaults to `https://heidi-pc.tailc50af2.ts.net` when unset. Trailing slashes are stripped automatically.
 
+On Android Termux, the script may not see a `100.x` address via `ip`/`ifconfig` even when Tailscale is connected. Set `HEIDI_TAILNET_URL` explicitly (for example `http://100.x.x.x:3000` from the Tailscale app, or MagicDNS) so the check probes that URL instead of exiting early with `PHONE_OFF_TAILNET`. When the URL is explicit and no local `100.x` is detected, you get a one-line `WARN` and the curls still run. The hard exit only applies when you rely on the default MagicDNS URL and the device looks off-tailnet.
+
 ### What it probes (GET, no query strings)
 
 | Check   | URL |
