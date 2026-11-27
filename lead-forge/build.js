@@ -26,6 +26,7 @@ async function main() {
     console.log(`CSV: ${pack.csvPath}`);
     console.log(`PDF: ${pack.pdfPath}`);
     if (pack.sourceErrors.length) console.warn(`Source warnings: ${pack.sourceErrors.join('; ')}`);
+    if (pack.boardWarning) console.warn(`Forge Board warning: ${pack.boardWarning}`);
   } catch (error) {
     console.error(`Lead Forge failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     process.exitCode = 1;
@@ -34,4 +35,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { parseArgs };
+module.exports = { parseArgs, main };

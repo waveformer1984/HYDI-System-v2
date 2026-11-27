@@ -1,0 +1,26 @@
+{
+  "id": "agency-buyers",
+  "search_terms": [
+    "marketing agency",
+    "digital marketing agency",
+    "advertising agency",
+    "lead generation agency"
+  ],
+  "business_categories": [
+    "marketing_agency",
+    "advertising_agency"
+  ],
+  "osm_tags": [
+    ["office", "advertising_agency"],
+    ["office", "marketing"]
+  ],
+  "qualifying_signals": [
+    {"id": "has_website", "weight": 10},
+    {"id": "review_count_5_200", "weight": 14},
+    {"id": "no_online_booking", "weight": 12},
+    {"id": "has_public_email", "weight": 14},
+    {"id": "mentions_lead_generation", "weight": 16}
+  ],
+  "disqualifiers": ["permanently_closed", "missing_contact_path", "national_chain"],
+  "why_theyd_buy": "Agencies that resell lead services need vetted, niche-specific prospect lists they can white-label without rebuilding sourcing pipelines for every client vertical."
+}
