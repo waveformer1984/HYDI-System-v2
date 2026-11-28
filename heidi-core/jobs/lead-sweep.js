@@ -16,8 +16,11 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LLM_TIMEOUT_MS = 90_000;
 
 function llmMax() {
-  const n = parseInt(process.env.HEIDI_LEADS_LLM_MAX || '20', 10);
-  return Number.isFinite(n) && n > 0 ? n : 20;
+  const raw = process.env.HEIDI_LEADS_LLM_MAX;
+  if (raw === undefined || String(raw).trim() === '') return 20;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n < 0) return 20;
+  return n;
 }
 
 function minFreeMb() {

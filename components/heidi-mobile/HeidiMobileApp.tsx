@@ -13,6 +13,7 @@ import TasksView from './TasksView';
 import RevenueOpsView from './RevenueOpsView';
 import ControlView from './ControlView';
 import PairingView from './PairingView';
+import TodayCard from './TodayCard';
 
 type Phase = 'checking' | 'unpaired' | 'paired' | 'server_unreachable';
 
@@ -241,6 +242,12 @@ export default function HeidiMobileApp({ lifelineUrl = DEFAULT_LIFELINE }: { lif
       </header>
 
       {banner && !keyboardOpen && <div className={`${styles.banner} ${banner.cls}`} role="status">{banner.text}</div>}
+
+      {!keyboardOpen && paired && online && (
+        <div className={styles.main} style={{ paddingBottom: 0, flex: '0 0 auto' }}>
+          <TodayCard online={online} />
+        </div>
+      )}
 
       <main className={styles.main}>
         {tab === 'chat' && (

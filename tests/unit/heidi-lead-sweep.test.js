@@ -129,6 +129,25 @@ describe('heidi lead sweep v2', () => {
     else process.env.HEIDI_LEADS_MIN_FREE_MB = prevMin;
   });
 
+  test('HEIDI_LEADS_LLM_MAX=0 disables LLM calls', async () => {
+    process.env.HEIDI_LEADS_LLM_MAX = '0';
+    const { scoreLeads: scoreFresh, llmMax: maxFn } = require('../../heidi-core/jobs/lead-sweep');
+    expect(maxFn()).toBe(0);
+    const leads = [
+      {
+        source: 'sa-bid',
+        title: 'Bid zero',
+        url: 'https://example.com/bid/z',
+        snippet: 'clean',
+        title_hash: titleHash('Bid zero'),
+      },
+    ];
+    const fetch = jest.fn();
+    const out = await scoreFresh(leads, { fetch, model: 'local-test' });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(out[0].score_reasons).toContain('llm_cap_reached');
+  });
+
   test('LLM cap enforced', async () => {
     process.env.HEIDI_LEADS_LLM_MAX = '2';
     const { scoreLeads: scoreFresh } = require('../../heidi-core/jobs/lead-sweep');
