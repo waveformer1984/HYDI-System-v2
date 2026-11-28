@@ -121,7 +121,44 @@ run_check health /api/health
 health_code=$LAST_HTTP_CODE
 run_check heidi /heidi
 heidi_code=$LAST_HTTP_CODE
-run_check state /api/heidi-mobile/state
+
+state_target="${URL}/api/heidi-mobile/state"
+state_body=""
+if command -v curl >/dev/null 2>&1; then
+  state_out=$(curl -sS --max-time 10 -w '\n%{http_code} %{time_total}' "$state_target" 2>/dev/null) || state_out=$'\n000 0'
+  state_body=$(printf '%s\n' "$state_out" | sed '$d')
+  state_meta=$(printf '%s\n' "$state_out" | tail -n 1)
+  state_code=$(printf '%s\n' "$state_meta" | awk '{print $1}')
+  state_time_total=$(printf '%s\n' "$state_meta" | awk '{print $2}')
+else
+  state_code="000"
+  state_time_total="0"
+fi
+LAST_HTTP_CODE=$state_code
+
+state_verdict=$(verdict_for state "$state_code" "$state_time_total")
+if [ "$state_code" = "200" ] && command -v node >/dev/null 2>&1; then
+  state_json_ok=$(printf '%s' "$state_body" | node -e "
+    let s='';
+    process.stdin.on('data',d=>s+=d);
+    process.stdin.on('end',()=>{
+      try {
+        const j=JSON.parse(s);
+        process.stdout.write(j && j.ts != null && j.leads && typeof j.leads==='object' ? '1' : '0');
+      } catch { process.stdout.write('0'); }
+    });
+  " 2>/dev/null || printf '%s' '0')
+  if [ "$state_json_ok" != "1" ]; then
+    state_verdict="invalid JSON — expected ts and leads"
+    have_degraded=1
+    if [ -z "$degraded_names" ]; then degraded_names="state"; else degraded_names="$degraded_names state"; fi
+  fi
+fi
+printf '%s %s %ss %s\n' "state" "$state_code" "$state_time_total" "$state_verdict"
+if [ "$state_verdict" != "OK" ] && [ "$have_degraded" -eq 0 ]; then
+  have_degraded=1
+  if [ -z "$degraded_names" ]; then degraded_names="state"; else degraded_names="$degraded_names state"; fi
+fi
 
 if is_loopback_probe; then
   run_external_check lifeline_health "http://127.0.0.1:${HEIDI_LIFELINE_PORT:-1}/health"

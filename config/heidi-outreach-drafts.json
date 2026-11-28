@@ -1,0 +1,28 @@
+{
+  "drafts": [
+    {
+      "id": "alamo-ranch-9814",
+      "builder": "Alamo Ranch Builders LLC",
+      "permits": 1,
+      "areas": ["Westpoint Dr, San Antonio 78254"],
+      "contact_hint": "Permit B2025-120044 — site contact on file with Development Services",
+      "body": "Hi — I saw permit B2025-120044 at 9814 Westpoint Dr (new single-family). We handle make-ready and final clean for builders before CO. Happy to do your next home as a no-cost trial so you can see the work. Reply if you want a short scope sheet."
+    },
+    {
+      "id": "stone-oak-gc",
+      "builder": "Stone Oak GC Inc",
+      "permits": 2,
+      "areas": ["Stone Oak, San Antonio"],
+      "contact_hint": "Listed on recent Bexar County residential permits",
+      "body": "Hi — your recent new-home permits in Stone Oak came up in our daily sweep. We specialize in construction final clean and punch-list touch-ups for close-out. Happy to do your next home as a no-cost trial so you can see the work. Open to a 10-minute call this week?"
+    },
+    {
+      "id": "comal-new-build",
+      "builder": "Hill Country Homes LP",
+      "permits": 1,
+      "areas": ["Comal County new residential"],
+      "contact_hint": "Comal CKAN permit export — applicant name on permit",
+      "body": "Hi — permit activity on your Comal new-build line caught our eye. We run final clean crews for builders at CO. Happy to do your next home as a no-cost trial so you can see the work. Worth a quick intro?"
+    }
+  ]
+}

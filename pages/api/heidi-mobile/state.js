@@ -4,21 +4,22 @@
 // Does not call heidi-core/heidi-agent.js; reads Supabase via lib/store.
 
 const { guard } = require('../../../lib/heidi-mobile/guard.js');
-const { fetchAgentMobileState } = require('../../../lib/heidi-mobile/agent-state-read.js');
+const { fetchOperationalMobileState } = require('../../../lib/heidi-mobile/operational-state-read.js');
 
 module.exports = async function handler(req, res) {
   const g = guard(req, res, { methods: ['GET'], routeName: 'state', rateMax: 30 });
   if (!g.ok) return;
 
   const started = Date.now();
-  const body = await fetchAgentMobileState({ eventLimit: 20 });
+  const body = await fetchOperationalMobileState();
 
   if (!body.ok) {
-    const status = body.reason === 'store_unavailable' ? 503 : 502;
+    const status =
+      body.reason === 'store_unavailable' || body.reason === 'stale_heartbeat' || body.reason === 'no_heartbeat'
+        ? 503
+        : 502;
     return res.status(status).json({
-      ok: false,
-      reason: body.reason,
-      message: body.message,
+      ...body,
       checked_at: new Date().toISOString(),
       latency_ms: Date.now() - started,
       device_id: g.session.deviceId,

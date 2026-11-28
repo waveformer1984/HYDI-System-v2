@@ -71,10 +71,14 @@ describe('scripts/phone/heidi-check.sh', () => {
       _res.writeHead(200, { 'content-type': 'text/plain' });
       _res.end('ok');
     };
+    const stateJson = (_res) => {
+      _res.writeHead(200, { 'content-type': 'application/json' });
+      _res.end(JSON.stringify({ ts: '2026-11-28T00:00:00.000Z', leads: { lead_count: 0 } }));
+    };
     const { server, port } = await startStub({
       '/api/health': ok,
       '/heidi': ok,
-      '/api/heidi-mobile/state': ok,
+      '/api/heidi-mobile/state': stateJson,
       '/health': ok,
     });
     try {
@@ -126,7 +130,7 @@ describe('scripts/phone/heidi-check.sh', () => {
       },
       '/api/heidi-mobile/state': (res) => {
         res.writeHead(200);
-        res.end();
+        res.end('{}');
       },
     });
     try {
